@@ -77,14 +77,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
+      { title: "Service VCH" },
+      { name: "description", content: "VCH Fleet Manager is a web application for managing a vehicle fleet, tracking mileage, and logging services." },
       { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { property: "og:title", content: "Service VCH" },
+      { property: "og:description", content: "VCH Fleet Manager is a web application for managing a vehicle fleet, tracking mileage, and logging services." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "Service VCH" },
+      { name: "twitter:description", content: "VCH Fleet Manager is a web application for managing a vehicle fleet, tracking mileage, and logging services." },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/6o9fnvMqPjRQxcQx2YTW2nNrZpu1/social-images/social-1782752720678-Screenshot_2026-06-26_165610.webp" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/6o9fnvMqPjRQxcQx2YTW2nNrZpu1/social-images/social-1782752720678-Screenshot_2026-06-26_165610.webp" },
     ],
     links: [
       {
