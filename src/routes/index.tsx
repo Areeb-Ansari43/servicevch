@@ -250,6 +250,8 @@ function UKPlate({ reg, size = "md" }: { reg: string; size?: "sm" | "md" | "lg" 
 type View = "dashboard" | "vehicles" | "add" | "services" | "log-service" | "mileage";
 
 function FleetApp() {
+  const navigate = useNavigate();
+  const [authed, setAuthed] = useState(false);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [services, setServices] = useState<ServiceRecord[]>([]);
   const [drivers, setDrivers] = useState<DriverTrack[]>([]);
@@ -257,6 +259,16 @@ function FleetApp() {
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.localStorage.getItem("vch10_auth") !== "1") {
+      navigate({ to: "/login" });
+    } else {
+      setAuthed(true);
+    }
+  }, [navigate]);
+
 
   /* hydrate */
   useEffect(() => {
