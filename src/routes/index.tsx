@@ -735,62 +735,110 @@ function VehiclesList({
   vehicles, onEdit, onDelete, onAdd,
 }: { vehicles: Vehicle[]; onEdit: (v: Vehicle) => void; onDelete: (id: string) => void; onAdd: () => void }) {
   const [q, setQ] = useState("");
-  const filtered = vehicles.filter((v) =>
-    [v.registration, v.make, v.model].some((s) => s.toLowerCase().includes(q.toLowerCase()))
-  );
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const filtered = vehicles.filter((v) => {
+    const matchQ = [v.registration, v.make, v.model].some((s) => s.toLowerCase().includes(q.toLowerCase()));
+    const matchS = statusFilter === "all" || v.status === statusFilter;
+    return matchQ && matchS;
+  });
+  const fuelStyle = (f: Vehicle["fuel_type"]) => {
+    if (f === "Electric") return "bg-blue-50 text-blue-700 border-blue-200";
+    if (f === "Hybrid") return "bg-orange-50 text-orange-700 border-orange-200";
+    if (f === "Diesel") return "bg-amber-50 text-amber-700 border-amber-200";
+    return "bg-emerald-50 text-emerald-700 border-emerald-200";
+  };
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      <div className="flex items-end justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-[#0f172a]">Vehicles</h2>
+          <p className="text-sm text-[#475569]">{vehicles.length} vehicles in your fleet</p>
+        </div>
+        <button onClick={onAdd} className="inline-flex items-center gap-2 rounded-lg bg-[#ff6a00] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#e05d00]">
+          <NavIcon.Plus className="h-4 w-4" /> Add Vehicle
+        </button>
+      </div>
+
       <div className="flex flex-wrap items-center gap-3">
-        <input
-          value={q} onChange={(e) => setQ(e.target.value)}
-          placeholder="Search registration, make or model..."
-          className="flex-1 rounded-lg border border-[#e2e8f0] bg-white px-4 py-2.5 text-sm focus:border-[#ff6a00] focus:outline-none focus:ring-2 focus:ring-[#ff6a00]/20"
-        />
-        <button onClick={onAdd} className="rounded-lg bg-[#ff6a00] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#e05d00]">+ Add Vehicle</button>
+        <div className="relative flex-1 min-w-[260px]">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94a3b8]"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <input
+            value={q} onChange={(e) => setQ(e.target.value)}
+            placeholder="Search by make, model or registration..."
+            className="w-full rounded-lg border border-[#e2e8f0] bg-white py-2.5 pl-9 pr-3 text-sm focus:border-[#ff6a00] focus:outline-none focus:ring-2 focus:ring-[#ff6a00]/20"
+          />
+        </div>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="rounded-lg border border-[#e2e8f0] bg-white px-3 py-2.5 text-sm focus:border-[#ff6a00] focus:outline-none focus:ring-2 focus:ring-[#ff6a00]/20"
+        >
+          <option value="all">All Statuses</option>
+          <option value="Active">Available</option>
+          <option value="In Service">In Service</option>
+          <option value="Off Road">Off Road</option>
+        </select>
       </div>
-      <div className="overflow-hidden rounded-xl border border-[#e2e8f0] bg-white">
-        <table className="w-full text-sm">
-          <thead className="bg-[#f8fafc] text-left text-xs uppercase tracking-wider text-[#475569]">
-            <tr>
-              <th className="px-4 py-3">Registration</th>
-              <th className="px-4 py-3">Make / Model</th>
-              <th className="px-4 py-3">Year</th>
-              <th className="px-4 py-3">Fuel</th>
-              <th className="px-4 py-3">Mileage</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((v) => (
-              <tr key={v.id} className="border-t border-[#e2e8f0] hover:bg-[#f8fafc]">
-                <td className="px-4 py-3"><UKPlate reg={v.registration} size="sm" /></td>
-                <td className="px-4 py-3">
-                  <div className="font-semibold">{v.make}</div>
-                  <div className="text-xs text-[#475569]">{v.model}</div>
-                </td>
-                <td className="px-4 py-3">{v.year}</td>
-                <td className="px-4 py-3">{v.fuel_type}</td>
-                <td className="px-4 py-3">{v.current_mileage.toLocaleString()} mi</td>
-                <td className="px-4 py-3">
-                  <StatusBadge status={v.status} />
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <button onClick={() => onEdit(v)} className="text-[#ff6a00] hover:text-[#e05d00]">Edit</button>
-                  <span className="mx-2 text-[#cbd5e1]">·</span>
-                  <button onClick={() => { if (confirm(`Delete ${v.registration}?`)) onDelete(v.id); }} className="text-red-600 hover:text-red-700">Delete</button>
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-[#475569]">No vehicles match.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+
+      {filtered.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-[#e2e8f0] bg-white p-10 text-center text-sm text-[#475569]">No vehicles match.</div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {filtered.map((v) => (
+            <div
+              key={v.id}
+              className="group flex flex-col rounded-xl border border-[#e2e8f0] bg-white p-4 transition-all hover:border-[#ff6a00]/40 hover:shadow-md"
+            >
+              <div className="mb-3 flex items-start justify-between gap-2">
+                <UKPlate reg={v.registration} size="sm" />
+                <StatusBadge status={v.status} />
+              </div>
+              <button onClick={() => onEdit(v)} className="block text-left">
+                <div className="line-clamp-2 text-sm font-bold uppercase leading-tight text-[#0f172a]">
+                  {v.make} {v.model}
+                </div>
+              </button>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#475569]">
+                <span>{v.year}</span>
+                <span className={`rounded border px-1.5 py-0.5 font-medium ${fuelStyle(v.fuel_type)}`}>{v.fuel_type}</span>
+                <span>{v.current_mileage.toLocaleString()} mi</span>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-1.5 border-t border-[#f1f5f9] pt-3 text-[10px]">
+                {v.next_mot_date && <Pill label="MOT" value={daysUntil(v.next_mot_date)} />}
+                {v.next_service_date && <Pill label="Service" value={daysUntil(v.next_service_date)} />}
+                {v.insurance_expiry && <Pill label="Ins." value={daysUntil(v.insurance_expiry)} />}
+              </div>
+              <div className="mt-3 flex items-center justify-end gap-2 border-t border-[#f1f5f9] pt-3 opacity-0 transition-opacity group-hover:opacity-100">
+                <button onClick={() => onEdit(v)} className="rounded-md px-2 py-1 text-xs font-medium text-[#ff6a00] hover:bg-[#fff1e6]">Edit</button>
+                <button onClick={() => { if (confirm(`Delete ${v.registration}?`)) onDelete(v.id); }} className="rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50">Delete</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
+
+function daysUntil(dateStr: string): string {
+  const now = Date.now();
+  const target = new Date(dateStr).getTime();
+  if (isNaN(target)) return "—";
+  const diff = Math.round((target - now) / 86400000);
+  if (diff < 0) return "Expired";
+  return `${diff}d`;
+}
+
+function Pill({ label, value }: { label: string; value: string }) {
+  const expired = value === "Expired";
+  return (
+    <span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-medium ${expired ? "border-red-200 bg-red-50 text-red-700" : "border-[#e2e8f0] bg-[#f8fafc] text-[#475569]"}`}>
+      <span className="opacity-70">{label}</span>
+      <span className={expired ? "font-bold" : ""}>{value}</span>
+    </span>
+  );
+}
+
 
 function StatusBadge({ status }: { status: Vehicle["status"] }) {
   const map = {
