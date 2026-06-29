@@ -451,7 +451,7 @@ const NavIcon = {
 };
 
 function Sidebar({ view, setView, onSignOut }: { view: View; setView: (v: View) => void; onSignOut: () => void }) {
-  const items: { id: View; label: string; Icon: (p: { className?: string }) => JSX.Element }[] = [
+  const items: { id: View; label: string; Icon: (p: { className?: string }) => React.ReactElement }[] = [
     { id: "dashboard", label: "Dashboard", Icon: NavIcon.Dashboard },
     { id: "vehicles", label: "Vehicles", Icon: NavIcon.Car },
     { id: "services", label: "Service History", Icon: NavIcon.Wrench },
