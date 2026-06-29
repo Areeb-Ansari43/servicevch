@@ -250,6 +250,7 @@ function UKPlate({ reg, size = "md" }: { reg: string; size?: "sm" | "md" | "lg" 
 type View = "dashboard" | "vehicles" | "add" | "services" | "log-service" | "mileage";
 
 function FleetApp() {
+  if (typeof window === "undefined") return null;
   const navigate = useNavigate();
   const [authed, setAuthed] = useState(false);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
