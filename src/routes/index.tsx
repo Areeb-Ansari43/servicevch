@@ -326,11 +326,21 @@ function FleetApp() {
 
   const nav = (v: View) => setView(v);
 
+  const signOut = () => {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem("vch10_auth");
+      window.localStorage.removeItem("vch10_user");
+    }
+    navigate({ to: "/login" });
+  };
+
+  if (!authed) return null;
+
   return (
     <div className="min-h-screen bg-[#f8fafc] text-[#0f172a]">
-      <Sidebar view={view} setView={nav} />
+      <Sidebar view={view} setView={nav} onSignOut={signOut} />
       <div className="ml-64">
-        <Topbar view={view} />
+        <Topbar />
         <main className="p-6 md:p-8">
           {view === "dashboard" && (
             <Dashboard
