@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 export const Route = createFileRoute("/")({
@@ -250,6 +250,8 @@ function UKPlate({ reg, size = "md" }: { reg: string; size?: "sm" | "md" | "lg" 
 type View = "dashboard" | "vehicles" | "add" | "services" | "log-service" | "mileage";
 
 function FleetApp() {
+  const navigate = useNavigate();
+  const [authed, setAuthed] = useState(false);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [services, setServices] = useState<ServiceRecord[]>([]);
   const [drivers, setDrivers] = useState<DriverTrack[]>([]);
@@ -257,6 +259,16 @@ function FleetApp() {
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.localStorage.getItem("vch10_auth") !== "1") {
+      navigate({ to: "/login" });
+    } else {
+      setAuthed(true);
+    }
+  }, [navigate]);
+
 
   /* hydrate */
   useEffect(() => {
@@ -314,11 +326,21 @@ function FleetApp() {
 
   const nav = (v: View) => setView(v);
 
+  const signOut = () => {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem("vch10_auth");
+      window.localStorage.removeItem("vch10_user");
+    }
+    navigate({ to: "/login" });
+  };
+
+  if (!authed) return null;
+
   return (
     <div className="min-h-screen bg-[#f8fafc] text-[#0f172a]">
-      <Sidebar view={view} setView={nav} />
+      <Sidebar view={view} setView={nav} onSignOut={signOut} />
       <div className="ml-64">
-        <Topbar view={view} />
+        <Topbar />
         <main className="p-6 md:p-8">
           {view === "dashboard" && (
             <Dashboard
@@ -407,27 +429,48 @@ function FleetApp() {
 }
 
 /* ---------------- Sidebar / Topbar ---------------- */
-function Sidebar({ view, setView }: { view: View; setView: (v: View) => void }) {
-  const items: { id: View; label: string }[] = [
-    { id: "dashboard", label: "Dashboard" },
-    { id: "vehicles", label: "Vehicles" },
-    { id: "add", label: "Add Vehicle" },
-    { id: "services", label: "Service Records" },
-    { id: "log-service", label: "Log Service" },
-    { id: "mileage", label: "Driver Mileage" },
+const NavIcon = {
+  Dashboard: (p: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+  ),
+  Car: (p: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}><path d="M5 17h14M5 17a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm18 0a2 2 0 1 1-4 0 2 2 0 0 1 4 0z"/><path d="M3 17v-5l2-5h14l2 5v5"/></svg>
+  ),
+  Wrench: (p: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+  ),
+  Gauge: (p: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}><circle cx="12" cy="12" r="10"/><path d="M12 14l4-4"/></svg>
+  ),
+  Plus: (p: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}><path d="M12 5v14M5 12h14"/></svg>
+  ),
+  SignOut: (p: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+  ),
+};
+
+function Sidebar({ view, setView, onSignOut }: { view: View; setView: (v: View) => void; onSignOut: () => void }) {
+  const items: { id: View; label: string; Icon: (p: { className?: string }) => React.ReactElement }[] = [
+    { id: "dashboard", label: "Dashboard", Icon: NavIcon.Dashboard },
+    { id: "vehicles", label: "Vehicles", Icon: NavIcon.Car },
+    { id: "services", label: "Service History", Icon: NavIcon.Wrench },
+    { id: "mileage", label: "Driver Mileage", Icon: NavIcon.Gauge },
+    { id: "add", label: "Add Vehicle", Icon: NavIcon.Plus },
   ];
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 w-64 border-r border-[#e2e8f0] bg-white">
-      <div className="flex h-16 items-center gap-2 border-b border-[#e2e8f0] px-5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#ff6a00] text-white">
-          <Icon.Car className="h-5 w-5" />
+    <aside className="fixed inset-y-0 left-0 z-30 flex w-64 flex-col border-r border-[#e2e8f0] bg-white">
+      <div className="flex items-center gap-3 px-5 py-4">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#1a1a1a] to-[#2d2d2d] text-[#ff6a00] shadow-sm">
+          <NavIcon.Car className="h-5 w-5" />
         </div>
-        <div>
-          <div className="text-sm font-bold leading-tight">Virtual Car Hire</div>
-          <div className="text-xs text-[#475569]">Fleet Tracker</div>
+        <div className="min-w-0">
+          <div className="truncate text-sm font-bold leading-tight text-[#0f172a]">Virtual Car Hire</div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#94a3b8]">Fleet Tracker</div>
         </div>
       </div>
-      <nav className="p-3">
+
+      <nav className="flex-1 overflow-y-auto px-3 py-2">
         {items.map((it) => {
           const active = view === it.id;
           return (
@@ -436,39 +479,41 @@ function Sidebar({ view, setView }: { view: View; setView: (v: View) => void }) 
               onClick={() => setView(it.id)}
               className={`mb-1 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${
                 active
-                  ? "bg-[#ff6a00] bg-opacity-[0.08] font-semibold text-[#ff6a00]"
-                  : "text-[#0f172a] hover:bg-[#f1f5f9]"
+                  ? "bg-[#fff1e6] font-semibold text-[#ff6a00]"
+                  : "text-[#334155] hover:bg-[#f1f5f9]"
               }`}
             >
-              <span className={`h-2 w-2 rounded-full ${active ? "bg-[#ff6a00]" : "bg-[#cbd5e1]"}`} />
-              {it.label}
+              <it.Icon className="h-4 w-4 shrink-0" />
+              <span>{it.label}</span>
             </button>
           );
         })}
       </nav>
-      <div className="absolute bottom-0 left-0 right-0 border-t border-[#e2e8f0] p-4 text-xs text-[#475569]">
-        VCH Fleet · v1.0
+
+      <div className="border-t border-[#e2e8f0] p-3">
+        <button
+          onClick={onSignOut}
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-[#475569] transition-colors hover:bg-[#f1f5f9]"
+        >
+          <NavIcon.SignOut className="h-4 w-4" />
+          Sign Out
+        </button>
       </div>
     </aside>
   );
 }
 
-function Topbar({ view }: { view: View }) {
-  const titles: Record<View, string> = {
-    dashboard: "Fleet Dashboard",
-    vehicles: "Vehicles",
-    add: "Add Vehicle",
-    services: "Service Records",
-    "log-service": "Log Service",
-    mileage: "Track Driver Mileage",
-  };
+function Topbar() {
   return (
-    <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-[#e2e8f0] bg-white/80 px-6 backdrop-blur md:px-8">
-      <h1 className="text-xl font-bold text-[#0f172a]">{titles[view]}</h1>
-      <div className="text-sm text-[#475569]">{new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</div>
+    <header className="sticky top-0 z-20 flex h-14 items-center border-b border-[#e2e8f0] bg-white px-6 md:px-8">
+      <span className="inline-flex items-center gap-2 rounded-full bg-[#fff1e6] px-3 py-1 text-xs font-semibold text-[#ff6a00]">
+        <span className="h-1.5 w-1.5 rounded-full bg-[#ff6a00]" />
+        VCH Fleet
+      </span>
     </header>
   );
 }
+
 
 /* ---------------- Dashboard ---------------- */
 function Dashboard({
@@ -690,62 +735,110 @@ function VehiclesList({
   vehicles, onEdit, onDelete, onAdd,
 }: { vehicles: Vehicle[]; onEdit: (v: Vehicle) => void; onDelete: (id: string) => void; onAdd: () => void }) {
   const [q, setQ] = useState("");
-  const filtered = vehicles.filter((v) =>
-    [v.registration, v.make, v.model].some((s) => s.toLowerCase().includes(q.toLowerCase()))
-  );
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const filtered = vehicles.filter((v) => {
+    const matchQ = [v.registration, v.make, v.model].some((s) => s.toLowerCase().includes(q.toLowerCase()));
+    const matchS = statusFilter === "all" || v.status === statusFilter;
+    return matchQ && matchS;
+  });
+  const fuelStyle = (f: Vehicle["fuel_type"]) => {
+    if (f === "Electric") return "bg-blue-50 text-blue-700 border-blue-200";
+    if (f === "Hybrid") return "bg-orange-50 text-orange-700 border-orange-200";
+    if (f === "Diesel") return "bg-amber-50 text-amber-700 border-amber-200";
+    return "bg-emerald-50 text-emerald-700 border-emerald-200";
+  };
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      <div className="flex items-end justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-[#0f172a]">Vehicles</h2>
+          <p className="text-sm text-[#475569]">{vehicles.length} vehicles in your fleet</p>
+        </div>
+        <button onClick={onAdd} className="inline-flex items-center gap-2 rounded-lg bg-[#ff6a00] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#e05d00]">
+          <NavIcon.Plus className="h-4 w-4" /> Add Vehicle
+        </button>
+      </div>
+
       <div className="flex flex-wrap items-center gap-3">
-        <input
-          value={q} onChange={(e) => setQ(e.target.value)}
-          placeholder="Search registration, make or model..."
-          className="flex-1 rounded-lg border border-[#e2e8f0] bg-white px-4 py-2.5 text-sm focus:border-[#ff6a00] focus:outline-none focus:ring-2 focus:ring-[#ff6a00]/20"
-        />
-        <button onClick={onAdd} className="rounded-lg bg-[#ff6a00] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#e05d00]">+ Add Vehicle</button>
+        <div className="relative flex-1 min-w-[260px]">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94a3b8]"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <input
+            value={q} onChange={(e) => setQ(e.target.value)}
+            placeholder="Search by make, model or registration..."
+            className="w-full rounded-lg border border-[#e2e8f0] bg-white py-2.5 pl-9 pr-3 text-sm focus:border-[#ff6a00] focus:outline-none focus:ring-2 focus:ring-[#ff6a00]/20"
+          />
+        </div>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="rounded-lg border border-[#e2e8f0] bg-white px-3 py-2.5 text-sm focus:border-[#ff6a00] focus:outline-none focus:ring-2 focus:ring-[#ff6a00]/20"
+        >
+          <option value="all">All Statuses</option>
+          <option value="Active">Available</option>
+          <option value="In Service">In Service</option>
+          <option value="Off Road">Off Road</option>
+        </select>
       </div>
-      <div className="overflow-hidden rounded-xl border border-[#e2e8f0] bg-white">
-        <table className="w-full text-sm">
-          <thead className="bg-[#f8fafc] text-left text-xs uppercase tracking-wider text-[#475569]">
-            <tr>
-              <th className="px-4 py-3">Registration</th>
-              <th className="px-4 py-3">Make / Model</th>
-              <th className="px-4 py-3">Year</th>
-              <th className="px-4 py-3">Fuel</th>
-              <th className="px-4 py-3">Mileage</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((v) => (
-              <tr key={v.id} className="border-t border-[#e2e8f0] hover:bg-[#f8fafc]">
-                <td className="px-4 py-3"><UKPlate reg={v.registration} size="sm" /></td>
-                <td className="px-4 py-3">
-                  <div className="font-semibold">{v.make}</div>
-                  <div className="text-xs text-[#475569]">{v.model}</div>
-                </td>
-                <td className="px-4 py-3">{v.year}</td>
-                <td className="px-4 py-3">{v.fuel_type}</td>
-                <td className="px-4 py-3">{v.current_mileage.toLocaleString()} mi</td>
-                <td className="px-4 py-3">
-                  <StatusBadge status={v.status} />
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <button onClick={() => onEdit(v)} className="text-[#ff6a00] hover:text-[#e05d00]">Edit</button>
-                  <span className="mx-2 text-[#cbd5e1]">·</span>
-                  <button onClick={() => { if (confirm(`Delete ${v.registration}?`)) onDelete(v.id); }} className="text-red-600 hover:text-red-700">Delete</button>
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-[#475569]">No vehicles match.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+
+      {filtered.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-[#e2e8f0] bg-white p-10 text-center text-sm text-[#475569]">No vehicles match.</div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {filtered.map((v) => (
+            <div
+              key={v.id}
+              className="group flex flex-col rounded-xl border border-[#e2e8f0] bg-white p-4 transition-all hover:border-[#ff6a00]/40 hover:shadow-md"
+            >
+              <div className="mb-3 flex items-start justify-between gap-2">
+                <UKPlate reg={v.registration} size="sm" />
+                <StatusBadge status={v.status} />
+              </div>
+              <button onClick={() => onEdit(v)} className="block text-left">
+                <div className="line-clamp-2 text-sm font-bold uppercase leading-tight text-[#0f172a]">
+                  {v.make} {v.model}
+                </div>
+              </button>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#475569]">
+                <span>{v.year}</span>
+                <span className={`rounded border px-1.5 py-0.5 font-medium ${fuelStyle(v.fuel_type)}`}>{v.fuel_type}</span>
+                <span>{v.current_mileage.toLocaleString()} mi</span>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-1.5 border-t border-[#f1f5f9] pt-3 text-[10px]">
+                {v.next_mot_date && <Pill label="MOT" value={daysUntil(v.next_mot_date)} />}
+                {v.next_service_date && <Pill label="Service" value={daysUntil(v.next_service_date)} />}
+                {v.insurance_expiry && <Pill label="Ins." value={daysUntil(v.insurance_expiry)} />}
+              </div>
+              <div className="mt-3 flex items-center justify-end gap-2 border-t border-[#f1f5f9] pt-3 opacity-0 transition-opacity group-hover:opacity-100">
+                <button onClick={() => onEdit(v)} className="rounded-md px-2 py-1 text-xs font-medium text-[#ff6a00] hover:bg-[#fff1e6]">Edit</button>
+                <button onClick={() => { if (confirm(`Delete ${v.registration}?`)) onDelete(v.id); }} className="rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50">Delete</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
+
+function daysUntil(dateStr: string): string {
+  const now = Date.now();
+  const target = new Date(dateStr).getTime();
+  if (isNaN(target)) return "—";
+  const diff = Math.round((target - now) / 86400000);
+  if (diff < 0) return "Expired";
+  return `${diff}d`;
+}
+
+function Pill({ label, value }: { label: string; value: string }) {
+  const expired = value === "Expired";
+  return (
+    <span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-medium ${expired ? "border-red-200 bg-red-50 text-red-700" : "border-[#e2e8f0] bg-[#f8fafc] text-[#475569]"}`}>
+      <span className="opacity-70">{label}</span>
+      <span className={expired ? "font-bold" : ""}>{value}</span>
+    </span>
+  );
+}
+
 
 function StatusBadge({ status }: { status: Vehicle["status"] }) {
   const map = {
