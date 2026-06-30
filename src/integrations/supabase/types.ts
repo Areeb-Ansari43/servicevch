@@ -14,7 +14,241 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      driver_tracks: {
+        Row: {
+          active: boolean
+          allowance: number
+          created_at: string
+          current_mileage: number
+          driver_name: string
+          id: string
+          rate_pence: number
+          reg: string
+          start_date: string
+          start_mileage: number
+          user_id: string
+          vehicle_id: string | null
+        }
+        Insert: {
+          active?: boolean
+          allowance?: number
+          created_at?: string
+          current_mileage?: number
+          driver_name: string
+          id?: string
+          rate_pence?: number
+          reg: string
+          start_date?: string
+          start_mileage?: number
+          user_id: string
+          vehicle_id?: string | null
+        }
+        Update: {
+          active?: boolean
+          allowance?: number
+          created_at?: string
+          current_mileage?: number
+          driver_name?: string
+          id?: string
+          rate_pence?: number
+          reg?: string
+          start_date?: string
+          start_mileage?: number
+          user_id?: string
+          vehicle_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "driver_tracks_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      login_otps: {
+        Row: {
+          code_hash: string
+          consumed: boolean
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+        }
+        Insert: {
+          code_hash: string
+          consumed?: boolean
+          created_at?: string
+          email: string
+          expires_at: string
+          id?: string
+        }
+        Update: {
+          code_hash?: string
+          consumed?: boolean
+          created_at?: string
+          email?: string
+          expires_at?: string
+          id?: string
+        }
+        Relationships: []
+      }
+      mileage_logs: {
+        Row: {
+          allowance: number
+          created_at: string
+          driver_name: string
+          end_mileage: number
+          excess_charge: number
+          id: string
+          period_end: string
+          period_start: string
+          rate_pence: number
+          reg: string
+          start_mileage: number
+          track_id: string | null
+          user_id: string
+        }
+        Insert: {
+          allowance: number
+          created_at?: string
+          driver_name: string
+          end_mileage: number
+          excess_charge?: number
+          id?: string
+          period_end: string
+          period_start: string
+          rate_pence: number
+          reg: string
+          start_mileage: number
+          track_id?: string | null
+          user_id: string
+        }
+        Update: {
+          allowance?: number
+          created_at?: string
+          driver_name?: string
+          end_mileage?: number
+          excess_charge?: number
+          id?: string
+          period_end?: string
+          period_start?: string
+          rate_pence?: number
+          reg?: string
+          start_mileage?: number
+          track_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      service_records: {
+        Row: {
+          cost: number | null
+          created_at: string
+          garage: string | null
+          id: string
+          mileage: number | null
+          notes: string | null
+          reg: string
+          service_date: string
+          service_type: string | null
+          status: string | null
+          user_id: string
+          vehicle_id: string | null
+        }
+        Insert: {
+          cost?: number | null
+          created_at?: string
+          garage?: string | null
+          id?: string
+          mileage?: number | null
+          notes?: string | null
+          reg: string
+          service_date?: string
+          service_type?: string | null
+          status?: string | null
+          user_id: string
+          vehicle_id?: string | null
+        }
+        Update: {
+          cost?: number | null
+          created_at?: string
+          garage?: string | null
+          id?: string
+          mileage?: number | null
+          notes?: string | null
+          reg?: string
+          service_date?: string
+          service_type?: string | null
+          status?: string | null
+          user_id?: string
+          vehicle_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_records_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vehicles: {
+        Row: {
+          created_at: string
+          current_mileage: number | null
+          fuel_type: string | null
+          id: string
+          make: string
+          model: string
+          next_mot_date: string | null
+          next_service_date: string | null
+          notes: string | null
+          pco_expiry_date: string | null
+          reg: string
+          status: string | null
+          updated_at: string
+          user_id: string
+          year: number | null
+        }
+        Insert: {
+          created_at?: string
+          current_mileage?: number | null
+          fuel_type?: string | null
+          id?: string
+          make: string
+          model: string
+          next_mot_date?: string | null
+          next_service_date?: string | null
+          notes?: string | null
+          pco_expiry_date?: string | null
+          reg: string
+          status?: string | null
+          updated_at?: string
+          user_id: string
+          year?: number | null
+        }
+        Update: {
+          created_at?: string
+          current_mileage?: number | null
+          fuel_type?: string | null
+          id?: string
+          make?: string
+          model?: string
+          next_mot_date?: string | null
+          next_service_date?: string | null
+          notes?: string | null
+          pco_expiry_date?: string | null
+          reg?: string
+          status?: string | null
+          updated_at?: string
+          user_id?: string
+          year?: number | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
