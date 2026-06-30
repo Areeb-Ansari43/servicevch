@@ -125,10 +125,12 @@ export function useFleetData() {
     setServices((sRes.data ?? []).map(sFromRow));
     const logsByTrack = new Map<string, MonthlyLog[]>();
     for (const l of lRes.data ?? []) {
+      if (!l.track_id) continue;
       const arr = logsByTrack.get(l.track_id) ?? [];
       arr.push(lFromRow(l));
       logsByTrack.set(l.track_id, arr);
     }
+
     setDrivers((dRes.data ?? []).map((r) => dFromRow(r, logsByTrack.get(r.id) ?? [])));
     setLoading(false);
   }, []);
