@@ -826,7 +826,7 @@ if (typeof document !== "undefined" && !document.getElementById(_styleInjectId))
 }
 
 /* ---------------- Edit Vehicle Modal ---------------- */
-function EditVehicleModal({ vehicle, onClose, onSave }: { vehicle: Vehicle; onClose: () => void; onSave: (v: Vehicle) => void }) {
+export function EditVehicleModal({ vehicle, onClose, onSave }: { vehicle: Vehicle; onClose: () => void; onSave: (v: Vehicle) => void }) {
   const [v, setV] = useState<Vehicle>(vehicle);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
