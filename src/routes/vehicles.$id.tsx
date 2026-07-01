@@ -26,10 +26,11 @@ function VehicleDetailPage() {
     });
   }, [navigate]);
 
-  const { vehicles, services, loading } = useFleetData();
+  const { vehicles, services, loading, saveVehicle, deleteVehicle } = useFleetData();
   const vehicle = vehicles.find((v) => v.id === id);
   const vServices = services.filter((s) => s.vehicle_id === id || (vehicle && s.registration === vehicle.registration));
   const totalSpend = vServices.reduce((a, s) => a + (s.cost || 0), 0);
+  const [editing, setEditing] = useState(false);
 
   if (!authed) return null;
 
