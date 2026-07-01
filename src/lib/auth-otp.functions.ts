@@ -54,8 +54,9 @@ async function sendOtpEmail(_email: string, code: string) {
 export const requestLoginCode = createServerFn({ method: "POST" })
   .inputValidator((d) => z.object({ email: z.string().email(), password: z.string().min(1) }).parse(d))
   .handler(async ({ data }) => {
-    if (data.email.toLowerCase() !== ALLOWED_EMAIL || data.password !== ALLOWED_PASSWORD) {
-      // Constant-time-ish small delay to avoid trivial timing oracles
+    const email = data.email.trim().toLowerCase();
+    const password = data.password.trim();
+    if (email !== ALLOWED_EMAIL || password !== ALLOWED_PASSWORD) {
       await new Promise((r) => setTimeout(r, 400));
       throw new Error("Invalid credentials");
     }
