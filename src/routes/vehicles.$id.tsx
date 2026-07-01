@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useFleetData } from "@/lib/fleet-data";
 import { exportVehiclePdf } from "@/lib/pdf-export";
-import { UKPlate, StatusBadge, Pill, daysUntil, T } from "@/routes/index";
+import { UKPlate, StatusBadge, Pill, daysUntil, T, EditVehicleModal } from "@/routes/index";
 
 export const Route = createFileRoute("/vehicles/$id")({
   head: () => ({
@@ -26,10 +26,11 @@ function VehicleDetailPage() {
     });
   }, [navigate]);
 
-  const { vehicles, services, loading } = useFleetData();
+  const { vehicles, services, loading, saveVehicle, deleteVehicle } = useFleetData();
   const vehicle = vehicles.find((v) => v.id === id);
   const vServices = services.filter((s) => s.vehicle_id === id || (vehicle && s.registration === vehicle.registration));
   const totalSpend = vServices.reduce((a, s) => a + (s.cost || 0), 0);
+  const [editing, setEditing] = useState(false);
 
   if (!authed) return null;
 
@@ -67,6 +68,23 @@ function VehicleDetailPage() {
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                     Export PDF
+                  </button>
+                  <button
+                    onClick={() => setEditing(true)}
+                    className="inline-flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold text-[#e7eaf0] hover:bg-[#1e222b]"
+                    style={{ borderColor: T.border }}
+                  >
+                    Edit Vehicle
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!confirm(`Delete ${vehicle.registration}? This cannot be undone.`)) return;
+                      await deleteVehicle(vehicle.id);
+                      navigate({ to: "/" });
+                    }}
+                    className="inline-flex items-center gap-2 rounded-lg border border-red-500/40 px-4 py-2.5 text-sm font-semibold text-red-400 hover:bg-red-500/10"
+                  >
+                    Delete
                   </button>
                 </div>
               </div>
@@ -121,6 +139,13 @@ function VehicleDetailPage() {
           </>
         )}
       </div>
+      {vehicle && editing && (
+        <EditVehicleModal
+          vehicle={vehicle}
+          onClose={() => setEditing(false)}
+          onSave={async (v) => { await saveVehicle(v, false); setEditing(false); }}
+        />
+      )}
     </div>
   );
 }

@@ -230,8 +230,6 @@ function FleetApp() {
           ) : view === "vehicles" ? (
             <VehiclesList
               vehicles={data.vehicles}
-              onEdit={(v) => setEditingVehicle(v)}
-              onDelete={async (id) => { await data.deleteVehicle(id); toast("Vehicle removed", "info"); }}
               onAdd={() => setView("add")}
               onOpen={(v) => navigate({ to: "/vehicles/$id", params: { id: v.id } })}
             />
@@ -593,8 +591,8 @@ function LineChart({ data, height }: { data: [string, number][]; height: number 
 
 /* ---------------- Vehicles ---------------- */
 function VehiclesList({
-  vehicles, onEdit, onDelete, onAdd, onOpen,
-}: { vehicles: Vehicle[]; onEdit: (v: Vehicle) => void; onDelete: (id: string) => void; onAdd: () => void; onOpen: (v: Vehicle) => void }) {
+  vehicles, onAdd, onOpen,
+}: { vehicles: Vehicle[]; onAdd: () => void; onOpen: (v: Vehicle) => void }) {
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const filtered = vehicles.filter((v) => {
@@ -671,11 +669,7 @@ function VehiclesList({
                 {v.insurance_expiry && <Pill label="Ins." value={daysUntil(v.insurance_expiry)} />}
               </div>
               <div className="mt-3 flex items-center justify-between gap-2 border-t pt-3" style={{ borderColor: T.borderSoft }}>
-                <button onClick={() => onOpen(v)} className="rounded-md px-2 py-1 text-xs font-semibold text-[#ff6a00] hover:bg-[#ff6a00]/10">View</button>
-                <div className="flex gap-1">
-                  <button onClick={() => onEdit(v)} className="rounded-md px-2 py-1 text-xs font-medium text-[#c5cbd6] hover:bg-[#1e222b]">Edit</button>
-                  <button onClick={() => { if (confirm(`Delete ${v.registration}?`)) onDelete(v.id); }} className="rounded-md px-2 py-1 text-xs font-medium text-red-400 hover:bg-red-500/10">Delete</button>
-                </div>
+                <button onClick={() => onOpen(v)} className="rounded-md px-2 py-1 text-xs font-semibold text-[#ff6a00] hover:bg-[#ff6a00]/10">View Details →</button>
               </div>
             </div>
           ))}
@@ -832,7 +826,7 @@ if (typeof document !== "undefined" && !document.getElementById(_styleInjectId))
 }
 
 /* ---------------- Edit Vehicle Modal ---------------- */
-function EditVehicleModal({ vehicle, onClose, onSave }: { vehicle: Vehicle; onClose: () => void; onSave: (v: Vehicle) => void }) {
+export function EditVehicleModal({ vehicle, onClose, onSave }: { vehicle: Vehicle; onClose: () => void; onSave: (v: Vehicle) => void }) {
   const [v, setV] = useState<Vehicle>(vehicle);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
