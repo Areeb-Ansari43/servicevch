@@ -139,6 +139,13 @@ function VehicleDetailPage() {
           </>
         )}
       </div>
+      {vehicle && editing && (
+        <EditVehicleModal
+          vehicle={vehicle}
+          onClose={() => setEditing(false)}
+          onSave={async (v) => { await saveVehicle(v, false); setEditing(false); }}
+        />
+      )}
     </div>
   );
 }
