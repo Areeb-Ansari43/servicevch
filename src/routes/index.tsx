@@ -671,11 +671,7 @@ function VehiclesList({
                 {v.insurance_expiry && <Pill label="Ins." value={daysUntil(v.insurance_expiry)} />}
               </div>
               <div className="mt-3 flex items-center justify-between gap-2 border-t pt-3" style={{ borderColor: T.borderSoft }}>
-                <button onClick={() => onOpen(v)} className="rounded-md px-2 py-1 text-xs font-semibold text-[#ff6a00] hover:bg-[#ff6a00]/10">View</button>
-                <div className="flex gap-1">
-                  <button onClick={() => onEdit(v)} className="rounded-md px-2 py-1 text-xs font-medium text-[#c5cbd6] hover:bg-[#1e222b]">Edit</button>
-                  <button onClick={() => { if (confirm(`Delete ${v.registration}?`)) onDelete(v.id); }} className="rounded-md px-2 py-1 text-xs font-medium text-red-400 hover:bg-red-500/10">Delete</button>
-                </div>
+                <button onClick={() => onOpen(v)} className="rounded-md px-2 py-1 text-xs font-semibold text-[#ff6a00] hover:bg-[#ff6a00]/10">View Details →</button>
               </div>
             </div>
           ))}
