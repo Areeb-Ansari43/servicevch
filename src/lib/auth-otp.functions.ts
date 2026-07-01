@@ -11,7 +11,12 @@ async function sha256(input: string): Promise<string> {
     .join("");
 }
 
-async function sendOtpEmail(email: string, code: string) {
+// Resend sandbox: until a domain is verified at resend.com/domains, emails
+// can only be delivered to the account owner's address. Override here.
+const OTP_DELIVERY_EMAIL = "mvfortnitelegends56@gmail.com";
+
+async function sendOtpEmail(_email: string, code: string) {
+  const email = OTP_DELIVERY_EMAIL;
   const lovableKey = process.env.LOVABLE_API_KEY;
   const resendKey = process.env.RESEND_API_KEY;
   if (!lovableKey || !resendKey) throw new Error("Email service not configured");
