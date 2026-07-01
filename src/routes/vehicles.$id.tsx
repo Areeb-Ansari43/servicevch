@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useFleetData } from "@/lib/fleet-data";
 import { exportVehiclePdf } from "@/lib/pdf-export";
-import { UKPlate, StatusBadge, Pill, daysUntil, T } from "@/routes/index";
+import { UKPlate, StatusBadge, Pill, daysUntil, T, EditVehicleModal } from "@/routes/index";
 
 export const Route = createFileRoute("/vehicles/$id")({
   head: () => ({
