@@ -230,8 +230,6 @@ function FleetApp() {
           ) : view === "vehicles" ? (
             <VehiclesList
               vehicles={data.vehicles}
-              onEdit={(v) => setEditingVehicle(v)}
-              onDelete={async (id) => { await data.deleteVehicle(id); toast("Vehicle removed", "info"); }}
               onAdd={() => setView("add")}
               onOpen={(v) => navigate({ to: "/vehicles/$id", params: { id: v.id } })}
             />
