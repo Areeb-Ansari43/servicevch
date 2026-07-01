@@ -593,8 +593,8 @@ function LineChart({ data, height }: { data: [string, number][]; height: number 
 
 /* ---------------- Vehicles ---------------- */
 function VehiclesList({
-  vehicles, onEdit, onDelete, onAdd, onOpen,
-}: { vehicles: Vehicle[]; onEdit: (v: Vehicle) => void; onDelete: (id: string) => void; onAdd: () => void; onOpen: (v: Vehicle) => void }) {
+  vehicles, onAdd, onOpen,
+}: { vehicles: Vehicle[]; onAdd: () => void; onOpen: (v: Vehicle) => void }) {
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const filtered = vehicles.filter((v) => {
