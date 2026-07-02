@@ -87,7 +87,7 @@ export function exportVehiclePdf(v: Vehicle, services: ServiceRecord[]) {
     ["Current Mileage", `${v.current_mileage.toLocaleString()} mi`],
     ["Next Service", v.next_service_date || "—"],
     ["Next MOT", v.next_mot_date || "—"],
-    ["Insurance Expiry", v.insurance_expiry || "—"],
+    ["PCO License Expiry", v.insurance_expiry || "—"],
   ];
 
   autoTable(doc, {
