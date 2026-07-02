@@ -392,7 +392,8 @@ function Dashboard({ vehicles, services, drivers, goto }: { vehicles: Vehicle[];
   });
   const monthly = Array.from(monthlyMap.entries()).sort().slice(-6);
 
-  // End of month reminders: 5 days before (start_date + 1 month)
+  // End of month reminders: fires on the due date (start_date + 1 month) and stays
+  // until the driver's mileage is updated (closeMonth resets start_date).
   const now = Date.now();
   const eomReminders = drivers
     .map((d) => {
@@ -402,8 +403,23 @@ function Dashboard({ vehicles, services, drivers, goto }: { vehicles: Vehicle[];
       const days = Math.ceil((dueDate.getTime() - now) / 86400000);
       return { d, dueDate, days };
     })
-    .filter((x) => x.days <= 5)
+    .filter((x) => x.days <= 0)
     .sort((a, b) => a.days - b.days);
+
+  // Expiry alerts: MOT & PCO expiring within 30 days or expired
+  const expiryAlerts = vehicles.flatMap((v) => {
+    const items: { v: Vehicle; type: "MOT" | "PCO License"; date: string; days: number }[] = [];
+    const check = (type: "MOT" | "PCO License", date: string) => {
+      if (!date) return;
+      const t = new Date(date).getTime();
+      if (isNaN(t)) return;
+      const days = Math.ceil((t - now) / 86400000);
+      if (days <= 30) items.push({ v, type, date, days });
+    };
+    check("MOT", v.next_mot_date);
+    check("PCO License", v.insurance_expiry);
+    return items;
+  }).sort((a, b) => a.days - b.days);
 
   const [expandedChart, setExpandedChart] = useState<null | "donut" | "line">(null);
 
@@ -421,11 +437,35 @@ function Dashboard({ vehicles, services, drivers, goto }: { vehicles: Vehicle[];
               <button key={d.id} onClick={() => goto("mileage")} className="flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-[#1e222b]" style={{ borderColor: T.border, background: T.panel }}>
                 <UKPlate reg={d.registration} size="sm" />
                 <div className="flex-1 text-sm">
-                  Ask <span className="font-bold">{d.driver_name}</span> for end-of-month mileage.
-                  <div className="text-xs text-[#8b95a8]">Due {dueDate.toLocaleDateString("en-GB")}</div>
+                  Ask <span className="font-bold">{d.driver_name}</span> to send a photo of the current mileage for <span className="font-semibold">{d.registration}</span>.
+                  <div className="text-xs text-[#8b95a8]">Due {dueDate.toLocaleDateString("en-GB")} · Dismisses when you log End of Month mileage</div>
                 </div>
-                <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${days < 0 ? "bg-red-500/20 text-red-300" : days === 0 ? "bg-red-500/20 text-red-300" : "bg-amber-500/20 text-amber-300"}`}>
-                  {days < 0 ? `${Math.abs(days)}d overdue` : days === 0 ? "Due today" : `${days}d left`}
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${days < 0 ? "bg-red-500/20 text-red-300" : "bg-red-500/20 text-red-300"}`}>
+                  {days < 0 ? `${Math.abs(days)}d overdue` : "Due today"}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {expiryAlerts.length > 0 && (
+        <div className="rounded-xl border p-5" style={{ borderColor: "rgba(248,113,113,0.35)", background: "rgba(248,113,113,0.06)" }}>
+          <div className="mb-3 flex items-center gap-2">
+            <Icon.Alert className="h-5 w-5 text-red-400" />
+            <h3 className="text-base font-semibold text-red-300">Alerts — MOT & PCO License Expiry</h3>
+            <span className="ml-auto rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">{expiryAlerts.length}</span>
+          </div>
+          <div className="space-y-2">
+            {expiryAlerts.map(({ v, type, date, days }) => (
+              <button key={v.id + type} onClick={() => goto("vehicles")} className="flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-[#1e222b]" style={{ borderColor: T.border, background: T.panel }}>
+                <UKPlate reg={v.registration} size="sm" />
+                <div className="flex-1 text-sm">
+                  <span className="font-bold">{type}</span> {days < 0 ? "expired" : "expiring"} for {v.make} {v.model}
+                  <div className="text-xs text-[#8b95a8]">{new Date(date).toLocaleDateString("en-GB")}</div>
+                </div>
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${days < 0 ? "bg-red-500/20 text-red-300" : days <= 7 ? "bg-red-500/20 text-red-300" : "bg-amber-500/20 text-amber-300"}`}>
+                  {days < 0 ? `${Math.abs(days)}d overdue` : days === 0 ? "Today" : `${days}d left`}
                 </span>
               </button>
             ))}
@@ -666,7 +706,7 @@ function VehiclesList({
               <div className="mt-3 flex flex-wrap gap-1.5 border-t pt-3 text-[10px]" style={{ borderColor: T.borderSoft }}>
                 {v.next_mot_date && <Pill label="MOT" value={daysUntil(v.next_mot_date)} />}
                 {v.next_service_date && <Pill label="Service" value={daysUntil(v.next_service_date)} />}
-                {v.insurance_expiry && <Pill label="Ins." value={daysUntil(v.insurance_expiry)} />}
+                {v.insurance_expiry && <Pill label="PCO" value={daysUntil(v.insurance_expiry)} />}
               </div>
               <div className="mt-3 flex items-center justify-between gap-2 border-t pt-3" style={{ borderColor: T.borderSoft }}>
                 <button onClick={() => onOpen(v)} className="rounded-md px-2 py-1 text-xs font-semibold text-[#ff6a00] hover:bg-[#ff6a00]/10">View Details →</button>
@@ -792,7 +832,7 @@ function AddVehicle({
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <Field label="Next Service"><input type="date" value={v.next_service_date} onChange={(e) => setV({ ...v, next_service_date: e.target.value })} className={inputCls} /></Field>
           <Field label="Next MOT"><input type="date" value={v.next_mot_date} onChange={(e) => setV({ ...v, next_mot_date: e.target.value })} className={inputCls} /></Field>
-          <Field label="Insurance Expiry"><input type="date" value={v.insurance_expiry} onChange={(e) => setV({ ...v, insurance_expiry: e.target.value })} className={inputCls} /></Field>
+          <Field label="PCO License Expiry"><input type="date" value={v.insurance_expiry} onChange={(e) => setV({ ...v, insurance_expiry: e.target.value })} className={inputCls} /></Field>
         </div>
       </div>
 
@@ -860,7 +900,7 @@ export function EditVehicleModal({ vehicle, onClose, onSave }: { vehicle: Vehicl
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <Field label="Next Service"><input type="date" value={v.next_service_date} onChange={(e) => setV({ ...v, next_service_date: e.target.value })} className={inputCls} /></Field>
             <Field label="Next MOT"><input type="date" value={v.next_mot_date} onChange={(e) => setV({ ...v, next_mot_date: e.target.value })} className={inputCls} /></Field>
-            <Field label="Insurance"><input type="date" value={v.insurance_expiry} onChange={(e) => setV({ ...v, insurance_expiry: e.target.value })} className={inputCls} /></Field>
+            <Field label="PCO License"><input type="date" value={v.insurance_expiry} onChange={(e) => setV({ ...v, insurance_expiry: e.target.value })} className={inputCls} /></Field>
           </div>
           <Field label="Notes"><textarea rows={3} value={v.notes} onChange={(e) => setV({ ...v, notes: e.target.value })} className={inputCls} /></Field>
           <div className="flex justify-end gap-2 border-t pt-4" style={{ borderColor: T.border }}>

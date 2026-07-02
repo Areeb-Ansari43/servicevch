@@ -102,7 +102,7 @@ function VehicleDetailPage() {
             <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
               <DateCard label="Next MOT" date={vehicle.next_mot_date} />
               <DateCard label="Next Service" date={vehicle.next_service_date} />
-              <DateCard label="Insurance Expiry" date={vehicle.insurance_expiry} />
+              <DateCard label="PCO License Expiry" date={vehicle.insurance_expiry} />
             </div>
 
             {vehicle.notes && (
