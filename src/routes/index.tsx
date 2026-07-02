@@ -706,7 +706,7 @@ function VehiclesList({
               <div className="mt-3 flex flex-wrap gap-1.5 border-t pt-3 text-[10px]" style={{ borderColor: T.borderSoft }}>
                 {v.next_mot_date && <Pill label="MOT" value={daysUntil(v.next_mot_date)} />}
                 {v.next_service_date && <Pill label="Service" value={daysUntil(v.next_service_date)} />}
-                {v.insurance_expiry && <Pill label="Ins." value={daysUntil(v.insurance_expiry)} />}
+                {v.insurance_expiry && <Pill label="PCO" value={daysUntil(v.insurance_expiry)} />}
               </div>
               <div className="mt-3 flex items-center justify-between gap-2 border-t pt-3" style={{ borderColor: T.borderSoft }}>
                 <button onClick={() => onOpen(v)} className="rounded-md px-2 py-1 text-xs font-semibold text-[#ff6a00] hover:bg-[#ff6a00]/10">View Details →</button>
