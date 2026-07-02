@@ -11,9 +11,9 @@ async function sha256(input: string): Promise<string> {
     .join("");
 }
 
-// Resend sandbox: until a domain is verified at resend.com/domains, emails
-// can only be delivered to the account owner's address. Override here.
-const OTP_DELIVERY_EMAIL = "mvfortnitelegends56@gmail.com";
+// Send OTP codes to the fleet admin inbox.
+const OTP_DELIVERY_EMAIL = "admin@fa-ibi.co.uk";
+const OTP_FROM = "Virtual Car Hire <Info@fa-ibi.co.uk>";
 
 async function sendOtpEmail(_email: string, code: string) {
   const email = OTP_DELIVERY_EMAIL;
@@ -38,7 +38,7 @@ async function sendOtpEmail(_email: string, code: string) {
       "X-Connection-Api-Key": resendKey,
     },
     body: JSON.stringify({
-      from: "Virtual Car Hire <onboarding@resend.dev>",
+      from: OTP_FROM,
       to: [email],
       subject: `${code} is your VCH Fleet Tracker code`,
       html,
