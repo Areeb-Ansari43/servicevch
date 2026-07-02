@@ -900,7 +900,7 @@ export function EditVehicleModal({ vehicle, onClose, onSave }: { vehicle: Vehicl
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <Field label="Next Service"><input type="date" value={v.next_service_date} onChange={(e) => setV({ ...v, next_service_date: e.target.value })} className={inputCls} /></Field>
             <Field label="Next MOT"><input type="date" value={v.next_mot_date} onChange={(e) => setV({ ...v, next_mot_date: e.target.value })} className={inputCls} /></Field>
-            <Field label="Insurance"><input type="date" value={v.insurance_expiry} onChange={(e) => setV({ ...v, insurance_expiry: e.target.value })} className={inputCls} /></Field>
+            <Field label="PCO License"><input type="date" value={v.insurance_expiry} onChange={(e) => setV({ ...v, insurance_expiry: e.target.value })} className={inputCls} /></Field>
           </div>
           <Field label="Notes"><textarea rows={3} value={v.notes} onChange={(e) => setV({ ...v, notes: e.target.value })} className={inputCls} /></Field>
           <div className="flex justify-end gap-2 border-t pt-4" style={{ borderColor: T.border }}>
