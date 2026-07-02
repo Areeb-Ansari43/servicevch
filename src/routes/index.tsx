@@ -392,7 +392,8 @@ function Dashboard({ vehicles, services, drivers, goto }: { vehicles: Vehicle[];
   });
   const monthly = Array.from(monthlyMap.entries()).sort().slice(-6);
 
-  // End of month reminders: 5 days before (start_date + 1 month)
+  // End of month reminders: fires on the due date (start_date + 1 month) and stays
+  // until the driver's mileage is updated (closeMonth resets start_date).
   const now = Date.now();
   const eomReminders = drivers
     .map((d) => {
@@ -402,8 +403,23 @@ function Dashboard({ vehicles, services, drivers, goto }: { vehicles: Vehicle[];
       const days = Math.ceil((dueDate.getTime() - now) / 86400000);
       return { d, dueDate, days };
     })
-    .filter((x) => x.days <= 5)
+    .filter((x) => x.days <= 0)
     .sort((a, b) => a.days - b.days);
+
+  // Expiry alerts: MOT & PCO expiring within 30 days or expired
+  const expiryAlerts = vehicles.flatMap((v) => {
+    const items: { v: Vehicle; type: "MOT" | "PCO License"; date: string; days: number }[] = [];
+    const check = (type: "MOT" | "PCO License", date: string) => {
+      if (!date) return;
+      const t = new Date(date).getTime();
+      if (isNaN(t)) return;
+      const days = Math.ceil((t - now) / 86400000);
+      if (days <= 30) items.push({ v, type, date, days });
+    };
+    check("MOT", v.next_mot_date);
+    check("PCO License", v.insurance_expiry);
+    return items;
+  }).sort((a, b) => a.days - b.days);
 
   const [expandedChart, setExpandedChart] = useState<null | "donut" | "line">(null);
 
