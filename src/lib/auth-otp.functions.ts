@@ -53,18 +53,6 @@ async function sendOtpEmail(_email: string, code: string) {
   }
 }
 
-async function ensureAuthUser(supabaseAdmin: any) {
-  // Find or create the allowed auth user so magiclink can be minted for it.
-  const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 });
-  const existing = list?.users?.find((u: any) => (u.email ?? "").toLowerCase() === ALLOWED_EMAIL);
-  if (existing) return existing;
-  const { data: created, error } = await supabaseAdmin.auth.admin.createUser({
-    email: ALLOWED_EMAIL,
-    email_confirm: true,
-  });
-  if (error) throw new Error(error.message);
-  return created.user;
-}
 
 export const requestLoginCode = createServerFn({ method: "POST" })
   .inputValidator((d) => z.object({ email: z.string().email(), password: z.string().min(1) }).parse(d))
