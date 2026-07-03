@@ -105,11 +105,9 @@ export const verifyLoginCode = createServerFn({ method: "POST" })
 
     await supabaseAdmin.from("login_otps").update({ consumed: true }).eq("id", row.id);
 
-    await ensureAuthUser(supabaseAdmin);
-
     const { data: link, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
       type: "magiclink",
-      email: ALLOWED_EMAIL,
+      email: SESSION_USER_EMAIL,
     });
     if (linkErr || !link?.properties?.hashed_token) throw new Error(linkErr?.message || "Failed to mint session");
 
