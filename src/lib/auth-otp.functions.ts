@@ -1,8 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-const ALLOWED_EMAIL = "info@fa-ibi.co.uk";
+const ALLOWED_EMAIL = "admin@fa-ibi.co.uk";
 const ALLOWED_PASSWORD = "Pakistan1!";
+// Existing Supabase auth user that owns all fleet data. Login credentials are admin@,
+// but the session is minted for this account so data ownership stays intact.
+const SESSION_USER_EMAIL = "Info@fa-ibi.co.uk";
 
 async function sha256(input: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
@@ -11,9 +14,8 @@ async function sha256(input: string): Promise<string> {
     .join("");
 }
 
-// Send OTP codes to the fleet admin inbox.
 const OTP_DELIVERY_EMAIL = "admin@fa-ibi.co.uk";
-const OTP_FROM = "Virtual Car Hire <Info@fa-ibi.co.uk>";
+const OTP_FROM = "Virtual Car Hire <admin@fa-ibi.co.uk>";
 
 async function sendOtpEmail(_email: string, code: string) {
   const email = OTP_DELIVERY_EMAIL;
@@ -51,6 +53,7 @@ async function sendOtpEmail(_email: string, code: string) {
   }
 }
 
+
 export const requestLoginCode = createServerFn({ method: "POST" })
   .inputValidator((d) => z.object({ email: z.string().email(), password: z.string().min(1) }).parse(d))
   .handler(async ({ data }) => {
@@ -67,7 +70,6 @@ export const requestLoginCode = createServerFn({ method: "POST" })
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    // Invalidate previous unconsumed codes for this email
     await supabaseAdmin.from("login_otps").update({ consumed: true }).eq("email", ALLOWED_EMAIL).eq("consumed", false);
 
     const { error } = await supabaseAdmin.from("login_otps").insert({
@@ -103,10 +105,9 @@ export const verifyLoginCode = createServerFn({ method: "POST" })
 
     await supabaseAdmin.from("login_otps").update({ consumed: true }).eq("id", row.id);
 
-    // Mint a session token pair via magiclink, then exchange on the client.
     const { data: link, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
       type: "magiclink",
-      email: ALLOWED_EMAIL,
+      email: SESSION_USER_EMAIL,
     });
     if (linkErr || !link?.properties?.hashed_token) throw new Error(linkErr?.message || "Failed to mint session");
 
