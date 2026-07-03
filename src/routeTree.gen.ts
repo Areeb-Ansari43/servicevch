@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as VehiclesIdRouteImport } from './routes/vehicles.$id'
+import { Route as ApiPublicExpiryAlertsRouteImport } from './routes/api/public/expiry-alerts'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -28,35 +29,49 @@ const VehiclesIdRoute = VehiclesIdRouteImport.update({
   path: '/vehicles/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicExpiryAlertsRoute = ApiPublicExpiryAlertsRouteImport.update({
+  id: '/api/public/expiry-alerts',
+  path: '/api/public/expiry-alerts',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/vehicles/$id': typeof VehiclesIdRoute
+  '/api/public/expiry-alerts': typeof ApiPublicExpiryAlertsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/vehicles/$id': typeof VehiclesIdRoute
+  '/api/public/expiry-alerts': typeof ApiPublicExpiryAlertsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/vehicles/$id': typeof VehiclesIdRoute
+  '/api/public/expiry-alerts': typeof ApiPublicExpiryAlertsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/vehicles/$id'
+  fullPaths: '/' | '/login' | '/vehicles/$id' | '/api/public/expiry-alerts'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/vehicles/$id'
-  id: '__root__' | '/' | '/login' | '/vehicles/$id'
+  to: '/' | '/login' | '/vehicles/$id' | '/api/public/expiry-alerts'
+  id:
+    | '__root__'
+    | '/'
+    | '/login'
+    | '/vehicles/$id'
+    | '/api/public/expiry-alerts'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
   VehiclesIdRoute: typeof VehiclesIdRoute
+  ApiPublicExpiryAlertsRoute: typeof ApiPublicExpiryAlertsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -82,6 +97,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VehiclesIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/expiry-alerts': {
+      id: '/api/public/expiry-alerts'
+      path: '/api/public/expiry-alerts'
+      fullPath: '/api/public/expiry-alerts'
+      preLoaderRoute: typeof ApiPublicExpiryAlertsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -89,6 +111,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
   VehiclesIdRoute: VehiclesIdRoute,
+  ApiPublicExpiryAlertsRoute: ApiPublicExpiryAlertsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
