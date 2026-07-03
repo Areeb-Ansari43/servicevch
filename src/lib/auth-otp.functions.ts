@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-const ALLOWED_EMAIL = "info@fa-ibi.co.uk";
+const ALLOWED_EMAIL = "admin@fa-ibi.co.uk";
 const ALLOWED_PASSWORD = "Pakistan1!";
 
 async function sha256(input: string): Promise<string> {
@@ -11,9 +11,8 @@ async function sha256(input: string): Promise<string> {
     .join("");
 }
 
-// Send OTP codes to the fleet admin inbox.
 const OTP_DELIVERY_EMAIL = "admin@fa-ibi.co.uk";
-const OTP_FROM = "Virtual Car Hire <Info@fa-ibi.co.uk>";
+const OTP_FROM = "Virtual Car Hire <admin@fa-ibi.co.uk>";
 
 async function sendOtpEmail(_email: string, code: string) {
   const email = OTP_DELIVERY_EMAIL;
@@ -51,6 +50,19 @@ async function sendOtpEmail(_email: string, code: string) {
   }
 }
 
+async function ensureAuthUser(supabaseAdmin: any) {
+  // Find or create the allowed auth user so magiclink can be minted for it.
+  const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 });
+  const existing = list?.users?.find((u: any) => (u.email ?? "").toLowerCase() === ALLOWED_EMAIL);
+  if (existing) return existing;
+  const { data: created, error } = await supabaseAdmin.auth.admin.createUser({
+    email: ALLOWED_EMAIL,
+    email_confirm: true,
+  });
+  if (error) throw new Error(error.message);
+  return created.user;
+}
+
 export const requestLoginCode = createServerFn({ method: "POST" })
   .inputValidator((d) => z.object({ email: z.string().email(), password: z.string().min(1) }).parse(d))
   .handler(async ({ data }) => {
@@ -67,7 +79,6 @@ export const requestLoginCode = createServerFn({ method: "POST" })
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    // Invalidate previous unconsumed codes for this email
     await supabaseAdmin.from("login_otps").update({ consumed: true }).eq("email", ALLOWED_EMAIL).eq("consumed", false);
 
     const { error } = await supabaseAdmin.from("login_otps").insert({
@@ -103,7 +114,8 @@ export const verifyLoginCode = createServerFn({ method: "POST" })
 
     await supabaseAdmin.from("login_otps").update({ consumed: true }).eq("id", row.id);
 
-    // Mint a session token pair via magiclink, then exchange on the client.
+    await ensureAuthUser(supabaseAdmin);
+
     const { data: link, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
       type: "magiclink",
       email: ALLOWED_EMAIL,
