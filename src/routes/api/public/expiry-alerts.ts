@@ -26,18 +26,21 @@ async function runExpiryScan() {
   if (error) return new Response(JSON.stringify({ ok: false, error: error.message }), { status: 500 });
 
   const now = Date.now();
-  type Item = { reg: string; make: string; model: string; type: "MOT" | "PCO License"; date: string; days: number };
+  type Item = { reg: string; make: string; model: string; type: "MOT" | "PCO License"; date: string; days: number; expired: boolean };
   const items: Item[] = [];
   for (const v of vehicles ?? []) {
-    const check = (type: Item["type"], date: string | null) => {
+    const check = (type: Item["type"], date: string | null, reminderDays: number) => {
       if (!date) return;
       const t = new Date(date).getTime();
       if (isNaN(t)) return;
       const days = Math.ceil((t - now) / 86400000);
-      if (days <= 30) items.push({ reg: v.reg, make: v.make, model: v.model, type, date, days });
+      // Reminder exactly N days before expiry, and warning on/after expiry day
+      if (days === reminderDays || days <= 0) {
+        items.push({ reg: v.reg, make: v.make, model: v.model, type, date, days, expired: days <= 0 });
+      }
     };
-    check("MOT", v.next_mot_date);
-    check("PCO License", v.pco_expiry_date);
+    check("MOT", v.next_mot_date, 7);
+    check("PCO License", v.pco_expiry_date, 10);
   }
 
   if (items.length === 0) {
