@@ -15,7 +15,10 @@ async function sha256(input: string): Promise<string> {
 }
 
 const OTP_DELIVERY_EMAIL = "admin@fa-ibi.co.uk";
-const OTP_FROM = "Virtual Car Hire <admin@fa-ibi.co.uk>";
+// NOTE: fa-ibi.co.uk is not yet verified in Resend, so we send from Resend's
+// shared verified sender. Once the domain is verified in Resend, switch this
+// back to "Virtual Car Hire <admin@fa-ibi.co.uk>".
+const OTP_FROM = "Virtual Car Hire <onboarding@resend.dev>";
 
 async function sendOtpEmail(_email: string, code: string) {
   const email = OTP_DELIVERY_EMAIL;
