@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 const ALERT_TO = "admin@fa-ibi.co.uk";
-const ALERT_FROM = "Virtual Car Hire <admin@fa-ibi.co.uk>";
+// Until fa-ibi.co.uk is verified in Resend, send from the shared verified sender.
+const ALERT_FROM = "Virtual Car Hire <onboarding@resend.dev>";
 
 export const Route = createFileRoute("/api/public/expiry-alerts")({
   server: {
