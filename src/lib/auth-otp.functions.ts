@@ -22,9 +22,8 @@ const OTP_FROM = "Virtual Car Hire <onboarding@resend.dev>";
 
 async function sendOtpEmail(_email: string, code: string) {
   const email = OTP_DELIVERY_EMAIL;
-  const lovableKey = process.env.LOVABLE_API_KEY;
   const resendKey = process.env.RESEND_API_KEY;
-  if (!lovableKey || !resendKey) throw new Error("Email service not configured");
+  if (!resendKey) throw new Error("Email service not configured: RESEND_API_KEY missing");
 
   const html = `
     <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;padding:24px;background:#0f1115;color:#fff;border-radius:12px">
@@ -35,12 +34,11 @@ async function sendOtpEmail(_email: string, code: string) {
       <p style="color:#64748b;font-size:12px;margin:18px 0 0">If you didn't request this, ignore this email.</p>
     </div>`;
 
-  const res = await fetch("https://connector-gateway.lovable.dev/resend/emails", {
+  const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${lovableKey}`,
-      "X-Connection-Api-Key": resendKey,
+      Authorization: `Bearer ${resendKey}`,
     },
     body: JSON.stringify({
       from: OTP_FROM,
