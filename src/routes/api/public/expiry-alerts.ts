@@ -14,10 +14,9 @@ export const Route = createFileRoute("/api/public/expiry-alerts")({
 });
 
 async function runExpiryScan() {
-  const lovableKey = process.env.LOVABLE_API_KEY;
   const resendKey = process.env.RESEND_API_KEY;
-  if (!lovableKey || !resendKey) {
-    return new Response(JSON.stringify({ ok: false, error: "Email not configured" }), { status: 500 });
+  if (!resendKey) {
+    return new Response(JSON.stringify({ ok: false, error: "Email not configured: RESEND_API_KEY missing" }), { status: 500 });
   }
 
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
