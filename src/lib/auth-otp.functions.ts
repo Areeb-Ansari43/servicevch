@@ -5,7 +5,7 @@ const ALLOWED_EMAIL = "admin@fa-ibi.co.uk";
 const ALLOWED_PASSWORD = "Pakistan1!";
 // Existing Supabase auth user that owns all fleet data. Login credentials are admin@,
 // but the session is minted for this account so data ownership stays intact.
-const SESSION_USER_EMAIL = "Info@fa-ibi.co.uk";
+const SESSION_USER_EMAIL = "admin@fa-ibi.co.uk";
 
 async function sha256(input: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
