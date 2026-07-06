@@ -34,8 +34,8 @@ async function runExpiryScan() {
       const t = new Date(date).getTime();
       if (isNaN(t)) return;
       const days = Math.ceil((t - now) / 86400000);
-      // Reminder exactly N days before expiry, and warning on/after expiry day
-      if (days === reminderDays || days <= 0) {
+      // Reminder any time within N days of expiry, and warning on/after expiry day
+      if (days <= reminderDays) {
         items.push({ reg: v.reg, make: v.make, model: v.model, type, date, days, expired: days <= 0 });
       }
     };
