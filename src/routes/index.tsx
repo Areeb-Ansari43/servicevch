@@ -220,11 +220,13 @@ function FleetApp() {
   if (!authed) return null;
 
   return (
-    <div className="min-h-screen text-[#e7eaf0]" style={{ background: T.bg }}>
+    <div className="vch-app relative min-h-screen text-[#eef2f8]" style={{ background: T.bg }}>
+      <div className="vch-glow" />
       <Sidebar view={view} setView={setView} onSignOut={signOut} />
-      <div className="ml-64">
+      <div className="relative z-10 ml-64">
         <Topbar />
         <main className="p-6 md:p-8">
+
           {data.loading ? (
             <div className="rounded-xl border p-12 text-center text-sm" style={{ borderColor: T.border, background: T.panel, color: T.muted }}>
               Loading fleet data…
