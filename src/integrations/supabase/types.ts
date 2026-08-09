@@ -14,6 +14,59 @@ export type Database = {
   }
   public: {
     Tables: {
+      accident_cases: {
+        Row: {
+          ai_summary: string | null
+          created_at: string
+          description: string
+          driver_name: string | null
+          id: string
+          incident_date: string
+          location: string | null
+          reg: string
+          severity: string
+          status: string
+          user_id: string
+          vehicle_id: string | null
+        }
+        Insert: {
+          ai_summary?: string | null
+          created_at?: string
+          description: string
+          driver_name?: string | null
+          id?: string
+          incident_date?: string
+          location?: string | null
+          reg?: string
+          severity?: string
+          status?: string
+          user_id: string
+          vehicle_id?: string | null
+        }
+        Update: {
+          ai_summary?: string | null
+          created_at?: string
+          description?: string
+          driver_name?: string | null
+          id?: string
+          incident_date?: string
+          location?: string | null
+          reg?: string
+          severity?: string
+          status?: string
+          user_id?: string
+          vehicle_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "accident_cases_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       driver_tracks: {
         Row: {
           active: boolean
@@ -246,6 +299,42 @@ export type Database = {
           updated_at?: string
           user_id?: string
           year?: number | null
+        }
+        Relationships: []
+      }
+      whatsapp_leads: {
+        Row: {
+          ai_summary: string | null
+          contact_name: string
+          created_at: string
+          id: string
+          intent: string | null
+          message: string
+          phone: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          ai_summary?: string | null
+          contact_name?: string
+          created_at?: string
+          id?: string
+          intent?: string | null
+          message: string
+          phone?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          ai_summary?: string | null
+          contact_name?: string
+          created_at?: string
+          id?: string
+          intent?: string | null
+          message?: string
+          phone?: string | null
+          status?: string
+          user_id?: string
         }
         Relationships: []
       }

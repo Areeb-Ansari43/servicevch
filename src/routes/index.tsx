@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useFleetData, type Vehicle, type ServiceRecord, type DriverTrack } from "@/lib/fleet-data";
 import { exportServiceHistoryPdf } from "@/lib/pdf-export";
+import { useLeadsData } from "@/lib/leads-data";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -117,19 +118,20 @@ const SERVICE_TYPES = [
   "Diagnostic","Bodywork Repair","Electrical Repair","Coolant Flush","Transmission Service","Other",
 ];
 
-/* ---------------- Theme ---------------- */
+/* ---------------- Theme (Apple liquid glass) ---------------- */
 export const T = {
-  bg: "#0e1015",
-  panel: "#171a21",
-  panel2: "#1e222b",
-  border: "#262b36",
-  borderSoft: "#1f242e",
-  text: "#e7eaf0",
-  muted: "#8b95a8",
-  mutedSoft: "#5b6478",
-  orange: "#ff6a00",
-  orangeSoft: "rgba(255,106,0,0.12)",
+  bg: "linear-gradient(160deg,#05070c 0%,#0a0e18 45%,#080b13 100%)",
+  panel: "rgba(255,255,255,0.055)",
+  panel2: "rgba(255,255,255,0.10)",
+  border: "rgba(255,255,255,0.12)",
+  borderSoft: "rgba(255,255,255,0.07)",
+  text: "#eef2f8",
+  muted: "#9aa5b8",
+  mutedSoft: "#6b7488",
+  orange: "#ff8a3d",
+  orangeSoft: "rgba(255,138,61,0.14)",
 };
+
 
 /* ---------------- Icons ---------------- */
 const Icon = {
@@ -146,7 +148,10 @@ const Icon = {
   Plus: (p: { className?: string }) => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}><path d="M12 5v14M5 12h14"/></svg>),
   SignOut: (p: { className?: string }) => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>),
   Dashboard: (p: { className?: string }) => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>),
+  Chat: (p: { className?: string }) => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>),
+  Crash: (p: { className?: string }) => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}><path d="m13 2-3 7h5l-3 7"/><path d="M5 17h14M5 17a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm18 0a2 2 0 1 1-4 0 2 2 0 0 1 4 0z"/><path d="M3 17v-4l2-3h4"/></svg>),
 };
+
 
 function serviceStyle(type: string) {
   const t = type.toLowerCase();
@@ -176,7 +181,7 @@ export function UKPlate({ reg, size = "md" }: { reg: string; size?: "sm" | "md" 
 }
 
 /* ---------------- App ---------------- */
-type View = "dashboard" | "vehicles" | "add" | "services" | "log-service" | "mileage";
+type View = "dashboard" | "vehicles" | "add" | "services" | "log-service" | "mileage" | "leads" | "accidents";
 
 function FleetApp() {
   if (typeof window === "undefined") return null;
@@ -216,11 +221,13 @@ function FleetApp() {
   if (!authed) return null;
 
   return (
-    <div className="min-h-screen text-[#e7eaf0]" style={{ background: T.bg }}>
+    <div className="vch-app relative min-h-screen text-[#eef2f8]" style={{ background: T.bg }}>
+      <div className="vch-glow" />
       <Sidebar view={view} setView={setView} onSignOut={signOut} />
-      <div className="ml-64">
+      <div className="relative z-10 ml-64">
         <Topbar />
         <main className="p-6 md:p-8">
+
           {data.loading ? (
             <div className="rounded-xl border p-12 text-center text-sm" style={{ borderColor: T.border, background: T.panel, color: T.muted }}>
               Loading fleet data…
@@ -254,7 +261,12 @@ function FleetApp() {
             />
           ) : view === "mileage" ? (
             <MileageView vehicles={data.vehicles} drivers={data.drivers} data={data} toast={toast} />
+          ) : view === "leads" ? (
+            <WhatsAppLeadsView toast={toast} />
+          ) : view === "accidents" ? (
+            <AccidentCasesView toast={toast} />
           ) : null}
+
         </main>
       </div>
 
@@ -298,7 +310,10 @@ function Sidebar({ view, setView, onSignOut }: { view: View; setView: (v: View) 
     { id: "vehicles", label: "Vehicles", Icon: Icon.Car },
     { id: "services", label: "Service History", Icon: Icon.Wrench },
     { id: "mileage", label: "Driver Mileage", Icon: Icon.Gauge },
+    { id: "leads", label: "WhatsApp Leads", Icon: Icon.Chat },
+    { id: "accidents", label: "Accident Cases", Icon: Icon.Crash },
     { id: "add", label: "Add Vehicle", Icon: Icon.Plus },
+
   ];
   return (
     <aside className="fixed inset-y-0 left-0 z-30 flex w-64 flex-col border-r" style={{ borderColor: T.border, background: T.panel }}>
@@ -1363,6 +1378,150 @@ function LogsModal({ driver, onClose }: { driver: DriverTrack; onClose: () => vo
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+/* ---------------- WhatsApp Leads ---------------- */
+function statusPill(status: string) {
+  const s = status.toLowerCase();
+  if (s === "new" || s === "open") return "border-emerald-400/30 bg-emerald-400/10 text-emerald-300";
+  if (s === "contacted" || s === "in progress") return "border-sky-400/30 bg-sky-400/10 text-sky-300";
+  return "border-white/15 bg-white/5 text-[#9aa5b8]";
+}
+
+function severityPill(sev: string) {
+  const s = sev.toLowerCase();
+  if (s === "severe") return "border-red-400/30 bg-red-400/10 text-red-300";
+  if (s === "moderate") return "border-amber-400/30 bg-amber-400/10 text-amber-300";
+  return "border-white/15 bg-white/5 text-[#9aa5b8]";
+}
+
+function SectionHead({ title, subtitle, count }: { title: string; subtitle: string; count: number }) {
+  return (
+    <div className="flex items-end justify-between">
+      <div>
+        <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
+        <p className="mt-1 text-sm text-[#9aa5b8]">{subtitle}</p>
+      </div>
+      <span className="rounded-full border px-3 py-1 text-xs font-semibold" style={{ borderColor: T.border, background: T.panel, color: T.orange }}>
+        {count} total
+      </span>
+    </div>
+  );
+}
+
+function WhatsAppLeadsView({ toast }: { toast: (m: string, t?: Toast["type"]) => void }) {
+  const { leads, loading, setLeadStatus, deleteLead } = useLeadsData();
+
+  return (
+    <div className="space-y-6">
+      <SectionHead title="WhatsApp Leads" subtitle="Inbound WhatsApp messages triaged and summarised by AI." count={leads.length} />
+
+      {loading ? (
+        <div className="rounded-xl border p-12 text-center text-sm" style={{ borderColor: T.border, background: T.panel, color: T.muted }}>Loading leads…</div>
+      ) : leads.length === 0 ? (
+        <div className="rounded-xl border p-12 text-center" style={{ borderColor: T.border, background: T.panel }}>
+          <Icon.Chat className="mx-auto h-8 w-8 text-[#9aa5b8]" />
+          <div className="mt-3 text-sm text-[#9aa5b8]">No leads yet. The AI files new WhatsApp enquiries here automatically.</div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          {leads.map((l) => (
+            <div key={l.id} className="rounded-2xl border p-5" style={{ borderColor: T.border, background: T.panel }}>
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl text-emerald-300" style={{ background: "rgba(16,185,129,0.14)" }}>
+                  <Icon.Chat className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold">{l.contact_name}</div>
+                  <div className="truncate text-xs text-[#9aa5b8]">{l.phone || "No number"} · {new Date(l.created_at).toLocaleString("en-GB")}</div>
+                </div>
+                <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold capitalize ${statusPill(l.status)}`}>{l.status}</span>
+              </div>
+
+              {l.ai_summary && (
+                <div className="mt-4 rounded-xl border p-3 text-sm" style={{ borderColor: T.borderSoft, background: T.panel2 }}>
+                  <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: T.orange }}>AI Summary</div>
+                  {l.ai_summary}
+                </div>
+              )}
+
+              <p className="mt-3 whitespace-pre-wrap text-sm text-[#c8d0dd]">{l.message}</p>
+
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                {l.intent && <span className="rounded-md border px-2 py-1 text-[11px] capitalize" style={{ borderColor: T.borderSoft, color: T.muted }}>{l.intent}</span>}
+                <div className="ml-auto flex gap-2">
+                  {l.status !== "contacted" && (
+                    <button onClick={async () => { await setLeadStatus(l.id, "contacted"); toast("Lead marked as contacted"); }} className="rounded-lg border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: T.border, background: T.panel2 }}>Mark contacted</button>
+                  )}
+                  {l.status !== "closed" && (
+                    <button onClick={async () => { await setLeadStatus(l.id, "closed"); toast("Lead closed", "info"); }} className="rounded-lg border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: T.border, background: T.panel2 }}>Close</button>
+                  )}
+                  <button onClick={async () => { await deleteLead(l.id); toast("Lead removed", "info"); }} className="rounded-lg border border-red-400/30 bg-red-400/10 px-3 py-1.5 text-xs font-semibold text-red-300">Delete</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------- Accident Cases ---------------- */
+function AccidentCasesView({ toast }: { toast: (m: string, t?: Toast["type"]) => void }) {
+  const { accidents, loading, setAccidentStatus, deleteAccident } = useLeadsData();
+
+  return (
+    <div className="space-y-6">
+      <SectionHead title="Accident Cases" subtitle="Accident reports captured and classified by AI." count={accidents.length} />
+
+      {loading ? (
+        <div className="rounded-xl border p-12 text-center text-sm" style={{ borderColor: T.border, background: T.panel, color: T.muted }}>Loading cases…</div>
+      ) : accidents.length === 0 ? (
+        <div className="rounded-xl border p-12 text-center" style={{ borderColor: T.border, background: T.panel }}>
+          <Icon.Crash className="mx-auto h-8 w-8 text-[#9aa5b8]" />
+          <div className="mt-3 text-sm text-[#9aa5b8]">No accident cases logged. The AI files new incident reports here automatically.</div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {accidents.map((a) => (
+            <div key={a.id} className="rounded-2xl border p-5" style={{ borderColor: T.border, background: T.panel }}>
+              <div className="flex flex-wrap items-center gap-3">
+                {a.reg ? <UKPlate reg={a.reg} size="sm" /> : <span className="text-sm text-[#9aa5b8]">No reg</span>}
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold">{a.driver_name || "Unknown driver"}</div>
+                  <div className="text-xs text-[#9aa5b8]">{new Date(a.incident_date).toLocaleDateString("en-GB")} · {a.location || "Location unknown"}</div>
+                </div>
+                <div className="ml-auto flex items-center gap-2">
+                  <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold capitalize ${severityPill(a.severity)}`}>{a.severity}</span>
+                  <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold capitalize ${statusPill(a.status)}`}>{a.status}</span>
+                </div>
+              </div>
+
+              {a.ai_summary && (
+                <div className="mt-4 rounded-xl border p-3 text-sm" style={{ borderColor: T.borderSoft, background: T.panel2 }}>
+                  <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: T.orange }}>AI Summary</div>
+                  {a.ai_summary}
+                </div>
+              )}
+
+              <p className="mt-3 whitespace-pre-wrap text-sm text-[#c8d0dd]">{a.description}</p>
+
+              <div className="mt-4 flex flex-wrap justify-end gap-2">
+                {a.status !== "in progress" && (
+                  <button onClick={async () => { await setAccidentStatus(a.id, "in progress"); toast("Case moved to in progress"); }} className="rounded-lg border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: T.border, background: T.panel2 }}>In progress</button>
+                )}
+                {a.status !== "closed" && (
+                  <button onClick={async () => { await setAccidentStatus(a.id, "closed"); toast("Case closed", "info"); }} className="rounded-lg border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: T.border, background: T.panel2 }}>Close case</button>
+                )}
+                <button onClick={async () => { await deleteAccident(a.id); toast("Case removed", "info"); }} className="rounded-lg border border-red-400/30 bg-red-400/10 px-3 py-1.5 text-xs font-semibold text-red-300">Delete</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
