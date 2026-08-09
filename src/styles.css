@@ -142,3 +142,24 @@
     color: var(--color-foreground);
   }
 }
+
+/* Liquid glass surfaces for the fleet app */
+.vch-app aside,
+.vch-app header,
+.vch-app [class*="rounded-xl"],
+.vch-app [class*="rounded-2xl"],
+.vch-app [class*="rounded-lg"] {
+  backdrop-filter: blur(22px) saturate(170%);
+}
+
+.vch-glow {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(60rem 40rem at 12% -10%, rgba(255, 106, 0, 0.18), transparent 60%),
+    radial-gradient(50rem 36rem at 95% 0%, rgba(56, 189, 248, 0.16), transparent 60%),
+    radial-gradient(46rem 34rem at 60% 110%, rgba(139, 92, 246, 0.14), transparent 60%);
+}
+
