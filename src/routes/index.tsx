@@ -258,7 +258,12 @@ function FleetApp() {
             />
           ) : view === "mileage" ? (
             <MileageView vehicles={data.vehicles} drivers={data.drivers} data={data} toast={toast} />
+          ) : view === "leads" ? (
+            <WhatsAppLeadsView toast={toast} />
+          ) : view === "accidents" ? (
+            <AccidentCasesView toast={toast} />
           ) : null}
+
         </main>
       </div>
 
