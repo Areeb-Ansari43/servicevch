@@ -309,7 +309,10 @@ function Sidebar({ view, setView, onSignOut }: { view: View; setView: (v: View) 
     { id: "vehicles", label: "Vehicles", Icon: Icon.Car },
     { id: "services", label: "Service History", Icon: Icon.Wrench },
     { id: "mileage", label: "Driver Mileage", Icon: Icon.Gauge },
+    { id: "leads", label: "WhatsApp Leads", Icon: Icon.Chat },
+    { id: "accidents", label: "Accident Cases", Icon: Icon.Crash },
     { id: "add", label: "Add Vehicle", Icon: Icon.Plus },
+
   ];
   return (
     <aside className="fixed inset-y-0 left-0 z-30 flex w-64 flex-col border-r" style={{ borderColor: T.border, background: T.panel }}>
