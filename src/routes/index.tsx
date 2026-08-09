@@ -117,19 +117,20 @@ const SERVICE_TYPES = [
   "Diagnostic","Bodywork Repair","Electrical Repair","Coolant Flush","Transmission Service","Other",
 ];
 
-/* ---------------- Theme ---------------- */
+/* ---------------- Theme (Apple liquid glass) ---------------- */
 export const T = {
-  bg: "#0e1015",
-  panel: "#171a21",
-  panel2: "#1e222b",
-  border: "#262b36",
-  borderSoft: "#1f242e",
-  text: "#e7eaf0",
-  muted: "#8b95a8",
-  mutedSoft: "#5b6478",
-  orange: "#ff6a00",
-  orangeSoft: "rgba(255,106,0,0.12)",
+  bg: "linear-gradient(160deg,#05070c 0%,#0a0e18 45%,#080b13 100%)",
+  panel: "rgba(255,255,255,0.055)",
+  panel2: "rgba(255,255,255,0.10)",
+  border: "rgba(255,255,255,0.12)",
+  borderSoft: "rgba(255,255,255,0.07)",
+  text: "#eef2f8",
+  muted: "#9aa5b8",
+  mutedSoft: "#6b7488",
+  orange: "#ff8a3d",
+  orangeSoft: "rgba(255,138,61,0.14)",
 };
+
 
 /* ---------------- Icons ---------------- */
 const Icon = {
