@@ -180,7 +180,7 @@ export function UKPlate({ reg, size = "md" }: { reg: string; size?: "sm" | "md" 
 }
 
 /* ---------------- App ---------------- */
-type View = "dashboard" | "vehicles" | "add" | "services" | "log-service" | "mileage";
+type View = "dashboard" | "vehicles" | "add" | "services" | "log-service" | "mileage" | "leads" | "accidents";
 
 function FleetApp() {
   if (typeof window === "undefined") return null;
