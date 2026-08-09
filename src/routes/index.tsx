@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useFleetData, type Vehicle, type ServiceRecord, type DriverTrack } from "@/lib/fleet-data";
 import { exportServiceHistoryPdf } from "@/lib/pdf-export";
+import { useLeadsData } from "@/lib/leads-data";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -1377,6 +1378,150 @@ function LogsModal({ driver, onClose }: { driver: DriverTrack; onClose: () => vo
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+/* ---------------- WhatsApp Leads ---------------- */
+function statusPill(status: string) {
+  const s = status.toLowerCase();
+  if (s === "new" || s === "open") return "border-emerald-400/30 bg-emerald-400/10 text-emerald-300";
+  if (s === "contacted" || s === "in progress") return "border-sky-400/30 bg-sky-400/10 text-sky-300";
+  return "border-white/15 bg-white/5 text-[#9aa5b8]";
+}
+
+function severityPill(sev: string) {
+  const s = sev.toLowerCase();
+  if (s === "severe") return "border-red-400/30 bg-red-400/10 text-red-300";
+  if (s === "moderate") return "border-amber-400/30 bg-amber-400/10 text-amber-300";
+  return "border-white/15 bg-white/5 text-[#9aa5b8]";
+}
+
+function SectionHead({ title, subtitle, count }: { title: string; subtitle: string; count: number }) {
+  return (
+    <div className="flex items-end justify-between">
+      <div>
+        <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
+        <p className="mt-1 text-sm text-[#9aa5b8]">{subtitle}</p>
+      </div>
+      <span className="rounded-full border px-3 py-1 text-xs font-semibold" style={{ borderColor: T.border, background: T.panel, color: T.orange }}>
+        {count} total
+      </span>
+    </div>
+  );
+}
+
+function WhatsAppLeadsView({ toast }: { toast: (m: string, t?: Toast["type"]) => void }) {
+  const { leads, loading, setLeadStatus, deleteLead } = useLeadsData();
+
+  return (
+    <div className="space-y-6">
+      <SectionHead title="WhatsApp Leads" subtitle="Inbound WhatsApp messages triaged and summarised by AI." count={leads.length} />
+
+      {loading ? (
+        <div className="rounded-xl border p-12 text-center text-sm" style={{ borderColor: T.border, background: T.panel, color: T.muted }}>Loading leads…</div>
+      ) : leads.length === 0 ? (
+        <div className="rounded-xl border p-12 text-center" style={{ borderColor: T.border, background: T.panel }}>
+          <Icon.Chat className="mx-auto h-8 w-8 text-[#9aa5b8]" />
+          <div className="mt-3 text-sm text-[#9aa5b8]">No leads yet. The AI files new WhatsApp enquiries here automatically.</div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          {leads.map((l) => (
+            <div key={l.id} className="rounded-2xl border p-5" style={{ borderColor: T.border, background: T.panel }}>
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl text-emerald-300" style={{ background: "rgba(16,185,129,0.14)" }}>
+                  <Icon.Chat className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold">{l.contact_name}</div>
+                  <div className="truncate text-xs text-[#9aa5b8]">{l.phone || "No number"} · {new Date(l.created_at).toLocaleString("en-GB")}</div>
+                </div>
+                <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold capitalize ${statusPill(l.status)}`}>{l.status}</span>
+              </div>
+
+              {l.ai_summary && (
+                <div className="mt-4 rounded-xl border p-3 text-sm" style={{ borderColor: T.borderSoft, background: T.panel2 }}>
+                  <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: T.orange }}>AI Summary</div>
+                  {l.ai_summary}
+                </div>
+              )}
+
+              <p className="mt-3 whitespace-pre-wrap text-sm text-[#c8d0dd]">{l.message}</p>
+
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                {l.intent && <span className="rounded-md border px-2 py-1 text-[11px] capitalize" style={{ borderColor: T.borderSoft, color: T.muted }}>{l.intent}</span>}
+                <div className="ml-auto flex gap-2">
+                  {l.status !== "contacted" && (
+                    <button onClick={async () => { await setLeadStatus(l.id, "contacted"); toast("Lead marked as contacted"); }} className="rounded-lg border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: T.border, background: T.panel2 }}>Mark contacted</button>
+                  )}
+                  {l.status !== "closed" && (
+                    <button onClick={async () => { await setLeadStatus(l.id, "closed"); toast("Lead closed", "info"); }} className="rounded-lg border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: T.border, background: T.panel2 }}>Close</button>
+                  )}
+                  <button onClick={async () => { await deleteLead(l.id); toast("Lead removed", "info"); }} className="rounded-lg border border-red-400/30 bg-red-400/10 px-3 py-1.5 text-xs font-semibold text-red-300">Delete</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------- Accident Cases ---------------- */
+function AccidentCasesView({ toast }: { toast: (m: string, t?: Toast["type"]) => void }) {
+  const { accidents, loading, setAccidentStatus, deleteAccident } = useLeadsData();
+
+  return (
+    <div className="space-y-6">
+      <SectionHead title="Accident Cases" subtitle="Accident reports captured and classified by AI." count={accidents.length} />
+
+      {loading ? (
+        <div className="rounded-xl border p-12 text-center text-sm" style={{ borderColor: T.border, background: T.panel, color: T.muted }}>Loading cases…</div>
+      ) : accidents.length === 0 ? (
+        <div className="rounded-xl border p-12 text-center" style={{ borderColor: T.border, background: T.panel }}>
+          <Icon.Crash className="mx-auto h-8 w-8 text-[#9aa5b8]" />
+          <div className="mt-3 text-sm text-[#9aa5b8]">No accident cases logged. The AI files new incident reports here automatically.</div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {accidents.map((a) => (
+            <div key={a.id} className="rounded-2xl border p-5" style={{ borderColor: T.border, background: T.panel }}>
+              <div className="flex flex-wrap items-center gap-3">
+                {a.reg ? <UKPlate reg={a.reg} size="sm" /> : <span className="text-sm text-[#9aa5b8]">No reg</span>}
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold">{a.driver_name || "Unknown driver"}</div>
+                  <div className="text-xs text-[#9aa5b8]">{new Date(a.incident_date).toLocaleDateString("en-GB")} · {a.location || "Location unknown"}</div>
+                </div>
+                <div className="ml-auto flex items-center gap-2">
+                  <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold capitalize ${severityPill(a.severity)}`}>{a.severity}</span>
+                  <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold capitalize ${statusPill(a.status)}`}>{a.status}</span>
+                </div>
+              </div>
+
+              {a.ai_summary && (
+                <div className="mt-4 rounded-xl border p-3 text-sm" style={{ borderColor: T.borderSoft, background: T.panel2 }}>
+                  <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: T.orange }}>AI Summary</div>
+                  {a.ai_summary}
+                </div>
+              )}
+
+              <p className="mt-3 whitespace-pre-wrap text-sm text-[#c8d0dd]">{a.description}</p>
+
+              <div className="mt-4 flex flex-wrap justify-end gap-2">
+                {a.status !== "in progress" && (
+                  <button onClick={async () => { await setAccidentStatus(a.id, "in progress"); toast("Case moved to in progress"); }} className="rounded-lg border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: T.border, background: T.panel2 }}>In progress</button>
+                )}
+                {a.status !== "closed" && (
+                  <button onClick={async () => { await setAccidentStatus(a.id, "closed"); toast("Case closed", "info"); }} className="rounded-lg border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: T.border, background: T.panel2 }}>Close case</button>
+                )}
+                <button onClick={async () => { await deleteAccident(a.id); toast("Case removed", "info"); }} className="rounded-lg border border-red-400/30 bg-red-400/10 px-3 py-1.5 text-xs font-semibold text-red-300">Delete</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
