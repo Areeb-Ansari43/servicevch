@@ -181,25 +181,44 @@ export function UKPlate({ reg, size = "md" }: { reg: string; size?: "sm" | "md" 
 }
 
 /* ---------------- App ---------------- */
-type View = "dashboard" | "vehicles" | "add" | "services" | "log-service" | "mileage" | "leads" | "accidents";
+export type View = "dashboard" | "vehicles" | "add" | "services" | "log-service" | "mileage" | "leads" | "accidents";
+
+export const VIEW_PATH: Record<View, string> = {
+  dashboard: "/",
+  vehicles: "/vehicles",
+  add: "/add-vehicle",
+  services: "/service-history",
+  "log-service": "/service-history/new",
+  mileage: "/driver-mileage",
+  leads: "/whatsapp-leads",
+  accidents: "/accident-cases",
+};
+
+export const regSlug = (reg: string) => reg.replace(/\s+/g, "").toUpperCase();
 
 function FleetApp() {
+  return <FleetShell view="dashboard" />;
+}
+
+export function FleetShell({ view }: { view: View }) {
   if (typeof window === "undefined") return null;
 
   const navigate = useNavigate();
   const [authed, setAuthed] = useState(false);
-  const [view, setView] = useState<View>("dashboard");
+  const [account, setAccount] = useState<{ email: string } | null>(null);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const data = useFleetData();
+
+  const go = (v: View) => navigate({ to: VIEW_PATH[v] });
 
   useEffect(() => {
     let cancelled = false;
     supabase.auth.getSession().then(({ data }) => {
       if (cancelled) return;
       if (!data.session) navigate({ to: "/login" });
-      else setAuthed(true);
+      else { setAuthed(true); setAccount({ email: data.session.user.email ?? "" }); }
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
       if (!session) navigate({ to: "/login" });
@@ -215,7 +234,7 @@ function FleetApp() {
 
   const signOut = async () => {
     await supabase.auth.signOut();
-    navigate({ to: "/login" });
+    navigate({ to: "/login", replace: true });
   };
 
   if (!authed) return null;
@@ -223,7 +242,7 @@ function FleetApp() {
   return (
     <div className="vch-app relative min-h-screen text-[#eef2f8]" style={{ background: T.bg }}>
       <div className="vch-glow" />
-      <Sidebar view={view} setView={setView} onSignOut={signOut} />
+      <Sidebar view={view} setView={go} onSignOut={signOut} account={account} />
       <div className="relative z-10 ml-64">
         <Topbar />
         <main className="p-6 md:p-8">
@@ -233,31 +252,31 @@ function FleetApp() {
               Loading fleet data…
             </div>
           ) : view === "dashboard" ? (
-            <Dashboard vehicles={data.vehicles} services={data.services} drivers={data.drivers} goto={setView} />
+            <Dashboard vehicles={data.vehicles} services={data.services} drivers={data.drivers} goto={go} />
           ) : view === "vehicles" ? (
             <VehiclesList
               vehicles={data.vehicles}
-              onAdd={() => setView("add")}
-              onOpen={(v) => navigate({ to: "/vehicles/$id", params: { id: v.id } })}
+              onAdd={() => go("add")}
+              onOpen={(v) => navigate({ to: "/vehicles/$reg", params: { reg: regSlug(v.registration) } })}
             />
           ) : view === "add" ? (
             <AddVehicle
               vehicles={data.vehicles}
-              onSave={async (v) => { try { await data.saveVehicle(v, true); toast(`Vehicle ${v.registration} added`); setView("vehicles"); } catch (e: any) { toast(e?.message ?? "Failed to save", "error"); } }}
-              onCancel={() => setView("vehicles")}
+              onSave={async (v) => { try { await data.saveVehicle(v, true); toast(`Vehicle ${v.registration} added`); go("vehicles"); } catch (e: any) { toast(e?.message ?? "Failed to save", "error"); } }}
+              onCancel={() => go("vehicles")}
               toast={toast}
             />
           ) : view === "services" ? (
             <ServicesList
               services={data.services}
-              onAdd={() => setView("log-service")}
+              onAdd={() => go("log-service")}
               onDelete={async (id) => { await data.deleteService(id); toast("Service record removed", "info"); }}
             />
           ) : view === "log-service" ? (
             <LogService
               vehicles={data.vehicles}
-              onSave={async (rec) => { try { await data.addService(rec); toast("Service record saved"); setView("services"); } catch (e: any) { toast(e?.message ?? "Failed", "error"); } }}
-              onCancel={() => setView("services")}
+              onSave={async (rec) => { try { await data.addService(rec); toast("Service record saved"); go("services"); } catch (e: any) { toast(e?.message ?? "Failed", "error"); } }}
+              onCancel={() => go("services")}
             />
           ) : view === "mileage" ? (
             <MileageView vehicles={data.vehicles} drivers={data.drivers} data={data} toast={toast} />
@@ -270,38 +289,8 @@ function FleetApp() {
         </main>
       </div>
 
-      {editingVehicle && (
-        <EditVehicleModal
-          vehicle={editingVehicle}
-          onClose={() => setEditingVehicle(null)}
-          onSave={async (v) => { try { await data.saveVehicle(v, false); setEditingVehicle(null); toast("Vehicle updated"); } catch (e: any) { toast(e?.message ?? "Failed", "error"); } }}
-        />
-      )}
+      <ApexAssistant vehicles={data.vehicles} services={data.services} drivers={data.drivers} />
 
-      {/* Toasts */}
-      <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2">
-        {toasts.map((t) => (
-          <div
-            key={t.id}
-            className="min-w-[260px] rounded-lg border px-4 py-3 shadow-xl"
-            style={{
-              borderColor: t.type === "success" ? "rgba(34,197,94,0.3)" : t.type === "error" ? "rgba(239,68,68,0.3)" : T.border,
-              background: T.panel,
-            }}
-          >
-            <div className="flex items-start gap-2">
-              <div className={`mt-0.5 h-2 w-2 rounded-full ${t.type === "success" ? "bg-green-500" : t.type === "error" ? "bg-red-500" : "bg-[#ff6a00]"}`} />
-              <div className="flex-1 text-sm">{t.msg}</div>
-              <button className="text-[#8b95a8] hover:text-white" onClick={() => setToasts((tt) => tt.filter((x) => x.id !== t.id))}>
-                <Icon.X className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 /* ---------------- Sidebar / Topbar ---------------- */
 function Sidebar({ view, setView, onSignOut }: { view: View; setView: (v: View) => void; onSignOut: () => void }) {
