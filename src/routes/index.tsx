@@ -291,6 +291,41 @@ export function FleetShell({ view }: { view: View }) {
 
       <ApexAssistant vehicles={data.vehicles} services={data.services} drivers={data.drivers} />
 
+      {editingVehicle && (
+        <EditVehicleModal
+          vehicle={editingVehicle}
+          onClose={() => setEditingVehicle(null)}
+          onSave={async (v) => { try { await data.saveVehicle(v, false); setEditingVehicle(null); toast("Vehicle updated"); } catch (e: any) { toast(e?.message ?? "Failed", "error"); } }}
+        />
+      )}
+
+      {/* Toasts */}
+      <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2">
+        {toasts.map((t) => (
+          <div
+            key={t.id}
+            className="min-w-[260px] rounded-lg border px-4 py-3 shadow-xl"
+            style={{
+              borderColor: t.type === "success" ? "rgba(34,197,94,0.3)" : t.type === "error" ? "rgba(239,68,68,0.3)" : T.border,
+              background: T.panel,
+            }}
+          >
+            <div className="flex items-start gap-2">
+              <div className={`mt-0.5 h-2 w-2 rounded-full ${t.type === "success" ? "bg-green-500" : t.type === "error" ? "bg-red-500" : "bg-[#ff6a00]"}`} />
+              <div className="flex-1 text-sm">{t.msg}</div>
+              <button className="text-[#8b95a8] hover:text-white" onClick={() => setToasts((tt) => tt.filter((x) => x.id !== t.id))}>
+                <Icon.X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+
 
 /* ---------------- Sidebar / Topbar ---------------- */
 function Sidebar({ view, setView, onSignOut }: { view: View; setView: (v: View) => void; onSignOut: () => void }) {
