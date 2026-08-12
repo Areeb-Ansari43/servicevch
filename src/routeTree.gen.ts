@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as WhatsappLeadsRouteImport } from './routes/whatsapp-leads'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as DriverMileageRouteImport } from './routes/driver-mileage'
+import { Route as AddVehicleRouteImport } from './routes/add-vehicle'
 import { Route as AccidentCasesRouteImport } from './routes/accident-cases'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as VehiclesIndexRouteImport } from './routes/vehicles.index'
@@ -34,6 +35,11 @@ const LoginRoute = LoginRouteImport.update({
 const DriverMileageRoute = DriverMileageRouteImport.update({
   id: '/driver-mileage',
   path: '/driver-mileage',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AddVehicleRoute = AddVehicleRouteImport.update({
+  id: '/add-vehicle',
+  path: '/add-vehicle',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AccidentCasesRoute = AccidentCasesRouteImport.update({
@@ -80,6 +86,7 @@ const ApiPublicAiIntakeRoute = ApiPublicAiIntakeRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/accident-cases': typeof AccidentCasesRoute
+  '/add-vehicle': typeof AddVehicleRoute
   '/driver-mileage': typeof DriverMileageRoute
   '/login': typeof LoginRoute
   '/whatsapp-leads': typeof WhatsappLeadsRoute
@@ -93,6 +100,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/accident-cases': typeof AccidentCasesRoute
+  '/add-vehicle': typeof AddVehicleRoute
   '/driver-mileage': typeof DriverMileageRoute
   '/login': typeof LoginRoute
   '/whatsapp-leads': typeof WhatsappLeadsRoute
@@ -107,6 +115,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/accident-cases': typeof AccidentCasesRoute
+  '/add-vehicle': typeof AddVehicleRoute
   '/driver-mileage': typeof DriverMileageRoute
   '/login': typeof LoginRoute
   '/whatsapp-leads': typeof WhatsappLeadsRoute
@@ -122,6 +131,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/accident-cases'
+    | '/add-vehicle'
     | '/driver-mileage'
     | '/login'
     | '/whatsapp-leads'
@@ -135,6 +145,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/accident-cases'
+    | '/add-vehicle'
     | '/driver-mileage'
     | '/login'
     | '/whatsapp-leads'
@@ -148,6 +159,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/accident-cases'
+    | '/add-vehicle'
     | '/driver-mileage'
     | '/login'
     | '/whatsapp-leads'
@@ -162,6 +174,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AccidentCasesRoute: typeof AccidentCasesRoute
+  AddVehicleRoute: typeof AddVehicleRoute
   DriverMileageRoute: typeof DriverMileageRoute
   LoginRoute: typeof LoginRoute
   WhatsappLeadsRoute: typeof WhatsappLeadsRoute
@@ -194,6 +207,13 @@ declare module '@tanstack/react-router' {
       path: '/driver-mileage'
       fullPath: '/driver-mileage'
       preLoaderRoute: typeof DriverMileageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/add-vehicle': {
+      id: '/add-vehicle'
+      path: '/add-vehicle'
+      fullPath: '/add-vehicle'
+      preLoaderRoute: typeof AddVehicleRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/accident-cases': {
@@ -258,6 +278,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccidentCasesRoute: AccidentCasesRoute,
+  AddVehicleRoute: AddVehicleRoute,
   DriverMileageRoute: DriverMileageRoute,
   LoginRoute: LoginRoute,
   WhatsappLeadsRoute: WhatsappLeadsRoute,
