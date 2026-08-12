@@ -9,15 +9,42 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as WhatsappLeadsRouteImport } from './routes/whatsapp-leads'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as DriverMileageRouteImport } from './routes/driver-mileage'
+import { Route as AddVehicleRouteImport } from './routes/add-vehicle'
+import { Route as AccidentCasesRouteImport } from './routes/accident-cases'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as VehiclesIdRouteImport } from './routes/vehicles.$id'
+import { Route as VehiclesIndexRouteImport } from './routes/vehicles.index'
+import { Route as ServiceHistoryIndexRouteImport } from './routes/service-history.index'
+import { Route as VehiclesRegRouteImport } from './routes/vehicles.$reg'
+import { Route as ServiceHistoryNewRouteImport } from './routes/service-history.new'
 import { Route as ApiPublicExpiryAlertsRouteImport } from './routes/api/public/expiry-alerts'
 import { Route as ApiPublicAiIntakeRouteImport } from './routes/api/public/ai-intake'
 
+const WhatsappLeadsRoute = WhatsappLeadsRouteImport.update({
+  id: '/whatsapp-leads',
+  path: '/whatsapp-leads',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DriverMileageRoute = DriverMileageRouteImport.update({
+  id: '/driver-mileage',
+  path: '/driver-mileage',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AddVehicleRoute = AddVehicleRouteImport.update({
+  id: '/add-vehicle',
+  path: '/add-vehicle',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccidentCasesRoute = AccidentCasesRouteImport.update({
+  id: '/accident-cases',
+  path: '/accident-cases',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -25,9 +52,24 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const VehiclesIdRoute = VehiclesIdRouteImport.update({
-  id: '/vehicles/$id',
-  path: '/vehicles/$id',
+const VehiclesIndexRoute = VehiclesIndexRouteImport.update({
+  id: '/vehicles/',
+  path: '/vehicles/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ServiceHistoryIndexRoute = ServiceHistoryIndexRouteImport.update({
+  id: '/service-history/',
+  path: '/service-history/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VehiclesRegRoute = VehiclesRegRouteImport.update({
+  id: '/vehicles/$reg',
+  path: '/vehicles/$reg',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ServiceHistoryNewRoute = ServiceHistoryNewRouteImport.update({
+  id: '/service-history/new',
+  path: '/service-history/new',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicExpiryAlertsRoute = ApiPublicExpiryAlertsRouteImport.update({
@@ -43,23 +85,44 @@ const ApiPublicAiIntakeRoute = ApiPublicAiIntakeRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/accident-cases': typeof AccidentCasesRoute
+  '/add-vehicle': typeof AddVehicleRoute
+  '/driver-mileage': typeof DriverMileageRoute
   '/login': typeof LoginRoute
-  '/vehicles/$id': typeof VehiclesIdRoute
+  '/whatsapp-leads': typeof WhatsappLeadsRoute
+  '/service-history/new': typeof ServiceHistoryNewRoute
+  '/vehicles/$reg': typeof VehiclesRegRoute
+  '/service-history/': typeof ServiceHistoryIndexRoute
+  '/vehicles/': typeof VehiclesIndexRoute
   '/api/public/ai-intake': typeof ApiPublicAiIntakeRoute
   '/api/public/expiry-alerts': typeof ApiPublicExpiryAlertsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/accident-cases': typeof AccidentCasesRoute
+  '/add-vehicle': typeof AddVehicleRoute
+  '/driver-mileage': typeof DriverMileageRoute
   '/login': typeof LoginRoute
-  '/vehicles/$id': typeof VehiclesIdRoute
+  '/whatsapp-leads': typeof WhatsappLeadsRoute
+  '/service-history/new': typeof ServiceHistoryNewRoute
+  '/vehicles/$reg': typeof VehiclesRegRoute
+  '/service-history': typeof ServiceHistoryIndexRoute
+  '/vehicles': typeof VehiclesIndexRoute
   '/api/public/ai-intake': typeof ApiPublicAiIntakeRoute
   '/api/public/expiry-alerts': typeof ApiPublicExpiryAlertsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/accident-cases': typeof AccidentCasesRoute
+  '/add-vehicle': typeof AddVehicleRoute
+  '/driver-mileage': typeof DriverMileageRoute
   '/login': typeof LoginRoute
-  '/vehicles/$id': typeof VehiclesIdRoute
+  '/whatsapp-leads': typeof WhatsappLeadsRoute
+  '/service-history/new': typeof ServiceHistoryNewRoute
+  '/vehicles/$reg': typeof VehiclesRegRoute
+  '/service-history/': typeof ServiceHistoryIndexRoute
+  '/vehicles/': typeof VehiclesIndexRoute
   '/api/public/ai-intake': typeof ApiPublicAiIntakeRoute
   '/api/public/expiry-alerts': typeof ApiPublicExpiryAlertsRoute
 }
@@ -67,41 +130,97 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/accident-cases'
+    | '/add-vehicle'
+    | '/driver-mileage'
     | '/login'
-    | '/vehicles/$id'
+    | '/whatsapp-leads'
+    | '/service-history/new'
+    | '/vehicles/$reg'
+    | '/service-history/'
+    | '/vehicles/'
     | '/api/public/ai-intake'
     | '/api/public/expiry-alerts'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/accident-cases'
+    | '/add-vehicle'
+    | '/driver-mileage'
     | '/login'
-    | '/vehicles/$id'
+    | '/whatsapp-leads'
+    | '/service-history/new'
+    | '/vehicles/$reg'
+    | '/service-history'
+    | '/vehicles'
     | '/api/public/ai-intake'
     | '/api/public/expiry-alerts'
   id:
     | '__root__'
     | '/'
+    | '/accident-cases'
+    | '/add-vehicle'
+    | '/driver-mileage'
     | '/login'
-    | '/vehicles/$id'
+    | '/whatsapp-leads'
+    | '/service-history/new'
+    | '/vehicles/$reg'
+    | '/service-history/'
+    | '/vehicles/'
     | '/api/public/ai-intake'
     | '/api/public/expiry-alerts'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AccidentCasesRoute: typeof AccidentCasesRoute
+  AddVehicleRoute: typeof AddVehicleRoute
+  DriverMileageRoute: typeof DriverMileageRoute
   LoginRoute: typeof LoginRoute
-  VehiclesIdRoute: typeof VehiclesIdRoute
+  WhatsappLeadsRoute: typeof WhatsappLeadsRoute
+  ServiceHistoryNewRoute: typeof ServiceHistoryNewRoute
+  VehiclesRegRoute: typeof VehiclesRegRoute
+  ServiceHistoryIndexRoute: typeof ServiceHistoryIndexRoute
+  VehiclesIndexRoute: typeof VehiclesIndexRoute
   ApiPublicAiIntakeRoute: typeof ApiPublicAiIntakeRoute
   ApiPublicExpiryAlertsRoute: typeof ApiPublicExpiryAlertsRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/whatsapp-leads': {
+      id: '/whatsapp-leads'
+      path: '/whatsapp-leads'
+      fullPath: '/whatsapp-leads'
+      preLoaderRoute: typeof WhatsappLeadsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/driver-mileage': {
+      id: '/driver-mileage'
+      path: '/driver-mileage'
+      fullPath: '/driver-mileage'
+      preLoaderRoute: typeof DriverMileageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/add-vehicle': {
+      id: '/add-vehicle'
+      path: '/add-vehicle'
+      fullPath: '/add-vehicle'
+      preLoaderRoute: typeof AddVehicleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/accident-cases': {
+      id: '/accident-cases'
+      path: '/accident-cases'
+      fullPath: '/accident-cases'
+      preLoaderRoute: typeof AccidentCasesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -111,11 +230,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/vehicles/$id': {
-      id: '/vehicles/$id'
-      path: '/vehicles/$id'
-      fullPath: '/vehicles/$id'
-      preLoaderRoute: typeof VehiclesIdRouteImport
+    '/vehicles/': {
+      id: '/vehicles/'
+      path: '/vehicles'
+      fullPath: '/vehicles/'
+      preLoaderRoute: typeof VehiclesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/service-history/': {
+      id: '/service-history/'
+      path: '/service-history'
+      fullPath: '/service-history/'
+      preLoaderRoute: typeof ServiceHistoryIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/vehicles/$reg': {
+      id: '/vehicles/$reg'
+      path: '/vehicles/$reg'
+      fullPath: '/vehicles/$reg'
+      preLoaderRoute: typeof VehiclesRegRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/service-history/new': {
+      id: '/service-history/new'
+      path: '/service-history/new'
+      fullPath: '/service-history/new'
+      preLoaderRoute: typeof ServiceHistoryNewRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/expiry-alerts': {
@@ -137,11 +277,28 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AccidentCasesRoute: AccidentCasesRoute,
+  AddVehicleRoute: AddVehicleRoute,
+  DriverMileageRoute: DriverMileageRoute,
   LoginRoute: LoginRoute,
-  VehiclesIdRoute: VehiclesIdRoute,
+  WhatsappLeadsRoute: WhatsappLeadsRoute,
+  ServiceHistoryNewRoute: ServiceHistoryNewRoute,
+  VehiclesRegRoute: VehiclesRegRoute,
+  ServiceHistoryIndexRoute: ServiceHistoryIndexRoute,
+  VehiclesIndexRoute: VehiclesIndexRoute,
   ApiPublicAiIntakeRoute: ApiPublicAiIntakeRoute,
   ApiPublicExpiryAlertsRoute: ApiPublicExpiryAlertsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

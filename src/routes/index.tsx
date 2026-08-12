@@ -4,16 +4,22 @@ import { supabase } from "@/integrations/supabase/client";
 import { useFleetData, type Vehicle, type ServiceRecord, type DriverTrack } from "@/lib/fleet-data";
 import { exportServiceHistoryPdf } from "@/lib/pdf-export";
 import { useLeadsData } from "@/lib/leads-data";
+import { ApexAssistant } from "@/components/apex-assistant";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Virtual Car Hire — Fleet Tracker" },
-      { name: "description", content: "VCH Fleet Tracker: vehicles, services, driver mileage." },
+      { title: "Fleet Dashboard — Virtual Car Hire Fleet Tracker" },
+      { name: "description", content: "Live VCH fleet dashboard: MOT and PCO alerts, service spend, driver mileage and AI-triaged leads." },
+      { property: "og:title", content: "Fleet Dashboard — Virtual Car Hire" },
+      { property: "og:description", content: "Live VCH fleet dashboard: MOT and PCO alerts, service spend and AI-triaged leads." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: FleetApp,
 });
+
 
 /* ---------------- Seed data (used for reg lookup only) ---------------- */
 const ALL_VEHICLES_SEED: { reg: string; make: string; model: string; year: number }[] = [
@@ -181,25 +187,44 @@ export function UKPlate({ reg, size = "md" }: { reg: string; size?: "sm" | "md" 
 }
 
 /* ---------------- App ---------------- */
-type View = "dashboard" | "vehicles" | "add" | "services" | "log-service" | "mileage" | "leads" | "accidents";
+export type View = "dashboard" | "vehicles" | "add" | "services" | "log-service" | "mileage" | "leads" | "accidents";
+
+export const VIEW_PATH: Record<View, string> = {
+  dashboard: "/",
+  vehicles: "/vehicles",
+  add: "/add-vehicle",
+  services: "/service-history",
+  "log-service": "/service-history/new",
+  mileage: "/driver-mileage",
+  leads: "/whatsapp-leads",
+  accidents: "/accident-cases",
+};
+
+export const regSlug = (reg: string) => reg.replace(/\s+/g, "").toUpperCase();
 
 function FleetApp() {
+  return <FleetShell view="dashboard" />;
+}
+
+export function FleetShell({ view }: { view: View }) {
   if (typeof window === "undefined") return null;
 
   const navigate = useNavigate();
   const [authed, setAuthed] = useState(false);
-  const [view, setView] = useState<View>("dashboard");
+  const [account, setAccount] = useState<{ email: string } | null>(null);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const data = useFleetData();
+
+  const go = (v: View) => navigate({ to: VIEW_PATH[v] });
 
   useEffect(() => {
     let cancelled = false;
     supabase.auth.getSession().then(({ data }) => {
       if (cancelled) return;
       if (!data.session) navigate({ to: "/login" });
-      else setAuthed(true);
+      else { setAuthed(true); setAccount({ email: data.session.user.email ?? "" }); }
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
       if (!session) navigate({ to: "/login" });
@@ -215,7 +240,7 @@ function FleetApp() {
 
   const signOut = async () => {
     await supabase.auth.signOut();
-    navigate({ to: "/login" });
+    navigate({ to: "/login", replace: true });
   };
 
   if (!authed) return null;
@@ -223,7 +248,7 @@ function FleetApp() {
   return (
     <div className="vch-app relative min-h-screen text-[#eef2f8]" style={{ background: T.bg }}>
       <div className="vch-glow" />
-      <Sidebar view={view} setView={setView} onSignOut={signOut} />
+      <Sidebar view={view} setView={go} onSignOut={signOut} account={account} />
       <div className="relative z-10 ml-64">
         <Topbar />
         <main className="p-6 md:p-8">
@@ -233,31 +258,31 @@ function FleetApp() {
               Loading fleet data…
             </div>
           ) : view === "dashboard" ? (
-            <Dashboard vehicles={data.vehicles} services={data.services} drivers={data.drivers} goto={setView} />
+            <Dashboard vehicles={data.vehicles} services={data.services} drivers={data.drivers} goto={go} />
           ) : view === "vehicles" ? (
             <VehiclesList
               vehicles={data.vehicles}
-              onAdd={() => setView("add")}
-              onOpen={(v) => navigate({ to: "/vehicles/$id", params: { id: v.id } })}
+              onAdd={() => go("add")}
+              onOpen={(v) => navigate({ to: "/vehicles/$reg", params: { reg: regSlug(v.registration) } })}
             />
           ) : view === "add" ? (
             <AddVehicle
               vehicles={data.vehicles}
-              onSave={async (v) => { try { await data.saveVehicle(v, true); toast(`Vehicle ${v.registration} added`); setView("vehicles"); } catch (e: any) { toast(e?.message ?? "Failed to save", "error"); } }}
-              onCancel={() => setView("vehicles")}
+              onSave={async (v) => { try { await data.saveVehicle(v, true); toast(`Vehicle ${v.registration} added`); go("vehicles"); } catch (e: any) { toast(e?.message ?? "Failed to save", "error"); } }}
+              onCancel={() => go("vehicles")}
               toast={toast}
             />
           ) : view === "services" ? (
             <ServicesList
               services={data.services}
-              onAdd={() => setView("log-service")}
+              onAdd={() => go("log-service")}
               onDelete={async (id) => { await data.deleteService(id); toast("Service record removed", "info"); }}
             />
           ) : view === "log-service" ? (
             <LogService
               vehicles={data.vehicles}
-              onSave={async (rec) => { try { await data.addService(rec); toast("Service record saved"); setView("services"); } catch (e: any) { toast(e?.message ?? "Failed", "error"); } }}
-              onCancel={() => setView("services")}
+              onSave={async (rec) => { try { await data.addService(rec); toast("Service record saved"); go("services"); } catch (e: any) { toast(e?.message ?? "Failed", "error"); } }}
+              onCancel={() => go("services")}
             />
           ) : view === "mileage" ? (
             <MileageView vehicles={data.vehicles} drivers={data.drivers} data={data} toast={toast} />
@@ -269,6 +294,8 @@ function FleetApp() {
 
         </main>
       </div>
+
+      <ApexAssistant vehicles={data.vehicles} services={data.services} drivers={data.drivers} />
 
       {editingVehicle && (
         <EditVehicleModal
@@ -303,8 +330,16 @@ function FleetApp() {
   );
 }
 
+
+
+
 /* ---------------- Sidebar / Topbar ---------------- */
-function Sidebar({ view, setView, onSignOut }: { view: View; setView: (v: View) => void; onSignOut: () => void }) {
+function Sidebar({ view, setView, onSignOut, account }: {
+  view: View;
+  setView: (v: View) => void;
+  onSignOut: () => void;
+  account: { email: string } | null;
+}) {
   const items: { id: View; label: string; Icon: (p: { className?: string }) => React.ReactElement }[] = [
     { id: "dashboard", label: "Dashboard", Icon: Icon.Dashboard },
     { id: "vehicles", label: "Vehicles", Icon: Icon.Car },
@@ -313,12 +348,14 @@ function Sidebar({ view, setView, onSignOut }: { view: View; setView: (v: View) 
     { id: "leads", label: "WhatsApp Leads", Icon: Icon.Chat },
     { id: "accidents", label: "Accident Cases", Icon: Icon.Crash },
     { id: "add", label: "Add Vehicle", Icon: Icon.Plus },
-
   ];
+  const email = account?.email ?? "";
+  const initial = (email.trim()[0] ?? "V").toUpperCase();
+
   return (
     <aside className="fixed inset-y-0 left-0 z-30 flex w-64 flex-col border-r" style={{ borderColor: T.border, background: T.panel }}>
       <div className="flex items-center gap-3 px-5 py-4">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[#ff6a00] shadow-sm" style={{ background: "linear-gradient(135deg,#0b0d12,#1e222b)" }}>
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-[#ff6a00] shadow-sm" style={{ background: "linear-gradient(135deg,#0b0d12,#1e222b)" }}>
           <Icon.Car className="h-5 w-5" />
         </div>
         <div className="min-w-0">
@@ -327,16 +364,16 @@ function Sidebar({ view, setView, onSignOut }: { view: View; setView: (v: View) 
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 py-2">
+      <nav className="flex-1 space-y-1.5 overflow-y-auto px-3 py-2">
         {items.map((it) => {
           const active = view === it.id;
           return (
             <button
               key={it.id}
               onClick={() => setView(it.id)}
-              className="mb-1 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors"
+              className="flex w-full items-center gap-3 rounded-full px-4 py-3 text-left text-sm transition-colors"
               style={active
-                ? { background: T.orangeSoft, color: T.orange, fontWeight: 600 }
+                ? { background: T.orangeSoft, color: T.orange, fontWeight: 600, boxShadow: "inset 0 0 0 1px rgba(255,106,0,0.28)" }
                 : { color: "#c5cbd6" }}
               onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = T.panel2; }}
               onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = "transparent"; }}
@@ -349,16 +386,23 @@ function Sidebar({ view, setView, onSignOut }: { view: View; setView: (v: View) 
       </nav>
 
       <div className="border-t p-3" style={{ borderColor: T.border }}>
-        <button
-          onClick={onSignOut}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors"
-          style={{ color: "#c5cbd6" }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = T.panel2)}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-        >
-          <Icon.SignOut className="h-4 w-4" />
-          Sign Out
-        </button>
+        <div className="flex items-center gap-3 rounded-2xl border px-3 py-2.5" style={{ borderColor: T.borderSoft, background: T.panel2 }}>
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#ff6a00] to-[#ff9d4d] text-sm font-bold text-white">
+            {initial}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-xs font-semibold text-[#e7eaf0]">{email || "Signed in"}</div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8b95a8]">Fleet Admin</div>
+          </div>
+          <button
+            onClick={onSignOut}
+            title="Sign out"
+            aria-label="Sign out"
+            className="shrink-0 rounded-full p-2 text-[#8b95a8] transition-colors hover:bg-white/10 hover:text-white"
+          >
+            <Icon.SignOut className="h-4 w-4" />
+          </button>
+        </div>
         <p className="mt-3 text-center text-[11px] text-[#8b95a8]">
           Powered by{" "}
           <a href="https://virtualcarhire.pages.dev/" target="_blank" rel="noopener noreferrer" className="font-semibold text-[#ff6a00] hover:text-[#ff8a3d]">
@@ -369,6 +413,7 @@ function Sidebar({ view, setView, onSignOut }: { view: View; setView: (v: View) 
     </aside>
   );
 }
+
 
 function Topbar() {
   return (
