@@ -4,16 +4,22 @@ import { supabase } from "@/integrations/supabase/client";
 import { useFleetData, type Vehicle, type ServiceRecord, type DriverTrack } from "@/lib/fleet-data";
 import { exportServiceHistoryPdf } from "@/lib/pdf-export";
 import { useLeadsData } from "@/lib/leads-data";
+import { ApexAssistant } from "@/components/apex-assistant";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Virtual Car Hire — Fleet Tracker" },
-      { name: "description", content: "VCH Fleet Tracker: vehicles, services, driver mileage." },
+      { title: "Fleet Dashboard — Virtual Car Hire Fleet Tracker" },
+      { name: "description", content: "Live VCH fleet dashboard: MOT and PCO alerts, service spend, driver mileage and AI-triaged leads." },
+      { property: "og:title", content: "Fleet Dashboard — Virtual Car Hire" },
+      { property: "og:description", content: "Live VCH fleet dashboard: MOT and PCO alerts, service spend and AI-triaged leads." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: FleetApp,
 });
+
 
 /* ---------------- Seed data (used for reg lookup only) ---------------- */
 const ALL_VEHICLES_SEED: { reg: string; make: string; model: string; year: number }[] = [
