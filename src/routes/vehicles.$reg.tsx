@@ -3,11 +3,19 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useFleetData } from "@/lib/fleet-data";
 import { exportVehiclePdf } from "@/lib/pdf-export";
-import { UKPlate, StatusBadge, Pill, daysUntil, T, EditVehicleModal } from "@/routes/index";
+import { UKPlate, StatusBadge, Pill, daysUntil, T, EditVehicleModal, regSlug } from "@/routes/index";
+import { NotFoundPanel } from "@/components/not-found-panel";
 
-export const Route = createFileRoute("/vehicles/$id")({
-  head: () => ({
-    meta: [{ title: "Vehicle Detail — Virtual Car Hire" }],
+export const Route = createFileRoute("/vehicles/$reg")({
+  head: ({ params }) => ({
+    meta: [
+      { title: `${(params as { reg: string }).reg} — Vehicle Profile | Virtual Car Hire` },
+      { name: "description", content: "Vehicle profile, MOT and PCO expiry, mileage and full service history for this VCH fleet vehicle." },
+      { property: "og:title", content: `${(params as { reg: string }).reg} — Vehicle Profile` },
+      { property: "og:description", content: "Vehicle profile, MOT and PCO expiry, mileage and service history." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
   }),
   component: VehicleDetailPage,
 });
@@ -16,7 +24,7 @@ function VehicleDetailPage() {
   if (typeof window === "undefined") return null;
 
   const navigate = useNavigate();
-  const { id } = useParams({ from: "/vehicles/$id" });
+  const { reg } = useParams({ from: "/vehicles/$reg" });
   const [authed, setAuthed] = useState(false);
 
   useEffect(() => {
@@ -27,8 +35,10 @@ function VehicleDetailPage() {
   }, [navigate]);
 
   const { vehicles, services, loading, saveVehicle, deleteVehicle } = useFleetData();
-  const vehicle = vehicles.find((v) => v.id === id);
-  const vServices = services.filter((s) => s.vehicle_id === id || (vehicle && s.registration === vehicle.registration));
+  const target = regSlug(reg ?? "");
+  const vehicle = vehicles.find((v) => regSlug(v.registration) === target);
+  const id = vehicle?.id;
+  const vServices = services.filter((s) => (id && s.vehicle_id === id) || (vehicle && regSlug(s.registration) === target));
   const totalSpend = vServices.reduce((a, s) => a + (s.cost || 0), 0);
   const [editing, setEditing] = useState(false);
 
@@ -37,16 +47,23 @@ function VehicleDetailPage() {
   return (
     <div className="min-h-screen text-[#e7eaf0]" style={{ background: T.bg }}>
       <div className="mx-auto max-w-5xl px-6 py-8">
-        <button onClick={() => navigate({ to: "/" })} className="mb-6 inline-flex items-center gap-2 text-sm text-[#8b95a8] hover:text-white">
+        <button onClick={() => navigate({ to: "/vehicles" })} className="mb-6 inline-flex items-center gap-2 text-sm text-[#8b95a8] hover:text-white">
           ← Back to Fleet
         </button>
 
-        {loading || !vehicle ? (
+        {loading ? (
           <div className="rounded-xl border p-12 text-center text-sm text-[#8b95a8]" style={{ borderColor: T.border, background: T.panel }}>
-            {loading ? "Loading vehicle…" : "Vehicle not found."}
+            Loading vehicle…
           </div>
+        ) : !vehicle ? (
+          <NotFoundPanel
+            code="404"
+            title="No vehicle found for that registration"
+            subtitle={`We couldn't find "${target}" in your fleet. Check the plate and try again.`}
+            showVehiclesLink
+          />
         ) : (
-          <>
+
             {/* Hero */}
             <div className="overflow-hidden rounded-2xl border" style={{ borderColor: T.border, background: T.panel }}>
               <div className="px-8 py-8" style={{ background: "linear-gradient(135deg, rgba(255,106,0,0.15), transparent)" }}>
