@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as VehiclesIndexRouteImport } from './routes/vehicles.index'
+import { Route as ServiceHistoryIndexRouteImport } from './routes/service-history.index'
 import { Route as VehiclesRegRouteImport } from './routes/vehicles.$reg'
 import { Route as ApiPublicExpiryAlertsRouteImport } from './routes/api/public/expiry-alerts'
 import { Route as ApiPublicAiIntakeRouteImport } from './routes/api/public/ai-intake'
@@ -29,6 +30,11 @@ const IndexRoute = IndexRouteImport.update({
 const VehiclesIndexRoute = VehiclesIndexRouteImport.update({
   id: '/vehicles/',
   path: '/vehicles/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ServiceHistoryIndexRoute = ServiceHistoryIndexRouteImport.update({
+  id: '/service-history/',
+  path: '/service-history/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const VehiclesRegRoute = VehiclesRegRouteImport.update({
@@ -51,6 +57,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/vehicles/$reg': typeof VehiclesRegRoute
+  '/service-history/': typeof ServiceHistoryIndexRoute
   '/vehicles/': typeof VehiclesIndexRoute
   '/api/public/ai-intake': typeof ApiPublicAiIntakeRoute
   '/api/public/expiry-alerts': typeof ApiPublicExpiryAlertsRoute
@@ -59,6 +66,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/vehicles/$reg': typeof VehiclesRegRoute
+  '/service-history': typeof ServiceHistoryIndexRoute
   '/vehicles': typeof VehiclesIndexRoute
   '/api/public/ai-intake': typeof ApiPublicAiIntakeRoute
   '/api/public/expiry-alerts': typeof ApiPublicExpiryAlertsRoute
@@ -68,6 +76,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/vehicles/$reg': typeof VehiclesRegRoute
+  '/service-history/': typeof ServiceHistoryIndexRoute
   '/vehicles/': typeof VehiclesIndexRoute
   '/api/public/ai-intake': typeof ApiPublicAiIntakeRoute
   '/api/public/expiry-alerts': typeof ApiPublicExpiryAlertsRoute
@@ -78,6 +87,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/vehicles/$reg'
+    | '/service-history/'
     | '/vehicles/'
     | '/api/public/ai-intake'
     | '/api/public/expiry-alerts'
@@ -86,6 +96,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/vehicles/$reg'
+    | '/service-history'
     | '/vehicles'
     | '/api/public/ai-intake'
     | '/api/public/expiry-alerts'
@@ -94,6 +105,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/vehicles/$reg'
+    | '/service-history/'
     | '/vehicles/'
     | '/api/public/ai-intake'
     | '/api/public/expiry-alerts'
@@ -103,6 +115,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
   VehiclesRegRoute: typeof VehiclesRegRoute
+  ServiceHistoryIndexRoute: typeof ServiceHistoryIndexRoute
   VehiclesIndexRoute: typeof VehiclesIndexRoute
   ApiPublicAiIntakeRoute: typeof ApiPublicAiIntakeRoute
   ApiPublicExpiryAlertsRoute: typeof ApiPublicExpiryAlertsRoute
@@ -129,6 +142,13 @@ declare module '@tanstack/react-router' {
       path: '/vehicles'
       fullPath: '/vehicles/'
       preLoaderRoute: typeof VehiclesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/service-history/': {
+      id: '/service-history/'
+      path: '/service-history'
+      fullPath: '/service-history/'
+      preLoaderRoute: typeof ServiceHistoryIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/vehicles/$reg': {
@@ -159,6 +179,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
   VehiclesRegRoute: VehiclesRegRoute,
+  ServiceHistoryIndexRoute: ServiceHistoryIndexRoute,
   VehiclesIndexRoute: VehiclesIndexRoute,
   ApiPublicAiIntakeRoute: ApiPublicAiIntakeRoute,
   ApiPublicExpiryAlertsRoute: ApiPublicExpiryAlertsRoute,
