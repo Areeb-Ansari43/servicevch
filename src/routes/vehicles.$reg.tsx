@@ -63,6 +63,7 @@ function VehicleDetailPage() {
             showVehiclesLink
           />
         ) : (
+          <>
 
             {/* Hero */}
             <div className="overflow-hidden rounded-2xl border" style={{ borderColor: T.border, background: T.panel }}>
