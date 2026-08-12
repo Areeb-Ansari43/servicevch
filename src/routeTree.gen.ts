@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as VehiclesIndexRouteImport } from './routes/vehicles.index'
 import { Route as VehiclesRegRouteImport } from './routes/vehicles.$reg'
 import { Route as ApiPublicExpiryAlertsRouteImport } from './routes/api/public/expiry-alerts'
 import { Route as ApiPublicAiIntakeRouteImport } from './routes/api/public/ai-intake'
@@ -23,6 +24,11 @@ const LoginRoute = LoginRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VehiclesIndexRoute = VehiclesIndexRouteImport.update({
+  id: '/vehicles/',
+  path: '/vehicles/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const VehiclesRegRoute = VehiclesRegRouteImport.update({
@@ -45,6 +51,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/vehicles/$reg': typeof VehiclesRegRoute
+  '/vehicles/': typeof VehiclesIndexRoute
   '/api/public/ai-intake': typeof ApiPublicAiIntakeRoute
   '/api/public/expiry-alerts': typeof ApiPublicExpiryAlertsRoute
 }
@@ -52,6 +59,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/vehicles/$reg': typeof VehiclesRegRoute
+  '/vehicles': typeof VehiclesIndexRoute
   '/api/public/ai-intake': typeof ApiPublicAiIntakeRoute
   '/api/public/expiry-alerts': typeof ApiPublicExpiryAlertsRoute
 }
@@ -60,6 +68,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/vehicles/$reg': typeof VehiclesRegRoute
+  '/vehicles/': typeof VehiclesIndexRoute
   '/api/public/ai-intake': typeof ApiPublicAiIntakeRoute
   '/api/public/expiry-alerts': typeof ApiPublicExpiryAlertsRoute
 }
@@ -69,6 +78,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/vehicles/$reg'
+    | '/vehicles/'
     | '/api/public/ai-intake'
     | '/api/public/expiry-alerts'
   fileRoutesByTo: FileRoutesByTo
@@ -76,6 +86,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/vehicles/$reg'
+    | '/vehicles'
     | '/api/public/ai-intake'
     | '/api/public/expiry-alerts'
   id:
@@ -83,6 +94,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/vehicles/$reg'
+    | '/vehicles/'
     | '/api/public/ai-intake'
     | '/api/public/expiry-alerts'
   fileRoutesById: FileRoutesById
@@ -91,6 +103,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
   VehiclesRegRoute: typeof VehiclesRegRoute
+  VehiclesIndexRoute: typeof VehiclesIndexRoute
   ApiPublicAiIntakeRoute: typeof ApiPublicAiIntakeRoute
   ApiPublicExpiryAlertsRoute: typeof ApiPublicExpiryAlertsRoute
 }
@@ -109,6 +122,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/vehicles/': {
+      id: '/vehicles/'
+      path: '/vehicles'
+      fullPath: '/vehicles/'
+      preLoaderRoute: typeof VehiclesIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/vehicles/$reg': {
@@ -139,6 +159,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
   VehiclesRegRoute: VehiclesRegRoute,
+  VehiclesIndexRoute: VehiclesIndexRoute,
   ApiPublicAiIntakeRoute: ApiPublicAiIntakeRoute,
   ApiPublicExpiryAlertsRoute: ApiPublicExpiryAlertsRoute,
 }
