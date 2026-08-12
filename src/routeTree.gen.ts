@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as DriverMileageRouteImport } from './routes/driver-mileage'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as VehiclesIndexRouteImport } from './routes/vehicles.index'
 import { Route as ServiceHistoryIndexRouteImport } from './routes/service-history.index'
@@ -21,6 +22,11 @@ import { Route as ApiPublicAiIntakeRouteImport } from './routes/api/public/ai-in
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DriverMileageRoute = DriverMileageRouteImport.update({
+  id: '/driver-mileage',
+  path: '/driver-mileage',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -61,6 +67,7 @@ const ApiPublicAiIntakeRoute = ApiPublicAiIntakeRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/driver-mileage': typeof DriverMileageRoute
   '/login': typeof LoginRoute
   '/service-history/new': typeof ServiceHistoryNewRoute
   '/vehicles/$reg': typeof VehiclesRegRoute
@@ -71,6 +78,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/driver-mileage': typeof DriverMileageRoute
   '/login': typeof LoginRoute
   '/service-history/new': typeof ServiceHistoryNewRoute
   '/vehicles/$reg': typeof VehiclesRegRoute
@@ -82,6 +90,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/driver-mileage': typeof DriverMileageRoute
   '/login': typeof LoginRoute
   '/service-history/new': typeof ServiceHistoryNewRoute
   '/vehicles/$reg': typeof VehiclesRegRoute
@@ -94,6 +103,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/driver-mileage'
     | '/login'
     | '/service-history/new'
     | '/vehicles/$reg'
@@ -104,6 +114,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/driver-mileage'
     | '/login'
     | '/service-history/new'
     | '/vehicles/$reg'
@@ -114,6 +125,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/driver-mileage'
     | '/login'
     | '/service-history/new'
     | '/vehicles/$reg'
@@ -125,6 +137,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DriverMileageRoute: typeof DriverMileageRoute
   LoginRoute: typeof LoginRoute
   ServiceHistoryNewRoute: typeof ServiceHistoryNewRoute
   VehiclesRegRoute: typeof VehiclesRegRoute
@@ -141,6 +154,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/driver-mileage': {
+      id: '/driver-mileage'
+      path: '/driver-mileage'
+      fullPath: '/driver-mileage'
+      preLoaderRoute: typeof DriverMileageRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -197,6 +217,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DriverMileageRoute: DriverMileageRoute,
   LoginRoute: LoginRoute,
   ServiceHistoryNewRoute: ServiceHistoryNewRoute,
   VehiclesRegRoute: VehiclesRegRoute,
