@@ -36,10 +36,13 @@ function LoginPage() {
   const [stage, setStage] = useState<"creds" | "otp">("creds");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [code, setCode] = useState("");
+  const [digits, setDigits] = useState<string[]>(["", "", "", "", "", ""]);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [feedback, setFeedback] = useState<"none" | "success" | "error">("none");
+  const boxRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const submittedRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,6 +52,10 @@ function LoginPage() {
     return () => { cancelled = true; };
   }, [navigate]);
 
+  useEffect(() => {
+    if (stage === "otp") setTimeout(() => boxRefs.current[0]?.focus(), 260);
+  }, [stage]);
+
   const submitCreds = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null); setInfo(null);
@@ -57,7 +64,7 @@ function LoginPage() {
     try {
       await requestLoginCode({ data: { email: email.trim(), password } });
       setStage("otp");
-      setInfo("A 6-digit verification code has been emailed to the authorised account.");
+      setInfo("We emailed a 6-digit verification code to the authorised account.");
     } catch (err: any) {
       setError(err?.message?.includes("Invalid credentials") ? "Invalid credentials." : (err?.message ?? "Sign-in failed."));
     } finally {
@@ -65,10 +72,10 @@ function LoginPage() {
     }
   };
 
-  const submitOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const verify = async (code: string) => {
+    if (submittedRef.current) return;
+    submittedRef.current = true;
     setError(null);
-    if (!/^\d{6}$/.test(code)) { setError("Enter the 6-digit code."); return; }
     setLoading(true);
     try {
       const res = await verifyLoginCode({ data: { code } });
@@ -77,20 +84,64 @@ function LoginPage() {
         type: "magiclink",
       });
       if (vErr) throw new Error(vErr.message);
-      navigate({ to: "/" });
+      setFeedback("success");
+      setTimeout(() => navigate({ to: "/" }), 640);
     } catch (err: any) {
+      setFeedback("error");
       setError(err?.message ?? "Verification failed.");
+      setTimeout(() => {
+        setFeedback("none");
+        setDigits(["", "", "", "", "", ""]);
+        boxRefs.current[0]?.focus();
+      }, 520);
+      submittedRef.current = false;
     } finally {
       setLoading(false);
     }
   };
 
+  const setDigit = (i: number, raw: string) => {
+    const chars = raw.replace(/\D/g, "");
+    if (!chars) {
+      setDigits((d) => { const n = [...d]; n[i] = ""; return n; });
+      return;
+    }
+    setDigits((d) => {
+      const n = [...d];
+      // Support paste of the full code into any box.
+      for (let k = 0; k < chars.length && i + k < 6; k++) n[i + k] = chars[k]!;
+      const next = Math.min(i + chars.length, 5);
+      setTimeout(() => boxRefs.current[next]?.focus(), 0);
+      const joined = n.join("");
+      if (joined.length === 6 && !n.includes("")) setTimeout(() => verify(joined), 80);
+      return n;
+    });
+  };
+
+  const onKeyDown = (i: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace" && !digits[i] && i > 0) {
+      e.preventDefault();
+      setDigits((d) => { const n = [...d]; n[i - 1] = ""; return n; });
+      boxRefs.current[i - 1]?.focus();
+    }
+    if (e.key === "ArrowLeft" && i > 0) boxRefs.current[i - 1]?.focus();
+    if (e.key === "ArrowRight" && i < 5) boxRefs.current[i + 1]?.focus();
+  };
+
   const inputCls =
-    "w-full rounded-lg border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-[#ff6a00] focus:outline-none focus:ring-2 focus:ring-[#ff6a00]/30";
+    "w-full rounded-xl border border-white/12 bg-white/[0.05] px-4 py-2.5 text-sm text-white placeholder:text-slate-500 backdrop-blur-xl focus:border-[#ff6a00] focus:outline-none focus:ring-2 focus:ring-[#ff6a00]/30";
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#0b0d12] via-[#11141b] to-[#0b0d12] px-4">
-      <div className="w-full max-w-md">
+    <div className="relative flex min-h-screen items-center justify-center px-4" style={{ background: "linear-gradient(160deg,#0b0d12,#11141b 55%,#0b0d12)" }}>
+      <div
+        className="pointer-events-none fixed inset-0"
+        style={{
+          background:
+            "radial-gradient(60rem 40rem at 12% -10%, rgba(255,106,0,0.18), transparent 60%), radial-gradient(50rem 36rem at 95% 0%, rgba(56,189,248,0.15), transparent 60%)",
+        }}
+        aria-hidden
+      />
+      <div className="relative w-full max-w-md">
         <div className="mb-6 flex flex-col items-center text-center">
           <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#ff6a00] to-[#ff8a3d] text-white shadow-lg shadow-orange-500/30">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-7 w-7">
@@ -103,7 +154,7 @@ function LoginPage() {
         </div>
 
         {stage === "creds" ? (
-          <form onSubmit={submitCreds} className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/40 p-6 shadow-xl backdrop-blur md:p-8">
+          <form onSubmit={submitCreds} className="space-y-4 rounded-3xl border border-white/10 bg-white/[0.045] p-6 shadow-2xl backdrop-blur-2xl md:p-8">
             <div>
               <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-400">Email</label>
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className={inputCls} autoComplete="email" />
@@ -113,43 +164,55 @@ function LoginPage() {
               <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className={inputCls} autoComplete="current-password" />
             </div>
 
-            {error && <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</div>}
+            {error && <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</div>}
 
-            <button type="submit" disabled={loading} className="w-full rounded-lg bg-[#ff6a00] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#e05d00] disabled:opacity-60">
+            <button type="submit" disabled={loading} className="w-full rounded-full bg-[#ff6a00] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#e05d00] disabled:opacity-60">
               {loading ? "Sending code…" : "Continue"}
             </button>
           </form>
         ) : (
-          <form onSubmit={submitOtp} className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/40 p-6 shadow-xl backdrop-blur md:p-8">
-            <div className="rounded-md border border-[#ff6a00]/30 bg-[#ff6a00]/10 px-3 py-2 text-xs text-orange-200">
-              {info ?? "Enter the code we sent to your inbox."}
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-400">6-digit code</label>
-              <input
-                inputMode="numeric"
-                maxLength={6}
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                placeholder="••••••"
-                className={inputCls + " text-center text-2xl tracking-[0.6em]"}
-                autoFocus
-              />
+          <div className="space-y-5 rounded-3xl border border-white/10 bg-white/[0.045] p-6 shadow-2xl backdrop-blur-2xl md:p-8">
+            <div className="text-center">
+              <h2 className="text-lg font-semibold text-white">Enter your verification code</h2>
+              <p className="mt-1 text-xs text-slate-400">{info ?? "Enter the 6-digit code we emailed you."}</p>
             </div>
 
-            {error && <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</div>}
+            <div className={`flex justify-center gap-2.5 ${feedback === "error" ? "vch-otp-error" : ""}`}>
+              {digits.map((d, i) => (
+                <input
+                  key={i}
+                  ref={(el) => { boxRefs.current[i] = el; }}
+                  value={d}
+                  onChange={(e) => setDigit(i, e.target.value)}
+                  onKeyDown={(e) => onKeyDown(i, e)}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  aria-label={`Digit ${i + 1}`}
+                  className={`vch-otp-box h-14 w-11 rounded-2xl border bg-white/[0.06] text-center text-xl font-semibold text-white backdrop-blur-xl focus:border-[#ff6a00] focus:outline-none focus:ring-2 focus:ring-[#ff6a00]/30 ${
+                    !d && feedback === "none" ? "vch-otp-empty" : ""
+                  } ${feedback === "success" ? "vch-otp-success" : ""} ${
+                    feedback === "error" ? "border-red-500/70 text-red-200" : "border-white/15"
+                  }`}
+                  style={{
+                    animationDelay:
+                      feedback === "success" ? `${i * 55}ms` : feedback === "none" ? `${i * 40}ms` : "0ms",
+                  }}
+                />
+              ))}
+            </div>
 
-            <button type="submit" disabled={loading} className="w-full rounded-lg bg-[#ff6a00] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#e05d00] disabled:opacity-60">
-              {loading ? "Verifying…" : "Verify & Sign In"}
-            </button>
+            {error && <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-center text-xs text-red-300">{error}</div>}
+            {loading && <div className="text-center text-xs text-slate-400">Verifying…</div>}
+
             <button
               type="button"
-              onClick={() => { setStage("creds"); setCode(""); setError(null); setInfo(null); }}
+              onClick={() => { setStage("creds"); setDigits(["", "", "", "", "", ""]); setError(null); setInfo(null); setFeedback("none"); submittedRef.current = false; }}
               className="w-full text-center text-xs font-medium text-slate-400 hover:text-white"
             >
               ← Use a different email
             </button>
-          </form>
+          </div>
         )}
 
         <PoweredBy />
@@ -160,3 +223,4 @@ function LoginPage() {
     </div>
   );
 }
+
