@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as WhatsappLeadsRouteImport } from './routes/whatsapp-leads'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as DriverMileageRouteImport } from './routes/driver-mileage'
 import { Route as IndexRouteImport } from './routes/index'
@@ -19,6 +20,11 @@ import { Route as ServiceHistoryNewRouteImport } from './routes/service-history.
 import { Route as ApiPublicExpiryAlertsRouteImport } from './routes/api/public/expiry-alerts'
 import { Route as ApiPublicAiIntakeRouteImport } from './routes/api/public/ai-intake'
 
+const WhatsappLeadsRoute = WhatsappLeadsRouteImport.update({
+  id: '/whatsapp-leads',
+  path: '/whatsapp-leads',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -69,6 +75,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/driver-mileage': typeof DriverMileageRoute
   '/login': typeof LoginRoute
+  '/whatsapp-leads': typeof WhatsappLeadsRoute
   '/service-history/new': typeof ServiceHistoryNewRoute
   '/vehicles/$reg': typeof VehiclesRegRoute
   '/service-history/': typeof ServiceHistoryIndexRoute
@@ -80,6 +87,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/driver-mileage': typeof DriverMileageRoute
   '/login': typeof LoginRoute
+  '/whatsapp-leads': typeof WhatsappLeadsRoute
   '/service-history/new': typeof ServiceHistoryNewRoute
   '/vehicles/$reg': typeof VehiclesRegRoute
   '/service-history': typeof ServiceHistoryIndexRoute
@@ -92,6 +100,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/driver-mileage': typeof DriverMileageRoute
   '/login': typeof LoginRoute
+  '/whatsapp-leads': typeof WhatsappLeadsRoute
   '/service-history/new': typeof ServiceHistoryNewRoute
   '/vehicles/$reg': typeof VehiclesRegRoute
   '/service-history/': typeof ServiceHistoryIndexRoute
@@ -105,6 +114,7 @@ export interface FileRouteTypes {
     | '/'
     | '/driver-mileage'
     | '/login'
+    | '/whatsapp-leads'
     | '/service-history/new'
     | '/vehicles/$reg'
     | '/service-history/'
@@ -116,6 +126,7 @@ export interface FileRouteTypes {
     | '/'
     | '/driver-mileage'
     | '/login'
+    | '/whatsapp-leads'
     | '/service-history/new'
     | '/vehicles/$reg'
     | '/service-history'
@@ -127,6 +138,7 @@ export interface FileRouteTypes {
     | '/'
     | '/driver-mileage'
     | '/login'
+    | '/whatsapp-leads'
     | '/service-history/new'
     | '/vehicles/$reg'
     | '/service-history/'
@@ -139,6 +151,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DriverMileageRoute: typeof DriverMileageRoute
   LoginRoute: typeof LoginRoute
+  WhatsappLeadsRoute: typeof WhatsappLeadsRoute
   ServiceHistoryNewRoute: typeof ServiceHistoryNewRoute
   VehiclesRegRoute: typeof VehiclesRegRoute
   ServiceHistoryIndexRoute: typeof ServiceHistoryIndexRoute
@@ -149,6 +162,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/whatsapp-leads': {
+      id: '/whatsapp-leads'
+      path: '/whatsapp-leads'
+      fullPath: '/whatsapp-leads'
+      preLoaderRoute: typeof WhatsappLeadsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -219,6 +239,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DriverMileageRoute: DriverMileageRoute,
   LoginRoute: LoginRoute,
+  WhatsappLeadsRoute: WhatsappLeadsRoute,
   ServiceHistoryNewRoute: ServiceHistoryNewRoute,
   VehiclesRegRoute: VehiclesRegRoute,
   ServiceHistoryIndexRoute: ServiceHistoryIndexRoute,
