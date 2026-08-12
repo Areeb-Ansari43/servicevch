@@ -25,14 +25,52 @@ async function sendOtpEmail(_email: string, code: string) {
   const resendKey = process.env.RESEND_API_KEY;
   if (!resendKey) throw new Error("Email service not configured: RESEND_API_KEY missing");
 
-  const html = `
-    <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;padding:24px;background:#0f1115;color:#fff;border-radius:12px">
-      <div style="font-weight:700;color:#ff6a00;font-size:14px;letter-spacing:.18em;text-transform:uppercase">Virtual Car Hire</div>
-      <h1 style="font-size:22px;margin:8px 0 16px">Your sign-in code</h1>
-      <p style="color:#94a3b8;font-size:14px;line-height:1.6;margin:0 0 16px">Use this 6-digit code to complete sign-in to Fleet Tracker. It expires in 10 minutes.</p>
-      <div style="font-size:38px;font-weight:800;letter-spacing:.4em;background:#1a1d24;color:#ff6a00;padding:18px 24px;border-radius:10px;text-align:center;font-family:ui-monospace,monospace">${code}</div>
-      <p style="color:#64748b;font-size:12px;margin:18px 0 0">If you didn't request this, ignore this email.</p>
-    </div>`;
+  const html = `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="supported-color-schemes" content="light dark" />
+  </head>
+  <body style="margin:0;padding:0;background:#f5f5f7;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f7;padding:32px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:440px;background:#ffffff;border-radius:16px;padding:32px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+            <tr>
+              <td style="padding-bottom:24px;">
+                <span style="display:inline-block;font-size:15px;font-weight:700;color:#111111;">Virtual Car Hire</span>
+                <span style="display:inline-block;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#ff6a00;padding-left:8px;">Fleet Tracker</span>
+              </td>
+            </tr>
+            <tr>
+              <td style="font-size:17px;line-height:1.5;color:#111111;padding-bottom:20px;">
+                Here's your verification code.
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="background:#f2f2f4;border-radius:12px;padding:22px 12px;">
+                <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:34px;font-weight:700;letter-spacing:.22em;color:#111111;">${code}</span>
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="font-size:13px;color:#6e6e73;padding-top:14px;">
+                This code expires in 10 minutes.
+              </td>
+            </tr>
+            <tr>
+              <td style="border-top:1px solid #e5e5ea;margin-top:24px;padding-top:18px;font-size:12px;line-height:1.5;color:#8e8e93;">
+                If you didn't request this, you can safely ignore this email.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+
 
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
