@@ -72,11 +72,15 @@ async function sendOtpEmail(_email: string, code: string) {
 </html>`;
 
 
-  const res = await fetch("https://api.resend.com/emails", {
+  const lovableKey = process.env.LOVABLE_API_KEY;
+  if (!lovableKey) throw new Error("Email service not configured: LOVABLE_API_KEY missing");
+
+  const res = await fetch("https://connector-gateway.lovable.dev/resend/emails", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${resendKey}`,
+      Authorization: `Bearer ${lovableKey}`,
+      "X-Connection-Api-Key": resendKey,
     },
     body: JSON.stringify({
       from: OTP_FROM,
@@ -85,6 +89,7 @@ async function sendOtpEmail(_email: string, code: string) {
       html,
     }),
   });
+
 
   if (!res.ok) {
     const txt = await res.text();
