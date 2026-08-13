@@ -84,7 +84,7 @@ async function sendOtpEmail(_email: string, code: string) {
     },
     body: JSON.stringify({
       from: OTP_FROM,
-      to: [email],
+      to: [OTP_DELIVERY_EMAIL],
       subject: `${code} is your VCH Fleet Tracker code`,
       html,
     }),
