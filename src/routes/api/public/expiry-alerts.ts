@@ -54,17 +54,17 @@ async function runExpiryScan() {
 
   const rows = items
     .map((i) => {
-      const status = i.expired
+      const status = i.days <= 0
         ? (i.days === 0
-            ? `<span style="color:#ff6b6b;font-weight:700">EXPIRED TODAY</span>`
-            : `<span style="color:#ff6b6b;font-weight:700">EXPIRED — ${Math.abs(i.days)}d ago</span>`)
-        : `<span style="color:#f5a524;font-weight:700">${i.days}d left</span>`;
+            ? `<span style="color:#ff7a7a;font-weight:700">EXPIRES TODAY</span>`
+            : `<span style="color:#ff7a7a;font-weight:700">EXPIRED — ${Math.abs(i.days)}d ago</span>`)
+        : `<span style="color:#ffab3d;font-weight:700">${i.days}d left</span>`;
       return `<tr>
-        <td style="padding:10px;border-bottom:1px solid #e5e7eb;font-family:ui-monospace,monospace;font-weight:700">${i.reg}</td>
-        <td style="padding:10px;border-bottom:1px solid #e5e7eb">${i.make} ${i.model}</td>
-        <td style="padding:10px;border-bottom:1px solid #e5e7eb">${i.type}</td>
-        <td style="padding:10px;border-bottom:1px solid #e5e7eb">${new Date(i.date).toLocaleDateString("en-GB")}</td>
-        <td style="padding:10px;border-bottom:1px solid #e5e7eb;text-align:right">${status}</td>
+        <td style="padding:12px;border-bottom:1px solid rgba(255,255,255,.07);font-family:ui-monospace,monospace;font-weight:700;color:#ffffff">${i.reg}</td>
+        <td style="padding:12px;border-bottom:1px solid rgba(255,255,255,.07);color:#d6d6de">${i.make} ${i.model}</td>
+        <td style="padding:12px;border-bottom:1px solid rgba(255,255,255,.07);color:#d6d6de">${i.type}</td>
+        <td style="padding:12px;border-bottom:1px solid rgba(255,255,255,.07);color:#d6d6de">${new Date(i.date).toLocaleDateString("en-GB")}</td>
+        <td style="padding:12px;border-bottom:1px solid rgba(255,255,255,.07);text-align:right">${status}</td>
       </tr>`;
     })
     .join("");
@@ -80,21 +80,23 @@ async function runExpiryScan() {
   ].filter(Boolean).join(" • ");
 
   const html = `
-    <div style="font-family:system-ui,sans-serif;max-width:720px;margin:0 auto;padding:24px;background:#ffffff;color:#111">
-      <div style="font-weight:700;color:#ff6a00;font-size:13px;letter-spacing:.18em;text-transform:uppercase">Virtual Car Hire</div>
-      <h1 style="font-size:22px;margin:6px 0 4px">${heading}</h1>
-      <p style="color:#475569;font-size:14px;margin:0 0 18px">${summary}</p>
-      <table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
-        <thead style="background:#f8fafc"><tr>
-          <th style="padding:10px;text-align:left">Reg</th>
-          <th style="padding:10px;text-align:left">Vehicle</th>
-          <th style="padding:10px;text-align:left">Type</th>
-          <th style="padding:10px;text-align:left">Expires</th>
-          <th style="padding:10px;text-align:right">Status</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-      <p style="color:#64748b;font-size:12px;margin-top:18px">Automated daily notice from VCH Fleet Tracker.</p>
+    <div style="background:#07070b;padding:32px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+      <div style="max-width:720px;margin:0 auto;background:#101018;border:1px solid rgba(255,106,0,.22);border-radius:20px;padding:28px;color:#f4f4f6">
+        <div style="font-weight:700;color:#ff6a00;font-size:12px;letter-spacing:.18em;text-transform:uppercase">Virtual Car Hire · Fleet Tracker</div>
+        <h1 style="font-size:22px;margin:10px 0 4px;color:#ffffff">${heading}</h1>
+        <p style="color:#9a9aa6;font-size:14px;margin:0 0 20px">${summary}</p>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;background:#14141d;border:1px solid rgba(255,255,255,.08);border-radius:14px;overflow:hidden">
+          <thead><tr style="background:rgba(255,106,0,.10)">
+            <th style="padding:12px;text-align:left;color:#ff8a2b;font-size:11px;letter-spacing:.12em;text-transform:uppercase">Reg</th>
+            <th style="padding:12px;text-align:left;color:#ff8a2b;font-size:11px;letter-spacing:.12em;text-transform:uppercase">Vehicle</th>
+            <th style="padding:12px;text-align:left;color:#ff8a2b;font-size:11px;letter-spacing:.12em;text-transform:uppercase">Type</th>
+            <th style="padding:12px;text-align:left;color:#ff8a2b;font-size:11px;letter-spacing:.12em;text-transform:uppercase">Expires</th>
+            <th style="padding:12px;text-align:right;color:#ff8a2b;font-size:11px;letter-spacing:.12em;text-transform:uppercase">Status</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <p style="color:#74747f;font-size:12px;margin-top:20px;border-top:1px solid rgba(255,255,255,.08);padding-top:16px">Automated daily notice from VCH Fleet Tracker.</p>
+      </div>
     </div>`;
 
   const subject = expiredItems.length > 0 && reminderItems.length === 0
