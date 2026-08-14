@@ -147,6 +147,47 @@ export type Database = {
         }
         Relationships: []
       }
+      messages: {
+        Row: {
+          content: string
+          created_at: string
+          handoff: boolean
+          id: string
+          lead_id: string | null
+          media_url: string | null
+          sender: string
+          user_id: string
+        }
+        Insert: {
+          content?: string
+          created_at?: string
+          handoff?: boolean
+          id?: string
+          lead_id?: string | null
+          media_url?: string | null
+          sender?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          handoff?: boolean
+          id?: string
+          lead_id?: string | null
+          media_url?: string | null
+          sender?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mileage_logs: {
         Row: {
           allowance: number
@@ -309,6 +350,8 @@ export type Database = {
           created_at: string
           id: string
           intent: string | null
+          last_message_at: string
+          media_url: string | null
           message: string
           phone: string | null
           status: string
@@ -320,6 +363,8 @@ export type Database = {
           created_at?: string
           id?: string
           intent?: string | null
+          last_message_at?: string
+          media_url?: string | null
           message: string
           phone?: string | null
           status?: string
@@ -331,6 +376,8 @@ export type Database = {
           created_at?: string
           id?: string
           intent?: string | null
+          last_message_at?: string
+          media_url?: string | null
           message?: string
           phone?: string | null
           status?: string
