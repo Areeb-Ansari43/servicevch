@@ -30,37 +30,37 @@ async function sendOtpEmail(_email: string, code: string) {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="light dark" />
-    <meta name="supported-color-schemes" content="light dark" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="supported-color-schemes" content="dark" />
   </head>
-  <body style="margin:0;padding:0;background:#f5f5f7;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f7;padding:32px 16px;">
+  <body style="margin:0;padding:0;background:#07070b;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#07070b;padding:36px 16px;">
       <tr>
         <td align="center">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:440px;background:#ffffff;border-radius:16px;padding:32px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:460px;background:#101018;border:1px solid rgba(255,106,0,.22);border-radius:20px;padding:34px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
             <tr>
-              <td style="padding-bottom:24px;">
-                <span style="display:inline-block;font-size:15px;font-weight:700;color:#111111;">Virtual Car Hire</span>
-                <span style="display:inline-block;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#ff6a00;padding-left:8px;">Fleet Tracker</span>
+              <td style="padding-bottom:26px;">
+                <span style="display:inline-block;font-size:15px;font-weight:700;color:#ffffff;">Virtual Car Hire</span>
+                <span style="display:inline-block;font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#ff6a00;padding-left:8px;">Fleet Tracker</span>
               </td>
             </tr>
             <tr>
-              <td style="font-size:17px;line-height:1.5;color:#111111;padding-bottom:20px;">
+              <td style="font-size:18px;line-height:1.5;color:#f4f4f6;font-weight:600;padding-bottom:20px;">
                 Here's your verification code.
               </td>
             </tr>
             <tr>
-              <td align="center" style="background:#f2f2f4;border-radius:12px;padding:22px 12px;">
-                <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:34px;font-weight:700;letter-spacing:.22em;color:#111111;">${code}</span>
+              <td align="center" style="background:#17171f;border:1px solid rgba(255,106,0,.32);border-radius:14px;padding:24px 12px;">
+                <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:36px;font-weight:700;letter-spacing:.24em;color:#ff8a2b;">${code}</span>
               </td>
             </tr>
             <tr>
-              <td align="center" style="font-size:13px;color:#6e6e73;padding-top:14px;">
+              <td align="center" style="font-size:13px;color:#9a9aa6;padding-top:16px;">
                 This code expires in 10 minutes.
               </td>
             </tr>
             <tr>
-              <td style="border-top:1px solid #e5e5ea;margin-top:24px;padding-top:18px;font-size:12px;line-height:1.5;color:#8e8e93;">
+              <td style="border-top:1px solid rgba(255,255,255,.08);padding-top:18px;font-size:12px;line-height:1.5;color:#74747f;">
                 If you didn't request this, you can safely ignore this email.
               </td>
             </tr>
