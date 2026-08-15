@@ -217,16 +217,18 @@ async function handleWebhook(request: Request) {
 
   // Find an existing open lead for this phone number, otherwise create one.
   let leadId: string | null = null;
+  let aiPaused = false;
   if (phone) {
     const { data: existing } = await supabaseAdmin
       .from("whatsapp_leads")
-      .select("id")
+      .select("id, ai_paused")
       .eq("user_id", userId)
       .eq("phone", phone)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     leadId = existing?.id ?? null;
+    aiPaused = Boolean((existing as { ai_paused?: boolean } | null)?.ai_paused);
   }
 
   if (leadId) {
@@ -268,7 +270,57 @@ async function handleWebhook(request: Request) {
   });
   if (inboundErr) return json({ ok: false, error: inboundErr.message }, 500);
 
-  const ai = await generateReply((history ?? []) as Turn[], content, Boolean(mediaUrl));
+  // A human has taken over this conversation — never auto-reply.
+  if (aiPaused) {
+    await supabaseAdmin
+      .from("whatsapp_leads")
+      .update({ status: "human" } as never)
+      .eq("id", leadId);
+    return json({ ok: true, lead_id: leadId, ai_paused: true, reply: null, needs_human: true });
+  }
+
+  // Menu selections: [1] Rent a Car, [2] Report an Accident, [3] Speak to Human.
+  const option = parseMenuOption(content);
+  if (option === 3) {
+    const reply = "No problem — I'm connecting you with a member of our team now. They'll reply here shortly.";
+    await supabaseAdmin.from("messages").insert({
+      user_id: userId,
+      lead_id: leadId,
+      sender: "ai_agent",
+      content: reply,
+      handoff: true,
+    });
+    await supabaseAdmin
+      .from("whatsapp_leads")
+      .update({ ai_summary: reply, status: "needs_human", ai_paused: true, intent: "speak_to_human" } as never)
+      .eq("id", leadId);
+    const menuAlert = await alertTeam({
+      name,
+      phone,
+      content,
+      mediaUrl,
+      reason: "Customer chose [3] Speak to Human",
+      leadId,
+    });
+    return json({ ok: true, lead_id: leadId, reply, needs_human: true, telegram_alert: menuAlert });
+  }
+
+  if (option === 1 || option === 2) {
+    await supabaseAdmin
+      .from("whatsapp_leads")
+      .update({ intent: option === 1 ? "rent_a_car" : "report_accident" } as never)
+      .eq("id", leadId);
+  }
+
+  const latest =
+    option === 1
+      ? `${content}\n(Menu selection: [1] Rent a Car — help them with availability and pricing next steps.)`
+      : option === 2
+        ? `${content}\n(Menu selection: [2] Report an Accident — gather registration, date, location and what happened.)`
+        : content;
+
+  const ai = await generateReply((history ?? []) as Turn[], latest, Boolean(mediaUrl));
+
 
   await supabaseAdmin.from("messages").insert({
     user_id: userId,
