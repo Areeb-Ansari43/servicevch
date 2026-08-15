@@ -49,6 +49,13 @@ const escapeHtml = (s: string) =>
 
 type Turn = { sender: string; content: string };
 
+/** Detects "[2]", "2", "2." or "option 2" style menu replies. */
+function parseMenuOption(text: string): 1 | 2 | 3 | null {
+  const m = text.trim().match(/^(?:option\s*)?\[?([123])\]?[.)]?$/i);
+  return m ? (Number(m[1]) as 1 | 2 | 3) : null;
+}
+
+
 /** Ask Gemini Flash for a reply + whether a human should take over. */
 async function generateReply(history: Turn[], latest: string, hasMedia: boolean) {
   const geminiKey = process.env["GEMINI_API_KEY"];
