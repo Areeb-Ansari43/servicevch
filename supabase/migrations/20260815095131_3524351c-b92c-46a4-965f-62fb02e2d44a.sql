@@ -1,0 +1,3 @@
+CREATE POLICY "own chat test media read" ON storage.objects FOR SELECT TO authenticated USING (bucket_id = 'chat-test-media' AND owner = auth.uid());
+CREATE POLICY "own chat test media insert" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'chat-test-media' AND owner = auth.uid());
+CREATE POLICY "own chat test media delete" ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'chat-test-media' AND owner = auth.uid());
