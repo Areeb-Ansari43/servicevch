@@ -345,6 +345,7 @@ export type Database = {
       }
       whatsapp_leads: {
         Row: {
+          ai_paused: boolean
           ai_summary: string | null
           contact_name: string
           created_at: string
@@ -358,6 +359,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          ai_paused?: boolean
           ai_summary?: string | null
           contact_name?: string
           created_at?: string
@@ -371,6 +373,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          ai_paused?: boolean
           ai_summary?: string | null
           contact_name?: string
           created_at?: string
