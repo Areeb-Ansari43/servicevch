@@ -19,6 +19,7 @@ import { Route as VehiclesIndexRouteImport } from './routes/vehicles.index'
 import { Route as ServiceHistoryIndexRouteImport } from './routes/service-history.index'
 import { Route as VehiclesRegRouteImport } from './routes/vehicles.$reg'
 import { Route as ServiceHistoryNewRouteImport } from './routes/service-history.new'
+import { Route as ApiPublicTelegramBotRouteImport } from './routes/api/public/telegram-bot'
 import { Route as ApiPublicExpiryAlertsRouteImport } from './routes/api/public/expiry-alerts'
 import { Route as ApiPublicAiIntakeRouteImport } from './routes/api/public/ai-intake'
 import { Route as ApiPublicAgentWebhookRouteImport } from './routes/api/public/agent-webhook'
@@ -73,6 +74,11 @@ const ServiceHistoryNewRoute = ServiceHistoryNewRouteImport.update({
   path: '/service-history/new',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicTelegramBotRoute = ApiPublicTelegramBotRouteImport.update({
+  id: '/api/public/telegram-bot',
+  path: '/api/public/telegram-bot',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicExpiryAlertsRoute = ApiPublicExpiryAlertsRouteImport.update({
   id: '/api/public/expiry-alerts',
   path: '/api/public/expiry-alerts',
@@ -103,6 +109,7 @@ export interface FileRoutesByFullPath {
   '/api/public/agent-webhook': typeof ApiPublicAgentWebhookRoute
   '/api/public/ai-intake': typeof ApiPublicAiIntakeRoute
   '/api/public/expiry-alerts': typeof ApiPublicExpiryAlertsRoute
+  '/api/public/telegram-bot': typeof ApiPublicTelegramBotRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -118,6 +125,7 @@ export interface FileRoutesByTo {
   '/api/public/agent-webhook': typeof ApiPublicAgentWebhookRoute
   '/api/public/ai-intake': typeof ApiPublicAiIntakeRoute
   '/api/public/expiry-alerts': typeof ApiPublicExpiryAlertsRoute
+  '/api/public/telegram-bot': typeof ApiPublicTelegramBotRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -134,6 +142,7 @@ export interface FileRoutesById {
   '/api/public/agent-webhook': typeof ApiPublicAgentWebhookRoute
   '/api/public/ai-intake': typeof ApiPublicAiIntakeRoute
   '/api/public/expiry-alerts': typeof ApiPublicExpiryAlertsRoute
+  '/api/public/telegram-bot': typeof ApiPublicTelegramBotRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -151,6 +160,7 @@ export interface FileRouteTypes {
     | '/api/public/agent-webhook'
     | '/api/public/ai-intake'
     | '/api/public/expiry-alerts'
+    | '/api/public/telegram-bot'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -166,6 +176,7 @@ export interface FileRouteTypes {
     | '/api/public/agent-webhook'
     | '/api/public/ai-intake'
     | '/api/public/expiry-alerts'
+    | '/api/public/telegram-bot'
   id:
     | '__root__'
     | '/'
@@ -181,6 +192,7 @@ export interface FileRouteTypes {
     | '/api/public/agent-webhook'
     | '/api/public/ai-intake'
     | '/api/public/expiry-alerts'
+    | '/api/public/telegram-bot'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -197,6 +209,7 @@ export interface RootRouteChildren {
   ApiPublicAgentWebhookRoute: typeof ApiPublicAgentWebhookRoute
   ApiPublicAiIntakeRoute: typeof ApiPublicAiIntakeRoute
   ApiPublicExpiryAlertsRoute: typeof ApiPublicExpiryAlertsRoute
+  ApiPublicTelegramBotRoute: typeof ApiPublicTelegramBotRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -271,6 +284,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ServiceHistoryNewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/telegram-bot': {
+      id: '/api/public/telegram-bot'
+      path: '/api/public/telegram-bot'
+      fullPath: '/api/public/telegram-bot'
+      preLoaderRoute: typeof ApiPublicTelegramBotRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/expiry-alerts': {
       id: '/api/public/expiry-alerts'
       path: '/api/public/expiry-alerts'
@@ -309,6 +329,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicAgentWebhookRoute: ApiPublicAgentWebhookRoute,
   ApiPublicAiIntakeRoute: ApiPublicAiIntakeRoute,
   ApiPublicExpiryAlertsRoute: ApiPublicExpiryAlertsRoute,
+  ApiPublicTelegramBotRoute: ApiPublicTelegramBotRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
