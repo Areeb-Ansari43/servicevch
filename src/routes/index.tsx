@@ -1462,7 +1462,16 @@ function SectionHead({ title, subtitle, count }: { title: string; subtitle: stri
 }
 
 function WhatsAppLeadsView({ toast }: { toast: (m: string, t?: Toast["type"]) => void }) {
-  const { leads, loading, setLeadStatus, deleteLead } = useLeadsData();
+  const { leads, loading, refresh, setLeadStatus, deleteLead } = useLeadsData();
+  const [openLeadId, setOpenLeadId] = useState<string | null>(null);
+  const openLead = leads.find((l) => l.id === openLeadId) ?? null;
+
+  // Deep link from Telegram handoff alerts: /whatsapp-leads?lead=<id>
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const id = new URLSearchParams(window.location.search).get("lead");
+    if (id) setOpenLeadId(id);
+  }, []);
 
   return (
     <div className="space-y-6">
