@@ -9,6 +9,7 @@ export type WhatsappLead = {
   ai_summary: string | null;
   intent: string | null;
   status: string;
+  ai_paused: boolean | null;
   created_at: string;
 };
 

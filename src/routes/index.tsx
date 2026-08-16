@@ -5,6 +5,8 @@ import { useFleetData, type Vehicle, type ServiceRecord, type DriverTrack } from
 import { exportServiceHistoryPdf } from "@/lib/pdf-export";
 import { useLeadsData } from "@/lib/leads-data";
 import { ApexAssistant } from "@/components/apex-assistant";
+import { ChatSimulator } from "@/components/chat-simulator";
+import { LeadThread } from "@/components/lead-thread";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -485,6 +487,9 @@ function Dashboard({ vehicles, services, drivers, goto }: { vehicles: Vehicle[];
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <ChatSimulator />
+      </div>
       {eomReminders.length > 0 && (
         <div className="rounded-xl border p-5" style={{ borderColor: "rgba(255,106,0,0.4)", background: T.orangeSoft }}>
           <div className="mb-3 flex items-center gap-2">
@@ -1457,7 +1462,16 @@ function SectionHead({ title, subtitle, count }: { title: string; subtitle: stri
 }
 
 function WhatsAppLeadsView({ toast }: { toast: (m: string, t?: Toast["type"]) => void }) {
-  const { leads, loading, setLeadStatus, deleteLead } = useLeadsData();
+  const { leads, loading, refresh, setLeadStatus, deleteLead } = useLeadsData();
+  const [openLeadId, setOpenLeadId] = useState<string | null>(null);
+  const openLead = leads.find((l) => l.id === openLeadId) ?? null;
+
+  // Deep link from Telegram handoff alerts: /whatsapp-leads?lead=<id>
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const id = new URLSearchParams(window.location.search).get("lead");
+    if (id) setOpenLeadId(id);
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -1482,6 +1496,9 @@ function WhatsAppLeadsView({ toast }: { toast: (m: string, t?: Toast["type"]) =>
                   <div className="truncate text-sm font-semibold">{l.contact_name}</div>
                   <div className="truncate text-xs text-[#9aa5b8]">{l.phone || "No number"} · {new Date(l.created_at).toLocaleString("en-GB")}</div>
                 </div>
+                {l.ai_paused && (
+                  <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-[11px] font-semibold text-amber-200">Human handling</span>
+                )}
                 <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold capitalize ${statusPill(l.status)}`}>{l.status}</span>
               </div>
 
@@ -1497,6 +1514,7 @@ function WhatsAppLeadsView({ toast }: { toast: (m: string, t?: Toast["type"]) =>
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 {l.intent && <span className="rounded-md border px-2 py-1 text-[11px] capitalize" style={{ borderColor: T.borderSoft, color: T.muted }}>{l.intent}</span>}
                 <div className="ml-auto flex gap-2">
+                  <button onClick={() => setOpenLeadId(l.id)} className="rounded-lg px-3 py-1.5 text-xs font-semibold text-white" style={{ background: T.orange }}>Open chat</button>
                   {l.status !== "contacted" && (
                     <button onClick={async () => { await setLeadStatus(l.id, "contacted"); toast("Lead marked as contacted"); }} className="rounded-lg border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: T.border, background: T.panel2 }}>Mark contacted</button>
                   )}
@@ -1509,6 +1527,17 @@ function WhatsAppLeadsView({ toast }: { toast: (m: string, t?: Toast["type"]) =>
             </div>
           ))}
         </div>
+      )}
+
+      {openLead && (
+        <LeadThread
+          leadId={openLead.id}
+          contactName={openLead.contact_name}
+          aiPaused={Boolean(openLead.ai_paused)}
+          onClose={() => setOpenLeadId(null)}
+          onChanged={refresh}
+          toast={toast}
+        />
       )}
     </div>
   );
