@@ -485,6 +485,9 @@ function Dashboard({ vehicles, services, drivers, goto }: { vehicles: Vehicle[];
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <ChatSimulator />
+      </div>
       {eomReminders.length > 0 && (
         <div className="rounded-xl border p-5" style={{ borderColor: "rgba(255,106,0,0.4)", background: T.orangeSoft }}>
           <div className="mb-3 flex items-center gap-2">
