@@ -1528,6 +1528,17 @@ function WhatsAppLeadsView({ toast }: { toast: (m: string, t?: Toast["type"]) =>
           ))}
         </div>
       )}
+
+      {openLead && (
+        <LeadThread
+          leadId={openLead.id}
+          contactName={openLead.contact_name}
+          aiPaused={Boolean(openLead.ai_paused)}
+          onClose={() => setOpenLeadId(null)}
+          onChanged={refresh}
+          toast={toast}
+        />
+      )}
     </div>
   );
 }
