@@ -1496,6 +1496,9 @@ function WhatsAppLeadsView({ toast }: { toast: (m: string, t?: Toast["type"]) =>
                   <div className="truncate text-sm font-semibold">{l.contact_name}</div>
                   <div className="truncate text-xs text-[#9aa5b8]">{l.phone || "No number"} · {new Date(l.created_at).toLocaleString("en-GB")}</div>
                 </div>
+                {l.ai_paused && (
+                  <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-[11px] font-semibold text-amber-200">Human handling</span>
+                )}
                 <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold capitalize ${statusPill(l.status)}`}>{l.status}</span>
               </div>
 
