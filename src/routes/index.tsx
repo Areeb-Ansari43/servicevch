@@ -5,6 +5,8 @@ import { useFleetData, type Vehicle, type ServiceRecord, type DriverTrack } from
 import { exportServiceHistoryPdf } from "@/lib/pdf-export";
 import { useLeadsData } from "@/lib/leads-data";
 import { ApexAssistant } from "@/components/apex-assistant";
+import { ChatSimulator } from "@/components/chat-simulator";
+import { LeadThread } from "@/components/lead-thread";
 
 export const Route = createFileRoute("/")({
   head: () => ({
