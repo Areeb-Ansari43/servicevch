@@ -477,10 +477,12 @@ export async function handleAgentWebhookRequest(request: Request) {
 
   if (isMenuReset(content)) {
     const reply = WELCOME_MENU;
-    await db.from("whatsapp_leads").update({ status: "active", ai_paused: false, closed_at: null, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
-    await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
     const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
-    return json({ ok: true, lead_id: leadId, reply, welcome_menu: true, needs_human: !outbound.sent, outbound });
+    if (outbound.sent) {
+      await db.from("whatsapp_leads").update({ status: "active", ai_paused: false, closed_at: null, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+      await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
+    }
+    return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, welcome_menu: outbound.sent, needs_human: !outbound.sent, outbound });
   }
 
   if (isAbusiveMessage(content)) {
@@ -656,25 +658,26 @@ export async function handleAgentWebhookRequest(request: Request) {
   const needsHuman = Boolean(ai.needs_human);
   const finalReply =
     needsHuman && !ai.reply ? "I’m connecting you with a member of our team now." : ai.reply;
-  await insertWithSessionFallback(db, "messages", {
-    user_id: userId,
-    lead_id: leadId,
-    sender: "ai_agent",
-    content: finalReply,
-    handoff: needsHuman,
-    session_id: sessionId,
-  });
-  await db
-    .from("whatsapp_leads")
-    .update({
-      ai_summary: finalReply,
-      ...(needsHuman ? { status: "needs_human", ai_paused: true } : {}),
-      last_message_at: new Date().toISOString(),
-    } as never)
-    .eq("id", leadId);
-
   console.info("[agent-webhook] awaiting OpenWA AI dispatch", { leadId, transportSession: openwaSessionId ?? "vch-bot", chatId: chatId ?? phone, hasPhone: Boolean(phone || chatId) });
   const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: finalReply, sessionId: openwaSessionId ?? undefined });
+  if (outbound.sent) {
+    await insertWithSessionFallback(db, "messages", {
+      user_id: userId,
+      lead_id: leadId,
+      sender: "ai_agent",
+      content: finalReply,
+      handoff: needsHuman,
+      session_id: sessionId,
+    });
+    await db
+      .from("whatsapp_leads")
+      .update({
+        ai_summary: finalReply,
+        ...(needsHuman ? { status: "needs_human", ai_paused: true } : {}),
+        last_message_at: new Date().toISOString(),
+      } as never)
+      .eq("id", leadId);
+  }
   console.info("[agent-webhook] OpenWA AI dispatch complete", { leadId, sent: outbound.sent, reason: outbound.sent ? undefined : outbound.reason });
   const deliveryFailed = !outbound.sent;
   let alert: { sent: boolean; reason?: string } = { sent: false, reason: "not_needed" };

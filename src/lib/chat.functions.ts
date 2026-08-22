@@ -81,7 +81,10 @@ export const getLeadConversation = createServerFn({ method: "GET" })
               : new Date().toISOString();
             return {
               id: `openwa:${message.id ?? `${createdAt}:${index}`}`,
-              sender: message.fromMe || message.from_me ? "human" : "customer",
+              sender: (message.fromMe || message.from_me) && localMessages.some((local) =>
+                local.sender === "human" && local.content === text &&
+                Math.abs(new Date(local.created_at).getTime() - new Date(createdAt).getTime()) < 120_000,
+              ) ? "human" : (message.fromMe || message.from_me ? "ai_agent" : "customer"),
               content: text || "(media)",
               media_url: message.media?.url ?? null,
               handoff: false,

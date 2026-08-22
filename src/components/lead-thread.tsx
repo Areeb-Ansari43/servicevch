@@ -12,6 +12,8 @@ export type ThreadMessage = {
   created_at: string;
 };
 
+const AI_FALLBACK_TEXT = "I’m sorry, I’m having trouble helping with that right now. I’m connecting you with a member of our team now.";
+
 const SENDER_STYLES: Record<string, { label: string; className: string }> = {
   customer: { label: "Customer", className: "border border-white/10 bg-white/[0.05] text-[#dce3ee]" },
   ai_agent: { label: "AI Agent", className: "ml-auto border border-[#ff6a00]/30 bg-[#ff6a00]/12 text-[#ffd9bd]" },
@@ -135,7 +137,8 @@ export function LeadThread({
             <p className="text-xs text-[#8b95a8]">No messages logged for this lead yet.</p>
           ) : (
             messages.map((m) => {
-              const style = SENDER_STYLES[m.sender] ?? SENDER_STYLES.customer;
+              const effectiveSender = m.content.trim() === AI_FALLBACK_TEXT ? "ai_agent" : m.sender;
+              const style = SENDER_STYLES[effectiveSender] ?? SENDER_STYLES.customer;
               return (
                 <div key={m.id} className={`max-w-[88%] rounded-2xl px-4 py-2.5 ${style.className}`}>
                   <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.16em] opacity-70">
