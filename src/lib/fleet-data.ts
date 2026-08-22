@@ -43,6 +43,7 @@ export type MonthlyLog = {
 export type DriverTrack = {
   id: string;
   driver_name: string;
+  phone?: string | null;
   vehicle_id: string;
   registration: string;
   start_mileage: number;
@@ -88,6 +89,7 @@ const sFromRow = (r: any): ServiceRecord => ({
 const dFromRow = (r: any, logs: MonthlyLog[]): DriverTrack => ({
   id: r.id,
   driver_name: r.driver_name,
+  phone: r.phone ?? "",
   vehicle_id: r.vehicle_id ?? "",
   registration: r.reg,
   start_mileage: r.start_mileage,
@@ -242,11 +244,12 @@ export function useFleetData() {
     const { data: userData } = await supabase.auth.getUser();
     const userId = userData.user?.id;
     if (!userId) throw new Error("Not signed in");
-    const { error } = await supabase.from("driver_tracks").insert({
+    const { error } = await (supabase.from("driver_tracks") as any).insert({
       user_id: userId,
       vehicle_id: d.vehicle_id || null,
       reg: d.registration,
       driver_name: d.driver_name,
+      phone: d.phone?.trim() || null,
       start_date: d.start_date,
       start_mileage: d.start_mileage,
       current_mileage: d.start_mileage,

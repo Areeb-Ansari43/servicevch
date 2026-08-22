@@ -255,7 +255,7 @@ export function UKPlate({ reg, size = "md" }: { reg: string; size?: "sm" | "md" 
 }
 
 /* ---------------- App ---------------- */
-export type View = "dashboard" | "vehicles" | "add" | "services" | "log-service" | "mileage" | "leads" | "accidents";
+export type View = "dashboard" | "vehicles" | "add" | "services" | "log-service" | "mileage" | "drivers" | "leads" | "accidents";
 
 export const VIEW_PATH: Record<View, string> = {
   dashboard: "/",
@@ -264,6 +264,7 @@ export const VIEW_PATH: Record<View, string> = {
   services: "/service-history",
   "log-service": "/service-history/new",
   mileage: "/driver-mileage",
+  drivers: "/drivers",
   leads: "/whatsapp-leads",
   accidents: "/accident-cases",
 };
@@ -330,6 +331,7 @@ export function FleetShell({ view }: { view: View }) {
           ) : view === "vehicles" ? (
             <VehiclesList
               vehicles={data.vehicles}
+              drivers={data.drivers}
               onAdd={() => go("add")}
               onOpen={(v) => navigate({ to: "/vehicles/$reg", params: { reg: regSlug(v.registration) } })}
             />
@@ -355,6 +357,8 @@ export function FleetShell({ view }: { view: View }) {
             />
           ) : view === "mileage" ? (
             <MileageView vehicles={data.vehicles} drivers={data.drivers} data={data} toast={toast} />
+          ) : view === "drivers" ? (
+            <DriversView vehicles={data.vehicles} drivers={data.drivers} data={data} toast={toast} />
           ) : view === "leads" ? (
             <WhatsAppLeadsView toast={toast} />
           ) : view === "accidents" ? (
@@ -414,6 +418,7 @@ function Sidebar({ view, setView, onSignOut, account }: {
     { id: "vehicles", label: "Vehicles", Icon: Icon.Car },
     { id: "services", label: "Service History", Icon: Icon.Wrench },
     { id: "mileage", label: "Driver Mileage", Icon: Icon.Gauge },
+    { id: "drivers", label: "Drivers", Icon: Icon.Chat },
     { id: "leads", label: "WhatsApp Leads", Icon: Icon.Chat },
     { id: "accidents", label: "Accident Cases", Icon: Icon.Crash },
     { id: "add", label: "Add Vehicle", Icon: Icon.Plus },
@@ -763,8 +768,8 @@ function LineChart({ data, height }: { data: [string, number][]; height: number 
 
 /* ---------------- Vehicles ---------------- */
 function VehiclesList({
-  vehicles, onAdd, onOpen,
-}: { vehicles: Vehicle[]; onAdd: () => void; onOpen: (v: Vehicle) => void }) {
+  vehicles, drivers, onAdd, onOpen,
+}: { vehicles: Vehicle[]; drivers: DriverTrack[]; onAdd: () => void; onOpen: (v: Vehicle) => void }) {
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const filtered = vehicles.filter((v) => {
@@ -778,6 +783,7 @@ function VehiclesList({
     if (f === "Diesel") return "border-amber-500/30 bg-amber-500/10 text-amber-300";
     return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
   };
+  const driverByVehicle = new Map(drivers.map((driver) => [driver.vehicle_id, driver]));
   return (
     <div className="space-y-5">
       <div className="flex items-end justify-between">
@@ -835,6 +841,11 @@ function VehiclesList({
                 <span className={`rounded border px-1.5 py-0.5 font-medium ${fuelStyle(v.fuel_type)}`}>{v.fuel_type}</span>
                 <span>{v.current_mileage.toLocaleString()} mi</span>
               </div>
+              {driverByVehicle.get(v.id)?.driver_name && (
+                <div className="mt-3 rounded-lg border border-sky-400/20 bg-sky-400/10 px-2.5 py-2 text-xs text-sky-200">
+                  Driver: <span className="font-semibold">{driverByVehicle.get(v.id)?.driver_name}</span>
+                </div>
+              )}
               <div className="mt-3 flex flex-wrap gap-1.5 border-t pt-3 text-[10px]" style={{ borderColor: T.borderSoft }}>
                 {v.next_mot_date && <Pill label="MOT" value={daysUntil(v.next_mot_date)} />}
                 {v.next_service_date && <Pill label="Service" value={daysUntil(v.next_service_date)} />}
@@ -1294,6 +1305,62 @@ function ServiceDetailsModal({ service, onClose }: { service: ServiceRecord; onC
         </div>
         <div className="mt-4 rounded-xl border p-5" style={{ borderColor: T.border, background: T.panel }}><div className="mb-2 text-xs uppercase tracking-wider text-[#8b95a8]">Service notes</div><p className="whitespace-pre-wrap text-sm leading-6 text-[#e6eaf0]">{service.description || "No notes were recorded for this service."}</p></div>
         <div className="mt-6 flex justify-end"><button type="button" onClick={onClose} className="rounded-lg bg-[#ff6a00] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#e05d00]">Close</button></div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Drivers ---------------- */
+function DriversView({ vehicles, drivers, data, toast }: { vehicles: Vehicle[]; drivers: DriverTrack[]; data: ReturnType<typeof useFleetData>; toast: (m: string, t?: Toast["type"]) => void }) {
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [vehicleId, setVehicleId] = useState("");
+  const [saving, setSaving] = useState(false);
+  const selected = vehicles.find((vehicle) => vehicle.id === vehicleId);
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!name.trim() || !phone.trim() || !selected) { toast("Enter the driver name, phone number, and vehicle.", "error"); return; }
+    setSaving(true);
+    try {
+      await data.addDriver({
+        driver_name: name.trim(), phone: phone.trim(), vehicle_id: selected.id, registration: selected.registration,
+        start_mileage: selected.current_mileage, current_mileage: selected.current_mileage,
+        allowance: 5000, excess_rate: 20, start_date: new Date().toISOString().slice(0, 10),
+      });
+      toast(`${name.trim()} linked to ${selected.registration}`);
+      setName(""); setPhone(""); setVehicleId("");
+    } catch (error: any) { toast(error?.message ?? "Could not save driver", "error"); }
+    finally { setSaving(false); }
+  };
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-2xl font-bold">Drivers</h2>
+        <p className="text-sm text-[#8b95a8]">Save client contact details and link each driver to a vehicle.</p>
+      </div>
+      <form onSubmit={submit} className="rounded-xl border p-5" style={{ borderColor: T.border, background: T.panel }}>
+        <h3 className="mb-4 text-base font-semibold">Add Driver</h3>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <Field label="Full name"><input value={name} onChange={(event) => setName(event.target.value)} className={inputCls} placeholder="Areeb Ansari" /></Field>
+          <Field label="Client phone number"><input value={phone} onChange={(event) => setPhone(event.target.value)} className={inputCls} placeholder="+44 7721 502779" /></Field>
+          <Field label="Linked vehicle">
+            <select value={vehicleId} onChange={(event) => setVehicleId(event.target.value)} className={inputCls}>
+              <option value="">Choose a vehicle…</option>
+              {vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.registration} — {vehicle.make} {vehicle.model}</option>)}
+            </select>
+          </Field>
+        </div>
+        <div className="mt-4 flex justify-end"><button disabled={saving} className="rounded-lg bg-[#ff6a00] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Saving…" : "Save Driver"}</button></div>
+      </form>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {drivers.map((driver) => {
+          const vehicle = vehicles.find((item) => item.id === driver.vehicle_id);
+          return <div key={driver.id} className="rounded-xl border p-5" style={{ borderColor: T.border, background: T.panel }}>
+            <div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold">{driver.driver_name}</h3><p className="mt-1 text-sm text-[#8b95a8]">{driver.phone || "No phone saved"}</p></div><span className="rounded-full border border-sky-400/30 bg-sky-400/10 px-2 py-1 text-[11px] text-sky-200">Active</span></div>
+            <div className="mt-4 flex items-center gap-3 border-t pt-3" style={{ borderColor: T.borderSoft }}><UKPlate reg={vehicle?.registration ?? driver.registration} size="sm" /><span className="text-sm text-[#c5ccda]">{vehicle ? `${vehicle.make} ${vehicle.model}` : "Vehicle not found"}</span></div>
+          </div>;
+        })}
+        {drivers.length === 0 && <div className="rounded-xl border border-dashed p-10 text-center text-sm text-[#8b95a8] md:col-span-2 xl:col-span-3" style={{ borderColor: T.border }}>No drivers saved yet.</div>}
       </div>
     </div>
   );
