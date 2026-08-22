@@ -597,7 +597,16 @@ export async function handleAgentWebhookRequest(request: Request) {
       .eq("user_id", userId)
       .order("last_message_at", { ascending: false })
       .limit(500);
-    const existing = (candidates ?? []).find((candidate: { phone?: string | null }) => canonicalPhoneKey(candidate.phone) === canonicalPhoneKey(canonicalPhone));
+    const matchingCandidates = (candidates ?? [])
+      .filter((candidate: { phone?: string | null }) => canonicalPhoneKey(candidate.phone) === canonicalPhoneKey(canonicalPhone))
+      .sort((a: { intent?: string | null; status?: string | null; last_message_at?: string | null }, b: { intent?: string | null; status?: string | null; last_message_at?: string | null }) => {
+        const intentScore = Number(Boolean(b.intent)) - Number(Boolean(a.intent));
+        if (intentScore) return intentScore;
+        const activeScore = Number(b.status !== "closed") - Number(a.status !== "closed");
+        if (activeScore) return activeScore;
+        return String(b.last_message_at ?? "").localeCompare(String(a.last_message_at ?? ""));
+      });
+    const existing = matchingCandidates[0];
     if (existing) {
       leadId = existing.id;
       aiPaused = Boolean(existing.ai_paused);
