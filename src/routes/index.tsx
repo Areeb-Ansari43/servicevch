@@ -1002,8 +1002,9 @@ if (typeof document !== "undefined" && !document.getElementById(_styleInjectId))
   tag.id = _styleInjectId;
   tag.textContent = `
     input, select, textarea { background-color: ${T.panel2}; border-color: ${T.border}; color: ${T.text}; }
+    select { color-scheme: dark; }
+    select option, select optgroup { background-color: #1e222b; color: #eef2f8; }
     input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.7); }
-    select option { background: ${T.panel2}; color: ${T.text}; }
   `;
   document.head.appendChild(tag);
 }
