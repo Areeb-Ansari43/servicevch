@@ -71,16 +71,11 @@ async function sendOtpEmail(_email: string, code: string) {
   </body>
 </html>`;
 
-
-  const lovableKey = process.env.LOVABLE_API_KEY;
-  if (!lovableKey) throw new Error("Email service not configured: LOVABLE_API_KEY missing");
-
-  const res = await fetch("https://connector-gateway.lovable.dev/resend/emails", {
+  const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${lovableKey}`,
-      "X-Connection-Api-Key": resendKey,
+      Authorization: `Bearer ${resendKey}`,
     },
     body: JSON.stringify({
       from: OTP_FROM,
@@ -90,16 +85,16 @@ async function sendOtpEmail(_email: string, code: string) {
     }),
   });
 
-
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(`Email send failed: ${res.status} ${txt}`);
   }
 }
 
-
 export const requestLoginCode = createServerFn({ method: "POST" })
-  .inputValidator((d) => z.object({ email: z.string().email(), password: z.string().min(1) }).parse(d))
+  .inputValidator((d) =>
+    z.object({ email: z.string().email(), password: z.string().min(1) }).parse(d),
+  )
   .handler(async ({ data }) => {
     const email = data.email.trim().toLowerCase();
     const password = data.password.trim();
@@ -114,7 +109,11 @@ export const requestLoginCode = createServerFn({ method: "POST" })
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    await supabaseAdmin.from("login_otps").update({ consumed: true }).eq("email", ALLOWED_EMAIL).eq("consumed", false);
+    await supabaseAdmin
+      .from("login_otps")
+      .update({ consumed: true })
+      .eq("email", ALLOWED_EMAIL)
+      .eq("consumed", false);
 
     const { error } = await supabaseAdmin.from("login_otps").insert({
       email: ALLOWED_EMAIL,
@@ -153,7 +152,8 @@ export const verifyLoginCode = createServerFn({ method: "POST" })
       type: "magiclink",
       email: SESSION_USER_EMAIL,
     });
-    if (linkErr || !link?.properties?.hashed_token) throw new Error(linkErr?.message || "Failed to mint session");
+    if (linkErr || !link?.properties?.hashed_token)
+      throw new Error(linkErr?.message || "Failed to mint session");
 
     return {
       ok: true as const,
