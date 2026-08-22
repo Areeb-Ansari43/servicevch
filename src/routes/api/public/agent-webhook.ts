@@ -236,10 +236,23 @@ async function generateReply(
     (hasMedia ? "\nThe customer attached media; acknowledge it if relevant." : "");
 
   try {
-    const geminiKey = getRuntimeEnv("GEMINI_API_KEY") ?? getRuntimeEnv("GOOGLE_API_KEY");
-    console.info("[agent-webhook] AI generation start", { historyLength: history.length, hasMedia, hasGeminiKey: Boolean(geminiKey) });
+    const geminiKeyBindings = [
+      "GEMINI_API_KEY",
+      "GOOGLE_API_KEY",
+      "GOOGLE_GEMINI_API_KEY",
+      "GOOGLE_GENERATIVE_AI_API_KEY",
+      "VITE_GEMINI_API_KEY",
+    ];
+    const geminiKeyBinding = geminiKeyBindings.find((binding) => Boolean(getRuntimeEnv(binding)));
+    const geminiKey = geminiKeyBinding ? getRuntimeEnv(geminiKeyBinding) : undefined;
+    console.info("[agent-webhook] AI generation start", {
+      historyLength: history.length,
+      hasMedia,
+      hasGeminiKey: Boolean(geminiKey),
+      geminiKeyBinding: geminiKeyBinding ?? null,
+    });
     if (!geminiKey) {
-      console.error("[agent-webhook] AI generation skipped: GEMINI_API_KEY or GOOGLE_API_KEY is not configured");
+      console.error("[agent-webhook] AI generation skipped: no supported Gemini API key binding is configured", { supportedBindings: geminiKeyBindings });
       return { ...fallback, reason: "gemini_api_key_missing" };
     }
     const endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
