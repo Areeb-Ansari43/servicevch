@@ -42,14 +42,30 @@ export function LeadThread({
   const setMode = useServerFn(setLeadAiMode);
 
   const load = useCallback(async () => {
-    const { data } = await supabase
-      .from("messages")
-      .select("id, sender, content, media_url, handoff, created_at")
-      .eq("lead_id", leadId)
-      .order("created_at", { ascending: true });
-    setMessages((data ?? []) as ThreadMessage[]);
-    setLoading(false);
-  }, [leadId]);
+    setLoading(true);
+    try {
+      const pageSize = 500;
+      const allMessages: ThreadMessage[] = [];
+      for (let page = 0; ; page += 1) {
+        const { data, error } = await supabase
+          .from("messages")
+          .select("id, sender, content, media_url, handoff, created_at")
+          .eq("lead_id", leadId)
+          .order("created_at", { ascending: true })
+          .range(page * pageSize, page * pageSize + pageSize - 1);
+        if (error) throw new Error(error.message);
+        const batch = (data ?? []) as ThreadMessage[];
+        allMessages.push(...batch);
+        if (batch.length < pageSize) break;
+      }
+      setMessages(allMessages);
+    } catch (error) {
+      setMessages([]);
+      toast((error as Error).message || "Could not load conversation history", "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [leadId, toast]);
 
   useEffect(() => { setLoading(true); load(); }, [load]);
 

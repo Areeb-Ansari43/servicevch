@@ -186,10 +186,8 @@ async function generateReply(
     }
     const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
     const parsed = JSON.parse(data.choices?.[0]?.message?.content ?? "{}");
-    const reply =
-      typeof parsed.reply === "string" && parsed.reply.trim()
-        ? parsed.reply.trim()
-        : fallback.reply;
+    const reply = typeof parsed.reply === "string" && parsed.reply.trim() ? parsed.reply.trim() : "";
+    if (!reply) return fallback;
     return {
       reply,
       needs_human: Boolean(parsed.needs_human),

@@ -7,6 +7,13 @@ type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
 };
 
+type RuntimeBindings = Record<string, unknown>;
+
+function exposeRuntimeBindings(env: unknown) {
+  if (!env || typeof env !== "object") return;
+  (globalThis as typeof globalThis & { __env__?: RuntimeBindings }).__env__ = env as RuntimeBindings;
+}
+
 let serverEntryPromise: Promise<ServerEntry> | undefined;
 
 async function getServerEntry(): Promise<ServerEntry> {
@@ -40,6 +47,7 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      exposeRuntimeBindings(env);
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);

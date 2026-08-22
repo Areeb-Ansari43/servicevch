@@ -29,21 +29,45 @@ export async function sendOpenWaText(params: {
   text: string;
   sessionId?: string;
 }): Promise<OpenWaSendResult> {
-  const baseUrl = firstNonEmpty(getRuntimeEnv("OPENWA_API_URL"), getRuntimeEnv("OPENWA_BASE_URL"), getRuntimeEnv("OPENWA_URL"));
-  const apiKey = getRuntimeEnv("OPENWA_API_KEY");
-  const sessionId = firstNonEmpty(params.sessionId, getRuntimeEnv("OPENWA_SESSION_ID"), "vch-bot") ?? "vch-bot";
+  const baseUrl = firstNonEmpty(
+    getRuntimeEnv("OPENWA_API_URL"),
+    getRuntimeEnv("OPENWA_BASE_URL"),
+    getRuntimeEnv("OPENWA_URL"),
+    getRuntimeEnv("OPENWA_TUNNEL_URL"),
+  );
+  const apiKey = firstNonEmpty(
+    getRuntimeEnv("OPENWA_API_KEY"),
+    getRuntimeEnv("OPENWA_API_TOKEN"),
+    getRuntimeEnv("OPENWA_OUTBOUND_API_KEY"),
+    getRuntimeEnv("OPENWA_TOKEN"),
+  );
+  const sessionId = firstNonEmpty(
+    params.sessionId,
+    getRuntimeEnv("OPENWA_SESSION_ID"),
+    getRuntimeEnv("OPENWA_SESSION"),
+    "vch-bot",
+  ) ?? "vch-bot";
   const chatId = normalizeOpenWaChatId(params.phone);
-  if (!baseUrl || !apiKey) return { sent: false, reason: "openwa_not_configured" };
+  if (!baseUrl || !apiKey) {
+    console.error("[openwa] outbound not configured", { hasBaseUrl: Boolean(baseUrl), hasApiKey: Boolean(apiKey), sessionId });
+    return { sent: false, reason: "openwa_not_configured" };
+  }
   if (!chatId) return { sent: false, reason: "customer_chat_id_missing" };
 
-  const endpoint = `${baseUrl.replace(/\/$/, "")}/api/sessions/${encodeURIComponent(sessionId)}/messages/send-text`;
+  const gatewayBase = baseUrl
+    .replace(/\/api\/sessions\/[^/]+\/messages\/send-text\/?$/i, "")
+    .replace(/\/api\/?$/i, "");
+  const endpoint = `${gatewayBase}/api/sessions/${encodeURIComponent(sessionId)}/messages/send-text`;
   try {
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
       body: JSON.stringify({ chatId, text: params.text, linkPreview: false }),
     });
-    if (!response.ok) return { sent: false, reason: `openwa_http_${response.status}` };
+    if (!response.ok) {
+      const detail = (await response.text().catch(() => "")).slice(0, 240).replace(/\s+/g, " ");
+      return { sent: false, reason: `openwa_http_${response.status}${detail ? `: ${detail}` : ""}` };
+    }
     const body = (await response.json().catch(() => ({}))) as { messageId?: string };
     return { sent: true, messageId: body.messageId };
   } catch {
