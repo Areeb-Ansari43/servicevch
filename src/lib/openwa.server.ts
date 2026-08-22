@@ -87,13 +87,26 @@ function openWaHeaders(apiKey: string) {
   };
 }
 
+function resolveTransportSession(requestedSessionId?: string): { sessionId: string; requestedSessionId?: string } {
+  const config = openWaConfig();
+  const requested = firstNonEmpty(requestedSessionId);
+  // OpenWA webhook payloads often contain the display name `vch-bot`; the REST
+  // endpoint must use the configured active session ID/UUID when available.
+  const configured = firstNonEmpty(getRuntimeEnv("OPENWA_SESSION_ID"), getRuntimeEnv("OPENWA_SESSION"));
+  return {
+    sessionId: configured ?? requested ?? config.sessionId,
+    ...(requested ? { requestedSessionId: requested } : {}),
+  };
+}
+
 export async function sendOpenWaText(params: {
   phone: unknown;
   text: string;
   sessionId?: string;
 }): Promise<OpenWaSendResult> {
   const { baseUrl, apiKey } = openWaConfig();
-  const sessionId = firstNonEmpty(params.sessionId) ?? openWaConfig().sessionId;
+  const transport = resolveTransportSession(params.sessionId);
+  const sessionId = transport.sessionId;
   const chatId = normalizeOpenWaChatId(params.phone);
   if (!baseUrl || !apiKey) {
     console.error("[openwa] outbound not configured", { hasBaseUrl: Boolean(baseUrl), hasApiKey: Boolean(apiKey), sessionId });
@@ -108,6 +121,7 @@ export async function sendOpenWaText(params: {
     chatId,
     textLength: params.text.length,
     apiKeyFingerprint: secretFingerprint(apiKey),
+    requestedSessionId: transport.requestedSessionId,
     headers: ["X-API-Key", "Authorization", "X-LocalTunnel-No-Client-Warning"],
   });
   try {
@@ -136,7 +150,8 @@ export async function fetchOpenWaHistory(params: {
   sessionId?: string;
 }): Promise<{ ok: true; messages: OpenWaHistoryMessage[] } | { ok: false; reason: string }> {
   const { baseUrl, apiKey } = openWaConfig();
-  const sessionId = firstNonEmpty(params.sessionId) ?? openWaConfig().sessionId;
+  const transport = resolveTransportSession(params.sessionId);
+  const sessionId = transport.sessionId;
   const chatId = normalizeOpenWaChatId(params.chatId);
   if (!baseUrl || !apiKey) return { ok: false, reason: "openwa_not_configured" };
   if (!chatId) return { ok: false, reason: "customer_chat_id_missing" };
