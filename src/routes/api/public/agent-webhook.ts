@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
+import { getRuntimeEnv } from "@/integrations/supabase/config";
+
 const CRM_BASE = "https://servicevch.pages.dev";
 
 type Turn = { sender: string; content: string; media_url?: string | null };
@@ -38,6 +40,30 @@ const json = (body: unknown, status = 200) =>
 
 const escapeHtml = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+function isMissingSessionColumn(error: unknown): boolean {
+  const text = error instanceof Error ? error.message : JSON.stringify(error);
+  return /session_id["']?\s+column|column\s+["']?session_id|schema cache/i.test(text ?? "");
+}
+
+async function insertWithSessionFallback(
+  db: { from: (table: string) => any },
+  table: string,
+  row: Record<string, unknown>,
+  select?: string,
+) {
+  const runInsert = (value: Record<string, unknown>) => {
+    const query = db.from(table).insert(value);
+    return select ? query.select(select).single() : query;
+  };
+  const result = await runInsert(row);
+  if (result.error && "session_id" in row && isMissingSessionColumn(result.error)) {
+    const { session_id: _sessionId, ...legacyRow } = row;
+    console.warn(`[agent-webhook] ${table} has no session_id; using legacy insert`);
+    return runInsert(legacyRow);
+  }
+  return result;
+}
 
 function parseMenuOption(text: string): 1 | 2 | 3 | null {
   const m = text.trim().match(/^(?:option\s*)?\[?([123])\]?[.)]?$/i);
@@ -113,7 +139,7 @@ async function generateReply(
     (hasMedia ? "\nThe customer attached media; acknowledge it if relevant." : "");
 
   try {
-    const lovableKey = process.env["LOVABLE_API_KEY"];
+    const lovableKey = getRuntimeEnv("LOVABLE_API_KEY");
     if (!lovableKey) return fallback;
     const content = hasMedia
       ? [
@@ -181,8 +207,8 @@ async function sendTelegramAlert(params: {
   mediaUrl: string | null;
   closed: boolean;
 }) {
-  const token = process.env["TELEGRAM_BOT_TOKEN"];
-  const chatId = process.env["TELEGRAM_CHAT_ID"];
+  const token = getRuntimeEnv("TELEGRAM_BOT_TOKEN");
+  const chatId = getRuntimeEnv("TELEGRAM_CHAT_ID");
   if (!token || !chatId) return { sent: false, reason: "not_configured" };
   const transcript = params.history
     .slice(-20)
@@ -283,19 +309,15 @@ export async function handleAgentWebhookRequest(request: Request) {
   }
 
   if (!leadId) {
-    const { data: created, error } = await db
-      .from("whatsapp_leads")
-      .insert({
-        user_id: userId,
-        contact_name: name,
-        phone,
-        message: content,
-        media_url: mediaUrl,
-        status: "new",
-        session_id: sessionId,
-      } as never)
-      .select("id")
-      .single();
+    const { data: created, error } = await insertWithSessionFallback(db, "whatsapp_leads", {
+      user_id: userId,
+      contact_name: name,
+      phone,
+      message: content,
+      media_url: mediaUrl,
+      status: "new",
+      session_id: sessionId,
+    }, "id");
     if (error) return json({ ok: false, error: error.message }, 500);
     leadId = created.id;
   } else {
@@ -309,6 +331,8 @@ export async function handleAgentWebhookRequest(request: Request) {
       .eq("id", leadId);
   }
 
+  if (!leadId) return json({ ok: false, error: "Lead could not be created" }, 500);
+
   const { data: oldHistory } = await db
     .from("messages")
     .select("sender, content, media_url")
@@ -316,14 +340,14 @@ export async function handleAgentWebhookRequest(request: Request) {
     .order("created_at", { ascending: true })
     .limit(40);
   const inbound: Turn = { sender: "customer", content, media_url: mediaUrl };
-  const { error: inboundError } = await db.from("messages").insert({
+  const { error: inboundError } = await insertWithSessionFallback(db, "messages", {
     user_id: userId,
     lead_id: leadId,
     sender: "customer",
     content,
     media_url: mediaUrl,
     session_id: sessionId,
-  } as never);
+  });
   if (inboundError) return json({ ok: false, error: inboundError.message }, 500);
   const history = [...((oldHistory ?? []) as Turn[]), inbound];
 
@@ -341,14 +365,14 @@ export async function handleAgentWebhookRequest(request: Request) {
   if (option === 3) {
     const reply =
       "No problem — I’m connecting you with a member of our team now. They’ll reply here shortly.";
-    await db.from("messages").insert({
+    await insertWithSessionFallback(db, "messages", {
       user_id: userId,
       lead_id: leadId,
       sender: "ai_agent",
       content: reply,
       handoff: true,
       session_id: sessionId,
-    } as never);
+    });
     await db
       .from("whatsapp_leads")
       .update({
@@ -372,13 +396,13 @@ export async function handleAgentWebhookRequest(request: Request) {
 
   if (isPositiveClosure(content)) {
     const reply = "Thanks for contacting Virtual Car Hire. Your conversation is now closed.";
-    await db.from("messages").insert({
+    await insertWithSessionFallback(db, "messages", {
       user_id: userId,
       lead_id: leadId,
       sender: "ai_agent",
       content: reply,
       session_id: sessionId,
-    } as never);
+    });
     const finalHistory = [...history, { sender: "ai_agent", content: reply }];
     await db
       .from("whatsapp_leads")
@@ -421,14 +445,14 @@ export async function handleAgentWebhookRequest(request: Request) {
   const needsHuman = Boolean(ai.needs_human);
   const finalReply =
     needsHuman && !ai.reply ? "I’m connecting you with a member of our team now." : ai.reply;
-  await db.from("messages").insert({
+  await insertWithSessionFallback(db, "messages", {
     user_id: userId,
     lead_id: leadId,
     sender: "ai_agent",
     content: finalReply,
     handoff: needsHuman,
     session_id: sessionId,
-  } as never);
+  });
   await db
     .from("whatsapp_leads")
     .update({
