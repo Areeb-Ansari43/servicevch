@@ -2,9 +2,24 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
 import { getRuntimeEnv } from "@/integrations/supabase/config";
-import { sendOpenWaText, WELCOME_MESSAGE } from "@/lib/openwa.server";
+import { sendOpenWaText } from "@/lib/openwa.server";
 
 const CRM_BASE = "https://servicevch.pages.dev";
+const VCH_WEBSITE = "https://virtualcarhire.pages.dev/our-fleet";
+const WELCOME_MENU =
+  "Virtual Car Hire\n" +
+  "London's number one PCO car hire company with 4.8 stars across Google and Trustpilot.\n\n" +
+  "How can we assist you today? Please reply with the number corresponding to your choice:\n" +
+  "1. Enquire about a car\n" +
+  "2. Report accident\n\n" +
+  "Type 1 or 2 to get started.";
+const WEBSITE_CATALOG = [
+  { make: "Mercedes", model: "EQE", fuel: "Electric", price: "£440/week" },
+  { make: "Tesla", model: "Model 3", fuel: "Electric", price: "£260/week" },
+  { make: "Toyota", model: "Corolla Estate", fuel: "Hybrid", price: "£220/week" },
+];
+const STANDARD_TERMS =
+  "Minimum 4-week flexible term; standard allowance 1,000 miles per month; insurance, servicing and roadside breakdown cover included.";
 
 type Turn = { sender: string; content: string; media_url?: string | null };
 type FleetVehicle = {
@@ -71,12 +86,29 @@ async function insertWithSessionFallback(
   return result;
 }
 
+function isMenuReset(text: string): boolean {
+  return /^(?:menu|main menu|restart|start again|start over|reset|hello|hi)[.!\s]*$/i.test(text.trim());
+}
+
+function isCarRequest(text: string): boolean {
+  return /\b(?:car|cars|vehicle|vehicles|available|availability|fleet|hire|rent|rental|mercedes|toyota|tesla|eqe|corolla)\b/i.test(text);
+}
+
+function isLikelyFullName(text: string): boolean {
+  const value = text.trim();
+  return value.length >= 3 && value.length <= 90 && !isCarRequest(value) && /^[A-Za-z][A-Za-z .'-]+$/.test(value);
+}
+
 function parseMenuOption(text: string): 1 | 2 | 3 | null {
   const normalized = text.trim().toLowerCase();
   if (/^(?:option\s*)?\[?1\]?[.)]?$/.test(normalized) || normalized === "book a car") return 1;
   if (/^(?:option\s*)?\[?2\]?[.)]?$/.test(normalized) || normalized === "report accident") return 2;
   if (/^(?:option\s*)?\[?3\]?[.)]?$/.test(normalized) || normalized === "speak to human") return 3;
   return null;
+}
+
+function isTermsResponse(text: string): boolean {
+  return /^(?:yes|no|yeah|nope|yep|not yet|i(?:'m| am) not sure)[.!\s]*$/i.test(text.trim());
 }
 
 function isPositiveClosure(text: string): boolean {
@@ -119,6 +151,24 @@ function fuelCategory(value: string | null): "Electric" | "Plug-in-Hybrid" | "Pe
 function isAvailable(vehicle: FleetVehicle): boolean {
   const status = (vehicle.status ?? "").toLowerCase();
   return ["available", "active", "in stock"].includes(status);
+}
+
+function websiteMatch(vehicle: FleetVehicle): (typeof WEBSITE_CATALOG)[number] | undefined {
+  return WEBSITE_CATALOG.find((item) =>
+    item.make.toLowerCase() === vehicle.make.toLowerCase() &&
+    item.model.toLowerCase().includes(vehicle.model.toLowerCase().replace(/ estate$/i, "")),
+  );
+}
+
+function formatCustomerFleet(fleet: FleetVehicle[]): string {
+  const available = fleet.filter(isAvailable);
+  if (!available.length) return "I’m sorry, there are no vehicles currently marked available. A team member can confirm the next incoming cars.";
+  const lines = available.map((vehicle, index) => {
+    const catalog = websiteMatch(vehicle);
+    const price = catalog?.price ?? "Price to confirm";
+    return `${index + 1}. ${vehicle.make} ${vehicle.model}${vehicle.year ? ` (${vehicle.year})` : ""} — ${catalog?.fuel ?? vehicle.fuel_type ?? "PCO-ready"} — ${price}`;
+  });
+  return `Thank you for your interest in our PCO fleet. Here are all vehicles currently marked available:\n\n${lines.join("\n")}\n\n${STANDARD_TERMS}\n\nAre you fully aware of and happy with these contract length and mileage details? Please reply Yes or No.\n\nPrices shown from ${VCH_WEBSITE}; vehicles without a published website rate are marked Price to confirm.`;
 }
 
 function formatFleet(fleet: FleetVehicle[]): string {
@@ -325,10 +375,11 @@ export async function handleAgentWebhookRequest(request: Request) {
   let aiPaused = false;
   let closed = false;
   let leadName = name;
+  let leadIntent: string | null = null;
   if (sessionId) {
     const { data: existing } = await db
       .from("whatsapp_leads")
-      .select("id, contact_name, ai_paused, status, closed_at")
+      .select("id, contact_name, ai_paused, status, closed_at, intent")
       .eq("user_id", userId)
       .eq("session_id", sessionId)
       .order("last_message_at", { ascending: false })
@@ -337,11 +388,12 @@ export async function handleAgentWebhookRequest(request: Request) {
     leadId = existing?.id ?? null;
     aiPaused = Boolean(existing?.ai_paused);
     closed = Boolean(existing?.closed_at) || existing?.status === "closed";
-    leadName = existing?.contact_name || leadName;
+    leadName = existing?.contact_name && existing.contact_name !== "Unknown" ? existing.contact_name : leadName;
+    leadIntent = existing?.intent ?? null;
   } else if (phone) {
     const { data: existing } = await db
       .from("whatsapp_leads")
-      .select("id, contact_name, ai_paused, status, closed_at")
+      .select("id, contact_name, ai_paused, status, closed_at, intent")
       .eq("user_id", userId)
       .eq("phone", phone)
       .order("last_message_at", { ascending: false })
@@ -350,7 +402,8 @@ export async function handleAgentWebhookRequest(request: Request) {
     leadId = existing?.id ?? null;
     aiPaused = Boolean(existing?.ai_paused);
     closed = Boolean(existing?.closed_at) || existing?.status === "closed";
-    leadName = existing?.contact_name || leadName;
+    leadName = existing?.contact_name && existing.contact_name !== "Unknown" ? existing.contact_name : leadName;
+    leadIntent = existing?.intent ?? null;
   }
 
   if (!leadId) {
@@ -397,6 +450,18 @@ export async function handleAgentWebhookRequest(request: Request) {
   });
   if (inboundError) return json({ ok: false, error: inboundError.message }, 500);
   const history = [...((oldHistory ?? []) as Turn[]), inbound];
+  const lastAgentMessage = [...history].reverse().find((turn) => turn.sender === "ai_agent")?.content ?? "";
+  const { data: fleet } = await db
+    .from("vehicles")
+    .select("reg, make, model, year, fuel_type, status, next_mot_date, pco_expiry_date");
+
+  if (isMenuReset(content)) {
+    const reply = WELCOME_MENU;
+    await db.from("whatsapp_leads").update({ status: "active", ai_paused: false, closed_at: null, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+    await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
+    const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
+    return json({ ok: true, lead_id: leadId, reply, welcome_menu: true, needs_human: !outbound.sent, outbound });
+  }
 
   if (closed) {
     console.info("[agent-webhook] conversation closed; no AI reply", { leadId });
@@ -417,21 +482,46 @@ export async function handleAgentWebhookRequest(request: Request) {
       user_id: userId,
       lead_id: leadId,
       sender: "ai_agent",
-      content: WELCOME_MESSAGE,
+      content: WELCOME_MENU,
       session_id: sessionId,
     });
-    const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: WELCOME_MESSAGE, sessionId: openwaSessionId ?? undefined });
+    const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: WELCOME_MENU, sessionId: openwaSessionId ?? undefined });
     let alert: { sent: boolean; reason?: string } = { sent: false, reason: "not_needed" };
     if (!outbound.sent) {
-      alert = await sendTelegramAlert({ name: leadName, phone, reason: `OpenWA welcome failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: WELCOME_MESSAGE }], mediaUrl, closed: false });
+      alert = await sendTelegramAlert({ name: leadName, phone, reason: `OpenWA welcome failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: WELCOME_MENU }], mediaUrl, closed: false });
     }
-    return json({ ok: true, lead_id: leadId, reply: WELCOME_MESSAGE, welcome_menu: true, needs_human: !outbound.sent, ai_paused: !outbound.sent, telegram_alert: alert, outbound });
+    return json({ ok: true, lead_id: leadId, reply: WELCOME_MENU, welcome_menu: true, needs_human: !outbound.sent, ai_paused: !outbound.sent, telegram_alert: alert, outbound });
+  }
+
+  if (!option && leadIntent === "book_car" && lastAgentMessage.toLowerCase().includes("full name") && isLikelyFullName(content)) {
+    const customerName = content.trim();
+    const reply = formatCustomerFleet((fleet ?? []) as FleetVehicle[]);
+    await db.from("whatsapp_leads").update({ contact_name: customerName, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+    await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
+    const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
+    return json({ ok: true, lead_id: leadId, reply, outbound, needs_human: !outbound.sent });
+  }
+
+  if (!option && leadIntent === "report_accident" && lastAgentMessage.toLowerCase().includes("full name") && isLikelyFullName(content)) {
+    const customerName = content.trim();
+    const reply = "Accident Support\n\nThank you, " + customerName + ". Please now send the vehicle registration, incident date, location, a short description of what happened, and any photos. A team member will review this promptly.";
+    await db.from("whatsapp_leads").update({ contact_name: customerName, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+    await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
+    const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
+    return json({ ok: true, lead_id: leadId, reply, outbound, needs_human: !outbound.sent });
+  }
+
+  if (!option && lastAgentMessage.includes("Type 1 or 2 to get started")) {
+    const reply = "We didn't quite catch that. Please reply with 1 to enquire about a car, or 2 to report an accident.";
+    await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
+    const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
+    return json({ ok: true, lead_id: leadId, reply, outbound, needs_human: !outbound.sent });
   }
 
   if (option === 1 || option === 2) {
     const reply = option === 1
-      ? "Great — I can help you book a car. Please tell me which make/model you need, your preferred dates, and whether you need a PCO rental. Is that all for today?"
-      : "I’m sorry to hear that. Please send the vehicle registration, incident date, location, and a short description of what happened. You can also attach photos. Is that all for today?";
+      ? "Car Enquiry\n\nThank you for your interest in our PCO fleet. Before we look at available vehicles, could you please tell me your full name?"
+      : "Accident Support\n\nWe are sorry to hear you've been in an accident. We are here to help guide you through the next steps safely.\n\nTo get started, please provide your full name:";
     const intent = option === 1 ? "book_car" : "report_accident";
     await insertWithSessionFallback(db, "messages", {
       user_id: userId,
@@ -440,13 +530,22 @@ export async function handleAgentWebhookRequest(request: Request) {
       content: reply,
       session_id: sessionId,
     });
-    await db.from("whatsapp_leads").update({ intent, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+    await db.from("whatsapp_leads").update({ intent, ai_summary: reply, ai_paused: false, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
     const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
     let alert: { sent: boolean; reason?: string } = { sent: false, reason: "not_needed" };
     if (!outbound.sent) {
       alert = await sendTelegramAlert({ name: leadName, phone, reason: `OpenWA reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
     }
     return json({ ok: true, lead_id: leadId, reply, needs_human: !outbound.sent, ai_paused: !outbound.sent, telegram_alert: alert, outbound });
+  }
+
+  if (!option && isTermsResponse(content) && lastAgentMessage.toLowerCase().includes("are you fully aware")) {
+    const reply = "Thank you for contacting us. A team member will reply back to you within 24 hours to secure your place in this car.";
+    await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, handoff: true, session_id: sessionId });
+    await db.from("whatsapp_leads").update({ status: "needs_human", ai_paused: true, intent: leadIntent ?? "book_car", ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+    const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
+    const alert = await sendTelegramAlert({ name: leadName, phone, reason: outbound.sent ? "Customer confirmed vehicle terms" : `OpenWA reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
+    return json({ ok: true, lead_id: leadId, reply, needs_human: true, telegram_alert: alert, outbound });
   }
 
   if (option === 3) {
@@ -523,9 +622,6 @@ export async function handleAgentWebhookRequest(request: Request) {
     });
   }
 
-  const { data: fleet } = await db
-    .from("vehicles")
-    .select("reg, make, model, year, fuel_type, status, next_mot_date, pco_expiry_date");
   console.info("[agent-webhook] awaiting AI response", { leadId, historyLength: history.length, fleetCount: fleet?.length ?? 0 });
   const ai = await generateReply(
     history,
