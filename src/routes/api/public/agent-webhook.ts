@@ -524,6 +524,16 @@ export async function handleAgentWebhookRequest(request: Request) {
     .from("vehicles")
     .select("reg, make, model, year, fuel_type, status, next_mot_date, pco_expiry_date");
 
+  if (isNewLead && !isMenuReset(content)) {
+    const reply = WELCOME_MENU;
+    const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
+    if (outbound.sent) {
+      await db.from("whatsapp_leads").update({ status: "active", ai_paused: false, closed_at: null, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+      await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
+    }
+    return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, welcome_menu: outbound.sent, needs_human: !outbound.sent, outbound });
+  }
+
   if (isMenuReset(content)) {
     const reply = WELCOME_MENU;
     const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
