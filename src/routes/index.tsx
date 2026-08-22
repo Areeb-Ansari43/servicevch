@@ -178,6 +178,64 @@ function serviceStyle(type: string) {
   return { cls: "border-slate-500/30 bg-slate-500/10 text-slate-300", I: Icon.Info };
 }
 
+function ServiceTypePicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const selectedStyle = serviceStyle(value);
+  const SelectedIcon = selectedStyle.I;
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!pickerRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    return () => document.removeEventListener("mousedown", closeOnOutsideClick);
+  }, [open]);
+
+  return (
+    <div ref={pickerRef} className="relative">
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") { event.preventDefault(); setOpen(true); }
+          if (event.key === "Escape") setOpen(false);
+        }}
+        className={`${inputCls} flex w-full items-center justify-between gap-3 text-left text-white`}
+        style={{ background: "#242936", color: T.text }}
+      >
+        <span className="flex items-center gap-2"><SelectedIcon className={`h-4 w-4 ${selectedStyle.cls.split(" ").pop()}`} />{value}</span>
+        <span className={`text-xs transition-transform ${open ? "rotate-180" : ""}`}>▼</span>
+      </button>
+      {open && (
+        <div role="listbox" aria-label="Service type" className="absolute left-0 right-0 z-40 mt-2 max-h-72 overflow-y-auto rounded-xl border p-1 shadow-2xl" style={{ borderColor: T.border, background: "#151a25" }}>
+          {SERVICE_TYPES.map((service) => {
+            const style = serviceStyle(service);
+            const ServiceIcon = style.I;
+            return (
+              <button
+                key={service}
+                type="button"
+                role="option"
+                aria-selected={service === value}
+                onClick={() => { onChange(service); setOpen(false); }}
+                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors hover:bg-white/10 ${service === value ? "bg-white/10" : ""}`}
+              >
+                <span className={`flex h-7 w-7 items-center justify-center rounded-md border ${style.cls}`}><ServiceIcon className="h-4 w-4" /></span>
+                <span className="text-white">{service}</span>
+                {service === value && <span className="ml-auto text-xs text-[#ff9a5c]">Selected</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ---------------- UK Plate ---------------- */
 export function UKPlate({ reg, size = "md" }: { reg: string; size?: "sm" | "md" | "lg" }) {
   const h = size === "sm" ? "h-7" : size === "lg" ? "h-11" : "h-9";
@@ -1077,14 +1135,7 @@ function LogService({
 
       <Grid2>
         <Field label="Service Type">
-          <select
-            value={type}
-            onChange={(e) => setType(e.target.value)}
-            className={`${inputCls} text-white`}
-            style={{ colorScheme: "dark", backgroundColor: "#242936", color: T.text }}
-          >
-            {SERVICE_TYPES.map((s) => <option key={s} className="bg-[#242936] text-white">{s}</option>)}
-          </select>
+          <ServiceTypePicker value={type} onChange={setType} />
         </Field>
         <Field label="Service Date"><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} /></Field>
       </Grid2>
