@@ -144,38 +144,6 @@ export async function sendOpenWaText(params: {
   }
 }
 
-export async function sendOpenWaPoll(params: {
-  phone: unknown;
-  name: string;
-  options: string[];
-  sessionId?: string;
-}): Promise<OpenWaSendResult> {
-  const { baseUrl, apiKey } = openWaConfig();
-  const transport = resolveTransportSession(params.sessionId);
-  const sessionId = transport.sessionId;
-  const chatId = normalizeOpenWaChatId(params.phone);
-  if (!baseUrl || !apiKey) return { sent: false, reason: "openwa_not_configured" };
-  if (!chatId) return { sent: false, reason: "customer_chat_id_missing" };
-  const endpoint = `${gatewayBase(baseUrl)}/api/sessions/${encodeURIComponent(sessionId)}/messages/send-poll`;
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { ...openWaHeaders(apiKey), "Content-Type": "application/json" },
-      body: JSON.stringify({ chatId, name: params.name, options: params.options, allowMultipleAnswers: false }),
-    });
-    const responseBody = await response.text().catch(() => "");
-    if (!response.ok) {
-      console.error("[openwa] outbound poll rejected", { endpoint, sessionId, chatId, status: response.status, responseBody });
-      return { sent: false, reason: `openwa_http_${response.status}: ${responseBody.replace(/\\s+/g, " ").slice(0, 500)}` };
-    }
-    const body = JSON.parse(responseBody || "{}") as { messageId?: string };
-    return { sent: true, messageId: body.messageId };
-  } catch (error) {
-    console.error("[openwa] outbound poll failed", { sessionId, chatId, error: error instanceof Error ? error.message : String(error) });
-    return { sent: false, reason: "openwa_network_error" };
-  }
-}
-
 export async function resolveOpenWaPhone(params: {
   chatId: unknown;
   sessionId?: string;

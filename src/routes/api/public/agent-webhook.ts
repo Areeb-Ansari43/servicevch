@@ -2,17 +2,17 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
 import { getRuntimeEnv } from "@/integrations/supabase/config";
-import { sendOpenWaPoll, sendOpenWaText } from "@/lib/openwa.server";
+import { sendOpenWaText } from "@/lib/openwa.server";
 
 const CRM_BASE = "https://servicevch.pages.dev";
 const VCH_WEBSITE = "https://virtualcarhire.pages.dev/our-fleet";
 const WELCOME_MENU =
-  "Hello, and welcome to Virtual Car Hire\n" +
-  "London's number one PCO car hire company with 4.8 stars across Google and Trustpilot.\n\n" +
+  "👋 Hello, and welcome to Virtual Car Hire\n" +
+  "🚘 London's number one PCO car hire company with 4.8 stars across Google and Trustpilot.\n\n" +
   "How can we assist you today? Please reply with the number corresponding to your choice:\n" +
-  "1. Enquire about a car\n" +
-  "2. Report accident\n\n" +
-  "Type 1 or 2 to get started.";
+  "🚗 1. Enquire about a car\n" +
+  "⚠️ 2. Report accident\n\n" +
+  "Please reply with 1 or 2 to get started.";
 const WEBSITE_CATALOG = [
   { make: "Mercedes", model: "E300", fuel: "Plug-in-Hybrid", price: "£340/week", year: "2021–24" },
   { make: "Mercedes", model: "Vito", fuel: "Petrol", price: "£380/week", year: "2021–24" },
@@ -69,18 +69,6 @@ const json = (body: unknown, status = 200) =>
     headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
   });
 
-async function sendWelcomeMenu(phone: unknown, sessionId?: string) {
-  const poll = await sendOpenWaPoll({
-    phone,
-    sessionId,
-    name: "How can we help you today?",
-    options: ["Enquire about a car", "Report accident"],
-  });
-  if (poll.sent) return poll;
-  console.warn("[agent-webhook] clickable menu unavailable; falling back to text menu", { reason: poll.reason });
-  return sendOpenWaText({ phone, text: WELCOME_MENU, sessionId });
-}
-
 const escapeHtml = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -135,7 +123,11 @@ function isMenuReset(text: string): boolean {
 }
 
 function isCarRequest(text: string): boolean {
-  return /\b(?:car|cars|vehicle|vehicles|available|availability|fleet|hire|rent|rental|mercedes|toyota|tesla|eqe|corolla)\b/i.test(text);
+  return /\b(?:car|cars|vehicle|vehicles|available|availability|fleet|hire|rent|rental|mercedes|toyota|tesla|eqe|corolla|auris|prius|e300|e220|vito|eqs|ioniq|jaguar|mg5|tourneo|multivan)\b/i.test(text);
+}
+
+function isAccidentRequest(text: string): boolean {
+  return /\b(?:accident|crash|collision|bumped|damage|damaged|smash|hit|incident)\b/i.test(text);
 }
 
 function isLikelyFullName(text: string): boolean {
@@ -252,6 +244,10 @@ function formatFleet(fleet: FleetVehicle[]): string {
     return `${category}: ${cars || "none currently available"}`;
   });
   return `Available vehicles (${available.length}/${fleet.length}; rented, in-service and off-road vehicles excluded):\n${grouped.join("\n")}`;
+}
+
+async function sendWelcomeMenu(phone: unknown, sessionId?: string) {
+  return sendOpenWaText({ phone, text: WELCOME_MENU, sessionId });
 }
 
 async function generateReply(
@@ -636,7 +632,8 @@ export async function handleAgentWebhookRequest(request: Request) {
     aiPaused = false;
   }
 
-  const option = parseMenuOption(content);
+  const option = parseMenuOption(content) ??
+    (!leadIntent && isAccidentRequest(content) ? 2 : !leadIntent && isCarRequest(content) ? 1 : null);
 
   if (!option && leadIntent === "book_car" && lastAgentMessage.toLowerCase().includes("full name") && isLikelyFullName(content)) {
     const customerName = content.trim();
