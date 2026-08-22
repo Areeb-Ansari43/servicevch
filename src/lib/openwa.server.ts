@@ -29,6 +29,20 @@ function firstNonEmpty(...values: unknown[]): string | undefined {
   return values.find((value): value is string => typeof value === "string" && Boolean(value.trim()))?.trim();
 }
 
+function normalizeApiKey(value: string): string {
+  const trimmed = value.replace(/^\uFEFF/, "").trim();
+  const quoted = trimmed.match(/^(?:\"(.*)\"|'(.*)')$/s);
+  return (quoted?.[1] ?? quoted?.[2] ?? trimmed).trim();
+}
+
+function secretFingerprint(value: string): { length: number; prefix: string; suffix: string } {
+  return {
+    length: value.length,
+    prefix: value.slice(0, 2),
+    suffix: value.slice(-2),
+  };
+}
+
 export function normalizeOpenWaChatId(value: unknown): string | null {
   if (value && typeof value === "object") {
     const record = value as Record<string, unknown>;
@@ -49,12 +63,8 @@ function openWaConfig() {
     getRuntimeEnv("OPENWA_URL"),
     getRuntimeEnv("OPENWA_TUNNEL_URL"),
   );
-  const apiKey = firstNonEmpty(
-    getRuntimeEnv("OPENWA_API_KEY"),
-    getRuntimeEnv("OPENWA_API_TOKEN"),
-    getRuntimeEnv("OPENWA_OUTBOUND_API_KEY"),
-    getRuntimeEnv("OPENWA_TOKEN"),
-  );
+  const rawApiKey = firstNonEmpty(getRuntimeEnv("OPENWA_API_KEY"));
+  const apiKey = rawApiKey ? normalizeApiKey(rawApiKey) : undefined;
   const sessionId = firstNonEmpty(
     getRuntimeEnv("OPENWA_SESSION_ID"),
     getRuntimeEnv("OPENWA_SESSION"),
@@ -72,6 +82,7 @@ function gatewayBase(value: string): string {
 function openWaHeaders(apiKey: string) {
   return {
     "X-API-Key": apiKey,
+    Authorization: `Bearer ${apiKey}`,
     "X-LocalTunnel-No-Client-Warning": "true",
   };
 }
@@ -91,7 +102,14 @@ export async function sendOpenWaText(params: {
   if (!chatId) return { sent: false, reason: "customer_chat_id_missing" };
 
   const endpoint = `${gatewayBase(baseUrl)}/api/sessions/${encodeURIComponent(sessionId)}/messages/send-text`;
-  console.info("[openwa] sending outbound text", { endpoint, sessionId, chatId, textLength: params.text.length });
+  console.info("[openwa] sending outbound text", {
+    endpoint,
+    sessionId,
+    chatId,
+    textLength: params.text.length,
+    apiKeyFingerprint: secretFingerprint(apiKey),
+    headers: ["X-API-Key", "Authorization", "X-LocalTunnel-No-Client-Warning"],
+  });
   try {
     const response = await fetch(endpoint, {
       method: "POST",
