@@ -423,7 +423,8 @@ export async function handleAgentWebhookRequest(request: Request) {
     await db
       .from("whatsapp_leads")
       .update({
-        ...(suppliedName ? { contact_name: suppliedName } : {}),
+        ...(suppliedName && suppliedName !== "Unknown" ? { contact_name: suppliedName } : {}),
+        ...(phone ? { phone } : {}),
         ...(chatId ? { session_id: `wa:${chatId}` } : {}),
         last_message_at: new Date().toISOString(),
         ...(mediaUrl ? { media_url: mediaUrl } : {}),

@@ -145,6 +145,38 @@ export async function sendOpenWaText(params: {
   }
 }
 
+export async function resolveOpenWaPhone(params: {
+  chatId: unknown;
+  sessionId?: string;
+}): Promise<string | null> {
+  const { baseUrl, apiKey } = openWaConfig();
+  const transport = resolveTransportSession(params.sessionId);
+  const sessionId = transport.sessionId;
+  const chatId = normalizeOpenWaChatId(params.chatId);
+  if (!baseUrl || !apiKey || !chatId || !/@lid$/i.test(chatId)) return null;
+  const endpoint = `${gatewayBase(baseUrl)}/api/sessions/${encodeURIComponent(sessionId)}/contacts/${encodeURIComponent(chatId)}/phone`;
+  console.info("[openwa] resolving linked contact phone", { endpoint, sessionId, chatId });
+  try {
+    const response = await fetch(endpoint, { headers: openWaHeaders(apiKey) });
+    const bodyText = await response.text();
+    if (!response.ok) {
+      console.warn("[openwa] linked contact phone unavailable", { endpoint, sessionId, chatId, status: response.status, responseBody: bodyText.slice(0, 500) });
+      return null;
+    }
+    const parsed = JSON.parse(bodyText) as unknown;
+    const candidate = typeof parsed === "string"
+      ? parsed
+      : parsed && typeof parsed === "object"
+        ? firstNonEmpty((parsed as Record<string, unknown>).phone, (parsed as Record<string, unknown>).phoneNumber, (parsed as Record<string, unknown>).number, (parsed as Record<string, unknown>).id)
+        : undefined;
+    const resolved = normalizeOpenWaChatId(candidate);
+    return resolved && !/@lid$/i.test(resolved) ? resolved : null;
+  } catch (error) {
+    console.warn("[openwa] linked contact phone lookup failed", { sessionId, chatId, error: error instanceof Error ? error.message : String(error) });
+    return null;
+  }
+}
+
 export async function fetchOpenWaHistory(params: {
   chatId: unknown;
   sessionId?: string;

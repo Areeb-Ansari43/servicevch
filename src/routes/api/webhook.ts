@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getRuntimeEnv } from "@/integrations/supabase/config";
+import { resolveOpenWaPhone } from "@/lib/openwa.server";
 import { handleAgentWebhookRequest } from "./public/agent-webhook";
 
 type JsonRecord = Record<string, unknown>;
@@ -412,18 +413,29 @@ export const Route = createFileRoute("/api/webhook")({
             return json({ ok: true, ignored: true, request_id: requestId });
           }
 
+          const resolvedPhone = normalized.chat_id?.toLowerCase().endsWith("@lid")
+            ? await resolveOpenWaPhone({ chatId: normalized.chat_id, sessionId: normalized.openwa_session_id })
+            : normalized.phone;
+          const routed = { ...normalized, phone: resolvedPhone ?? normalized.phone };
+          console.info("[openwa-webhook] forwarding normalized message", {
+            requestId,
+            chatId: routed.chat_id,
+            phoneResolved: Boolean(resolvedPhone && !resolvedPhone.toLowerCase().endsWith("@lid")),
+            phone: routed.phone,
+          });
+
           const upstream = await handleAgentWebhookRequest(
             new Request(request.url, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                phone: normalized.phone,
-                chat_id: normalized.chat_id,
-                name: normalized.name,
-                content: normalized.content,
-                media_url: normalized.media_url,
-                session_id: normalized.session_id,
-                openwa_session_id: normalized.openwa_session_id ?? undefined,
+                phone: routed.phone,
+                chat_id: routed.chat_id,
+                name: routed.name,
+                content: routed.content,
+                media_url: routed.media_url,
+                session_id: routed.session_id,
+                openwa_session_id: routed.openwa_session_id ?? undefined,
               }),
             }),
           );
@@ -433,7 +445,7 @@ export const Route = createFileRoute("/api/webhook")({
             requestId,
             payload: raw,
             eventName: normalized.eventName,
-            normalized,
+            normalized: routed,
             status: upstream.ok ? "processed" : "error",
             error: upstream.ok ? undefined : responseText.slice(0, 1000),
             receivedAt,
