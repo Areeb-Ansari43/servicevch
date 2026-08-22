@@ -14,9 +14,22 @@ const WELCOME_MENU =
   "2. Report accident\n\n" +
   "Type 1 or 2 to get started.";
 const WEBSITE_CATALOG = [
-  { make: "Mercedes", model: "EQE", fuel: "Electric", price: "£440/week" },
-  { make: "Tesla", model: "Model 3", fuel: "Electric", price: "£260/week" },
-  { make: "Toyota", model: "Corolla Estate", fuel: "Hybrid", price: "£220/week" },
+  { make: "Mercedes", model: "E300", fuel: "Plug-in-Hybrid", price: "£340/week", year: "2021–24" },
+  { make: "Mercedes", model: "Vito", fuel: "Petrol", price: "£380/week", year: "2021–24" },
+  { make: "Mercedes", model: "V-Class", fuel: "Petrol", price: "£450/week", year: "2022–24" },
+  { make: "Mercedes", model: "EQS", fuel: "Electric", price: "£500/week", year: "2022–24" },
+  { make: "Mercedes", model: "E220", fuel: "Petrol", price: "£310/week", year: "2020–24" },
+  { make: "Mercedes", model: "EQE", fuel: "Electric", price: "£440/week", year: "2023–24" },
+  { make: "Toyota", model: "Corolla Estate", fuel: "Plug-in-Hybrid", price: "£220/week", year: "2021–24" },
+  { make: "Toyota", model: "Auris Estate", fuel: "Plug-in-Hybrid", price: "£210/week", year: "2019–22" },
+  { make: "Toyota", model: "Prius", fuel: "Plug-in-Hybrid", price: "£200/week", year: "2020–24" },
+  { make: "Tesla", model: "Model 3", fuel: "Electric", price: "£260/week", year: "2021–24" },
+  { make: "Jaguar", model: "I-Pace", fuel: "Electric", price: "£330/week", year: "2020–24" },
+  { make: "Hyundai", model: "IONIQ", fuel: "Plug-in-Hybrid", price: "£220/week", year: "2020–23" },
+  { make: "MG", model: "MG5 EV", fuel: "Electric", price: "£200/week", year: "2022–24" },
+  { make: "Ford", model: "Tourneo Custom", fuel: "Plug-in-Hybrid", price: "£410/week", year: "2021–24" },
+  { make: "MG", model: "MG S9 PHEV SUV", fuel: "Plug-in-Hybrid", price: "£350/week", year: "2024–25" },
+  { make: "Volkswagen", model: "Multivan PHEV", fuel: "Plug-in-Hybrid", price: "£350/week", year: "2024–25" },
 ];
 const STANDARD_TERMS =
   "Minimum 4-week flexible term; standard allowance 1,000 miles per month; insurance, servicing and roadside breakdown cover included.";
@@ -173,10 +186,12 @@ function isAvailable(vehicle: FleetVehicle): boolean {
 }
 
 function websiteMatch(vehicle: FleetVehicle): (typeof WEBSITE_CATALOG)[number] | undefined {
-  return WEBSITE_CATALOG.find((item) =>
-    item.make.toLowerCase() === vehicle.make.toLowerCase() &&
-    item.model.toLowerCase().includes(vehicle.model.toLowerCase().replace(/ estate$/i, "")),
-  );
+  const make = vehicle.make.toLowerCase();
+  const model = vehicle.model.toLowerCase().replace(/[-_]/g, " ").replace(/\s+/g, " ").trim();
+  return WEBSITE_CATALOG.find((item) => {
+    const itemModel = item.model.toLowerCase().replace(/[-_]/g, " ").replace(/\s+/g, " ").trim();
+    return item.make.toLowerCase() === make && (itemModel.includes(model.replace(/ estate$/i, "")) || model.includes(itemModel.replace(/ ev$/i, "")));
+  });
 }
 
 function formatCustomerFleet(fleet: FleetVehicle[]): string {
@@ -185,7 +200,8 @@ function formatCustomerFleet(fleet: FleetVehicle[]): string {
   const lines = available.map((vehicle, index) => {
     const catalog = websiteMatch(vehicle);
     const price = catalog?.price ?? "Price to confirm";
-    return `${index + 1}. ${vehicle.make} ${vehicle.model}${vehicle.year ? ` (${vehicle.year})` : ""} — ${catalog?.fuel ?? fuelCategory(vehicle.fuel_type)} — ${price}`;
+    const year = vehicle.year ?? catalog?.year ?? "Year to confirm";
+    return `${index + 1}. ${vehicle.make} ${vehicle.model} (${year}) — ${catalog?.fuel ?? fuelCategory(vehicle.fuel_type)} — ${price}`;
   });
   return `Thank you for your interest in our PCO fleet. Here are all vehicles currently marked available:\n\n${lines.join("\n")}\n\nPlease tell me which vehicle you would like to go with, and I will provide its complete contract details.\n\nPrices shown from ${VCH_WEBSITE}; vehicles without a published website rate are marked Price to confirm.`;
 }
@@ -205,7 +221,8 @@ function findSelectedVehicle(text: string, fleet: FleetVehicle[]): FleetVehicle 
 function formatVehicleDetails(vehicle: FleetVehicle): string {
   const catalog = websiteMatch(vehicle);
   const price = catalog?.price ?? "Price to confirm";
-  return `Thank you for choosing the ${vehicle.make} ${vehicle.model}.\n\nVehicle: ${vehicle.make} ${vehicle.model}${vehicle.year ? ` (${vehicle.year})` : ""}\nFuel category: ${catalog?.fuel ?? fuelCategory(vehicle.fuel_type)}\nContract length: Minimum 4-week flexible term\nMileage allowance: 1,000 miles per month (standard plan)\nWeekly rate: ${price}\nIncluded: Servicing, maintenance and roadside breakdown cover\n\nAre you fully aware of and happy with these contract length and mileage details? Please reply Yes or No.`;
+  const year = vehicle.year ?? catalog?.year ?? "Year to confirm";
+  return `Thank you for choosing the ${vehicle.make} ${vehicle.model}.\n\nVehicle: ${vehicle.make} ${vehicle.model}\nYear: ${year}\nFuel category: ${catalog?.fuel ?? fuelCategory(vehicle.fuel_type)}\nContract length: Minimum 4-week flexible term\nMileage allowance: 1,000 miles per month (standard plan)\nWeekly rate: ${price}\nIncluded: Servicing, maintenance and roadside breakdown cover\n\nAre you fully aware of and happy with these contract length and mileage details? Please reply Yes or No.`;
 }
 
 function formatFleet(fleet: FleetVehicle[]): string {
@@ -213,7 +230,12 @@ function formatFleet(fleet: FleetVehicle[]): string {
   const grouped = ["Electric", "Plug-in-Hybrid", "Petrol"].map((category) => {
     const cars = available
       .filter((vehicle) => fuelCategory(vehicle.fuel_type) === category)
-      .map((vehicle) => `${vehicle.make} ${vehicle.model} (${vehicle.reg})`)
+      .map((vehicle) => {
+        const catalog = websiteMatch(vehicle);
+        const year = vehicle.year ?? catalog?.year ?? "year to confirm";
+        const price = catalog?.price ?? "price to confirm";
+        return `${vehicle.make} ${vehicle.model} (${year}; ${price})`;
+      })
       .join(", ");
     return `${category}: ${cars || "none currently available"}`;
   });
@@ -235,7 +257,7 @@ async function generateReply(
   };
   const system =
     "You are the WhatsApp assistant for Virtual Car Hire (VCH), a UK PCO/private-hire car rental company. " +
-    "Reply naturally and briefly in UK English, maximum 4 short sentences. Use £ for prices. " +
+    "Reply naturally in UK English. Use concise paragraphs and bullet-style lines when listing cars or contract details. Use £ for prices. " +
     "Use only the supplied live fleet data: never invent availability, prices, dates, MOT or PCO information. " +
     "Treat only vehicles marked available/active/in stock as available; rented, assigned, in-service and off-road vehicles are unavailable. " +
     "If the customer asks for a car, wants to hire/rent, asks what is available, or uses any natural wording with the same meaning, treat it as a car enquiry and show all currently available vehicles from the supplied fleet, grouped clearly under Electric, Plug-in-Hybrid, Petrol where possible. If the conversation already contains the complete available-fleet list and the customer names a vehicle, respond with that vehicle's complete contract details: contract length, mileage allowance, weekly rate, and inclusions, then ask for Yes or No confirmation. If the requested car is unavailable, explicitly say so and suggest alternatives under exactly these headings: Electric, Plug-in-Hybrid, Petrol. Do not repeat the full fleet list when the customer has selected a vehicle. " +
@@ -444,7 +466,23 @@ export async function handleAgentWebhookRequest(request: Request) {
   let closed = false;
   let leadName = name;
   let leadIntent: string | null = null;
-  if (sessionId) {
+  const canonicalPhone = phone && !/@lid$/i.test(phone) ? phone : null;
+  if (canonicalPhone) {
+    const { data: existing } = await db
+      .from("whatsapp_leads")
+      .select("id, contact_name, ai_paused, status, closed_at, intent")
+      .eq("user_id", userId)
+      .eq("phone", canonicalPhone)
+      .order("last_message_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    leadId = existing?.id ?? null;
+    aiPaused = Boolean(existing?.ai_paused);
+    closed = Boolean(existing?.closed_at) || existing?.status === "closed";
+    leadName = existing?.contact_name && existing.contact_name !== "Unknown" ? existing.contact_name : leadName;
+    leadIntent = existing?.intent ?? null;
+  }
+  if (!leadId && sessionId) {
     const { data: existing } = await db
       .from("whatsapp_leads")
       .select("id, contact_name, ai_paused, status, closed_at, intent")
@@ -458,7 +496,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     closed = Boolean(existing?.closed_at) || existing?.status === "closed";
     leadName = existing?.contact_name && existing.contact_name !== "Unknown" ? existing.contact_name : leadName;
     leadIntent = existing?.intent ?? null;
-  } else if (phone) {
+  } else if (!leadId && phone) {
     const { data: existing } = await db
       .from("whatsapp_leads")
       .select("id, contact_name, ai_paused, status, closed_at, intent")

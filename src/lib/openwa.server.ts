@@ -82,7 +82,6 @@ function gatewayBase(value: string): string {
 function openWaHeaders(apiKey: string) {
   return {
     "X-API-Key": apiKey,
-    Authorization: `Bearer ${apiKey}`,
     "X-LocalTunnel-No-Client-Warning": "true",
   };
 }
@@ -122,7 +121,7 @@ export async function sendOpenWaText(params: {
     textLength: params.text.length,
     apiKeyFingerprint: secretFingerprint(apiKey),
     requestedSessionId: transport.requestedSessionId,
-    headers: ["X-API-Key", "Authorization", "X-LocalTunnel-No-Client-Warning"],
+    headers: ["X-API-Key", "X-LocalTunnel-No-Client-Warning"],
   });
   try {
     const response = await fetch(endpoint, {
