@@ -189,7 +189,10 @@ function normalizeInbound(raw: JsonRecord): NormalizedMessage | null {
   const senderPhone = phoneFrom(
     recordValue(message, "senderPhone", "sender_phone"),
   ) ?? phoneFrom(recordValue(messageData, "senderPhone", "sender_phone"));
-  const phone = senderPhone ?? (chatId && /@(?:c|g)\.us$/i.test(chatId) ? chatId : undefined);
+  // OpenWA can legitimately provide only an @lid. The CRM phone column is
+  // non-null in existing deployments, so retain the exact chat ID as a safe
+  // fallback until RESOLVE_LID_TO_PHONE supplies senderPhone.
+  const phone = senderPhone ?? chatId ?? undefined;
   const name = stringValue(
     recordValue(sender, "pushname", "pushName", "name", "formattedName"),
     recordValue(message, "notifyName", "notify_name", "pushname", "pushName", "name"),
