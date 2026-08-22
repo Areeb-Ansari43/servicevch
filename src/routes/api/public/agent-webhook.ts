@@ -255,7 +255,6 @@ async function generateReply(
       console.error("[agent-webhook] AI generation skipped: no supported Gemini API key binding is configured", { supportedBindings: geminiKeyBindings });
       return { ...fallback, reason: "gemini_api_key_missing" };
     }
-    const endpoint = "https://generativelanguage.googleapis.com/v1beta/models";
     const responseSchema = {
       type: "OBJECT",
       properties: {
@@ -269,46 +268,49 @@ async function generateReply(
     const requestBody = {
       systemInstruction: { parts: [{ text: system }] },
       contents: [{ role: "user", parts: [{ text: userText }] }],
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema,
-        temperature: 0.2,
-      },
+      generationConfig: { responseMimeType: "application/json", responseSchema, temperature: 0.2 },
     };
     const requestHeaders = { "Content-Type": "application/json", "x-goog-api-key": geminiKey.trim() };
-    const callModel = async (model: string) => {
-      const response = await fetch(`${endpoint}/${model}:generateContent`, {
+    const preferredModels = [
+      "gemini-2.5-flash",
+      "gemini-2.5-flash-lite",
+      "gemini-3.5-flash",
+      "gemini-3.6-flash",
+      "gemini-3.7-flash",
+      "gemini-1.5-flash",
+    ];
+    const apiVersions = ["v1beta", "v1"];
+    type GeminiGeneration = { response: Response; body: string; model: string; apiVersion: string };
+    const callModel = async (apiVersion: string, model: string): Promise<GeminiGeneration> => {
+      const response = await fetch(`https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent`, {
         method: "POST",
         headers: requestHeaders,
         body: JSON.stringify(requestBody),
       });
-      return { response, body: await response.text(), model };
+      return { response, body: await response.text(), model, apiVersion };
     };
-    let generation = await callModel("gemini-2.5-flash");
-    if (generation.response.status === 404) {
-      const modelListResponse = await fetch(endpoint, { headers: requestHeaders });
-      if (modelListResponse.ok) {
-        const modelList = await modelListResponse.json() as {
-          models?: { name?: string; supportedGenerationMethods?: string[] }[];
-        };
-        const supportedModels = (modelList.models ?? [])
-          .filter((model) => model.supportedGenerationMethods?.includes("generateContent"))
-          .map((model) => model.name?.replace(/^models\//, ""))
-          .filter((model): model is string => Boolean(model));
-        const preferredModels = [
-          "gemini-2.5-flash",
-          "gemini-2.5-flash-lite",
-          "gemini-3.5-flash",
-          "gemini-3.6-flash",
-          "gemini-3.7-flash",
-        ];
-        const discoveredModel = preferredModels.find((model) => supportedModels.includes(model)) ?? supportedModels.find((model) => /flash/i.test(model));
-        if (discoveredModel && discoveredModel !== generation.model) {
-          console.warn("[agent-webhook] Retrying Gemini with a model supported by this API key", { requestedModel: generation.model, discoveredModel });
-          generation = await callModel(discoveredModel);
-        }
+    const discoverModels = async (apiVersion: string): Promise<string[]> => {
+      const response = await fetch(`https://generativelanguage.googleapis.com/${apiVersion}/models`, { headers: requestHeaders });
+      if (!response.ok) return [];
+      const modelList = await response.json() as { models?: { name?: string; supportedGenerationMethods?: string[] }[] };
+      return (modelList.models ?? [])
+        .filter((model) => model.supportedGenerationMethods?.includes("generateContent"))
+        .map((model) => model.name?.replace(/^models\//, ""))
+        .filter((model): model is string => Boolean(model));
+    };
+    let generation: GeminiGeneration | undefined;
+    for (const apiVersion of apiVersions) {
+      const discovered = await discoverModels(apiVersion);
+      const models = [...preferredModels.filter((model) => discovered.includes(model)), ...discovered.filter((model) => /flash/i.test(model) && !preferredModels.includes(model)), ...preferredModels.filter((model) => discovered.length === 0)];
+      for (const model of [...new Set(models)]) {
+        const attempt = await callModel(apiVersion, model);
+        generation = attempt;
+        if (attempt.response.ok) break;
+        if (attempt.response.status !== 404) break;
       }
+      if (generation?.response.ok || generation?.response.status !== 404) break;
     }
+    if (!generation) generation = await callModel("v1beta", "gemini-2.5-flash");
     if (!generation.response.ok) {
       console.error("[agent-webhook] Gemini API error", {
         status: generation.response.status,
