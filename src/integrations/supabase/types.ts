@@ -19,6 +19,8 @@ export type Database = {
           id: string
           source: string
           request_id: string | null
+          method: string
+          url: string | null
           event_name: string | null
           headers: Json
           payload: Json | null
@@ -33,6 +35,8 @@ export type Database = {
           id?: string
           source?: string
           request_id?: string | null
+          method?: string
+          url?: string | null
           event_name?: string | null
           headers?: Json
           payload?: Json | null
@@ -47,6 +51,8 @@ export type Database = {
           id?: string
           source?: string
           request_id?: string | null
+          method?: string
+          url?: string | null
           event_name?: string | null
           headers?: Json
           payload?: Json | null

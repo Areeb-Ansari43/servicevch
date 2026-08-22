@@ -2,6 +2,8 @@ create table if not exists public.webhook_events (
   id uuid not null default gen_random_uuid() primary key,
   source text not null default 'openwa',
   request_id text,
+  method text not null default 'POST',
+  url text,
   event_name text,
   headers jsonb not null default '{}'::jsonb,
   payload jsonb,
@@ -12,6 +14,10 @@ create table if not exists public.webhook_events (
   received_at timestamptz not null default now(),
   processed_at timestamptz not null default now()
 );
+
+-- Keep this migration safe when the original webhook_events table already exists.
+alter table public.webhook_events add column if not exists method text not null default 'POST';
+alter table public.webhook_events add column if not exists url text;
 
 grant all on public.webhook_events to service_role;
 

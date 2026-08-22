@@ -176,6 +176,8 @@ async function logEvent(params: {
   status: string;
   error?: string;
   receivedAt: string;
+  method?: string;
+  url?: string;
 }) {
   try {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -186,6 +188,8 @@ async function logEvent(params: {
     await supabaseAdmin.from("webhook_events").insert({
       source: "openwa",
       request_id: params.requestId,
+      method: params.method ?? "POST",
+      url: params.url ?? null,
       event_name: params.eventName ?? null,
       headers: params.headers,
       payload,
@@ -215,91 +219,140 @@ export const Route = createFileRoute("/api/webhook")({
           },
         }),
       POST: async ({ request }) => {
-        const requestId = request.headers.get("x-openwa-delivery-id") ?? crypto.randomUUID();
-        const receivedAt = new Date().toISOString();
-        const headers = headerSnapshot(request);
-        const rawBody = await request.text();
+        let requestId = request.headers.get("x-openwa-delivery-id") ?? "unknown";
+        let receivedAt = new Date().toISOString();
+        let headers: JsonRecord = {};
+        let rawBody = "";
+        const requestLog = (params: Parameters<typeof logEvent>[0]) =>
+          logEvent({ ...params, method: request.method, url: request.url });
 
-        if (!verifyWebhookApiKey(request) || !(await verifyWebhookSecret(request, rawBody))) {
-          await logEvent({
-            headers,
-            requestId,
-            payloadText: rawBody,
-            status: "unauthorized",
-            error: "OpenWA authentication failed",
-            receivedAt,
-          });
-          return json({ ok: false, error: "Unauthorized" }, 401);
-        }
-
-        let raw: unknown;
         try {
-          raw = JSON.parse(rawBody);
-        } catch {
-          await logEvent({
+          requestId = request.headers.get("x-openwa-delivery-id") ?? crypto.randomUUID();
+          receivedAt = new Date().toISOString();
+          headers = headerSnapshot(request);
+          rawBody = await request.text();
+
+          if (!verifyWebhookApiKey(request) || !(await verifyWebhookSecret(request, rawBody))) {
+            await requestLog({
+              headers,
+              requestId,
+              payloadText: rawBody,
+              status: "unauthorized",
+              error: "OpenWA authentication failed",
+              receivedAt,
+            });
+            return json({ ok: false, error: "Unauthorized" }, 401);
+          }
+
+          let raw: unknown;
+          try {
+            raw = JSON.parse(rawBody);
+          } catch {
+            await requestLog({
+              headers,
+              requestId,
+              payloadText: rawBody,
+              status: "error",
+              error: "Invalid JSON body",
+              receivedAt,
+            });
+            return json({
+              ok: true,
+              received: true,
+              processed: false,
+              error: "Invalid JSON body",
+              request_id: requestId,
+            });
+          }
+          if (!isRecord(raw)) {
+            await requestLog({
+              headers,
+              requestId,
+              payload: raw,
+              status: "error",
+              error: "Expected a JSON object",
+              receivedAt,
+            });
+            return json({
+              ok: true,
+              received: true,
+              processed: false,
+              error: "Expected a JSON object",
+              request_id: requestId,
+            });
+          }
+
+          const normalized = normalizeInbound(raw);
+          if (!normalized) {
+            await requestLog({
+              headers,
+              requestId,
+              payload: raw,
+              eventName: stringValue(raw.event, raw.type, raw.eventName),
+              normalized: null,
+              status: "ignored",
+              receivedAt,
+            });
+            return json({ ok: true, ignored: true, request_id: requestId });
+          }
+
+          const upstream = await handleAgentWebhookRequest(
+            new Request(request.url, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                phone: normalized.phone,
+                name: normalized.name,
+                content: normalized.content,
+                media_url: normalized.media_url,
+                session_id: normalized.session_id,
+              }),
+            }),
+          );
+          const responseText = await upstream.text();
+          await requestLog({
+            headers,
+            requestId,
+            payload: raw,
+            eventName: normalized.eventName,
+            normalized,
+            status: upstream.ok ? "processed" : "error",
+            error: upstream.ok ? undefined : responseText.slice(0, 1000),
+            receivedAt,
+          });
+          if (!upstream.ok) {
+            return json({
+              ok: true,
+              received: true,
+              processed: false,
+              error: "Webhook received but CRM processing failed",
+              request_id: requestId,
+            });
+          }
+
+          return new Response(responseText, {
+            status: upstream.status,
+            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.error("[openwa-webhook] processing failed", error);
+          await requestLog({
             headers,
             requestId,
             payloadText: rawBody,
-            status: "invalid_json",
-            error: "Invalid JSON body",
+            status: "error",
+            error: message.slice(0, 2_000),
             receivedAt,
           });
-          return json({ ok: false, error: "Invalid JSON body", request_id: requestId }, 400);
-        }
-        if (!isRecord(raw)) {
-          await logEvent({
-            headers,
-            requestId,
-            payload: raw,
-            status: "invalid_payload",
-            error: "Expected a JSON object",
-            receivedAt,
+          return json({
+            ok: true,
+            received: true,
+            processed: false,
+            error: "Webhook received but processing failed",
+            request_id: requestId,
           });
-          return json({ ok: false, error: "Expected a JSON object", request_id: requestId }, 400);
         }
-
-        const normalized = normalizeInbound(raw);
-        if (!normalized) {
-          await logEvent({
-            headers,
-            requestId,
-            payload: raw,
-            eventName: stringValue(raw.event, raw.type, raw.eventName),
-            normalized: null,
-            status: "ignored",
-            receivedAt,
-          });
-          return json({ ok: true, ignored: true, request_id: requestId });
-        }
-
-        const upstream = await handleAgentWebhookRequest(
-          new Request(request.url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              phone: normalized.phone,
-              name: normalized.name,
-              content: normalized.content,
-              media_url: normalized.media_url,
-              session_id: normalized.session_id,
-            }),
-          }),
-        );
-        const responseText = await upstream.text();
-        await logEvent({
-          headers,
-          requestId,
-          payload: raw,
-          eventName: normalized.eventName,
-          normalized,
-          status: upstream.ok ? "processed" : "processing_error",
-          error: upstream.ok ? undefined : responseText.slice(0, 1000),
-          receivedAt,
-        });
-        return new Response(responseText, {
-          status: upstream.status,
-          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-        });
       },
     },
   },
