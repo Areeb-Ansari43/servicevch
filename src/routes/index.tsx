@@ -1564,7 +1564,15 @@ function LogsModal({ driver, onClose }: { driver: DriverTrack; onClose: () => vo
 /* ---------------- WhatsApp Leads ---------------- */
 function displayLeadPhone(phone: string | null | undefined): string {
   if (!phone) return "No number";
-  return /@lid$/i.test(phone) ? "Phone pending OpenWA resolution" : phone;
+  if (/@lid$/i.test(phone)) return "Phone pending OpenWA resolution";
+  const digits = phone.replace(/@c\.us$/i, "").replace(/\D/g, "");
+  if (digits.startsWith("44") && digits.length === 12) {
+    return `+44 ${digits.slice(2, 6)} ${digits.slice(6)}`;
+  }
+  if (digits.startsWith("0") && digits.length === 11) {
+    return `+44 ${digits.slice(1, 5)} ${digits.slice(5)}`;
+  }
+  return phone.replace(/@c\.us$/i, "");
 }
 
 function statusPill(status: string) {

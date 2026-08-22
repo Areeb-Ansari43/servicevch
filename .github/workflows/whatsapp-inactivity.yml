@@ -1,0 +1,21 @@
+name: WhatsApp inactivity follow-ups
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  inactivity-followups:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Process inactive WhatsApp leads
+        env:
+          INACTIVITY_JOB_SECRET: ${{ secrets.INACTIVITY_JOB_SECRET }}
+        run: |
+          test -n "$INACTIVITY_JOB_SECRET"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "x-inactivity-job-secret: $INACTIVITY_JOB_SECRET" \
+            --header "content-type: application/json" \
+            https://servicevch.pages.dev/api/jobs/inactivity

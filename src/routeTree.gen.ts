@@ -20,6 +20,7 @@ import { Route as ServiceHistoryIndexRouteImport } from './routes/service-histor
 import { Route as ServiceHistoryNewRouteImport } from './routes/service-history.new'
 import { Route as VehiclesIndexRouteImport } from './routes/vehicles.index'
 import { Route as VehiclesRegRouteImport } from './routes/vehicles.$reg'
+import { Route as ApiJobsInactivityRouteImport } from './routes/api/jobs/inactivity'
 import { Route as ApiPublicAgentWebhookRouteImport } from './routes/api/public/agent-webhook'
 import { Route as ApiPublicAiIntakeRouteImport } from './routes/api/public/ai-intake'
 import { Route as ApiPublicExpiryAlertsRouteImport } from './routes/api/public/expiry-alerts'
@@ -80,6 +81,11 @@ const VehiclesRegRoute = VehiclesRegRouteImport.update({
   path: '/vehicles/$reg',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiJobsInactivityRoute = ApiJobsInactivityRouteImport.update({
+  id: '/api/jobs/inactivity',
+  path: '/api/jobs/inactivity',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicAgentWebhookRoute = ApiPublicAgentWebhookRouteImport.update({
   id: '/api/public/agent-webhook',
   path: '/api/public/agent-webhook',
@@ -113,6 +119,7 @@ export interface FileRoutesByFullPath {
   '/vehicles/$reg': typeof VehiclesRegRoute
   '/service-history/': typeof ServiceHistoryIndexRoute
   '/vehicles/': typeof VehiclesIndexRoute
+  '/api/jobs/inactivity': typeof ApiJobsInactivityRoute
   '/api/public/agent-webhook': typeof ApiPublicAgentWebhookRoute
   '/api/public/ai-intake': typeof ApiPublicAiIntakeRoute
   '/api/public/expiry-alerts': typeof ApiPublicExpiryAlertsRoute
@@ -130,6 +137,7 @@ export interface FileRoutesByTo {
   '/vehicles/$reg': typeof VehiclesRegRoute
   '/service-history': typeof ServiceHistoryIndexRoute
   '/vehicles': typeof VehiclesIndexRoute
+  '/api/jobs/inactivity': typeof ApiJobsInactivityRoute
   '/api/public/agent-webhook': typeof ApiPublicAgentWebhookRoute
   '/api/public/ai-intake': typeof ApiPublicAiIntakeRoute
   '/api/public/expiry-alerts': typeof ApiPublicExpiryAlertsRoute
@@ -148,6 +156,7 @@ export interface FileRoutesById {
   '/vehicles/$reg': typeof VehiclesRegRoute
   '/service-history/': typeof ServiceHistoryIndexRoute
   '/vehicles/': typeof VehiclesIndexRoute
+  '/api/jobs/inactivity': typeof ApiJobsInactivityRoute
   '/api/public/agent-webhook': typeof ApiPublicAgentWebhookRoute
   '/api/public/ai-intake': typeof ApiPublicAiIntakeRoute
   '/api/public/expiry-alerts': typeof ApiPublicExpiryAlertsRoute
@@ -167,6 +176,7 @@ export interface FileRouteTypes {
     | '/vehicles/$reg'
     | '/service-history/'
     | '/vehicles/'
+    | '/api/jobs/inactivity'
     | '/api/public/agent-webhook'
     | '/api/public/ai-intake'
     | '/api/public/expiry-alerts'
@@ -184,6 +194,7 @@ export interface FileRouteTypes {
     | '/vehicles/$reg'
     | '/service-history'
     | '/vehicles'
+    | '/api/jobs/inactivity'
     | '/api/public/agent-webhook'
     | '/api/public/ai-intake'
     | '/api/public/expiry-alerts'
@@ -201,6 +212,7 @@ export interface FileRouteTypes {
     | '/vehicles/$reg'
     | '/service-history/'
     | '/vehicles/'
+    | '/api/jobs/inactivity'
     | '/api/public/agent-webhook'
     | '/api/public/ai-intake'
     | '/api/public/expiry-alerts'
@@ -219,6 +231,7 @@ export interface RootRouteChildren {
   VehiclesRegRoute: typeof VehiclesRegRoute
   ServiceHistoryIndexRoute: typeof ServiceHistoryIndexRoute
   VehiclesIndexRoute: typeof VehiclesIndexRoute
+  ApiJobsInactivityRoute: typeof ApiJobsInactivityRoute
   ApiPublicAgentWebhookRoute: typeof ApiPublicAgentWebhookRoute
   ApiPublicAiIntakeRoute: typeof ApiPublicAiIntakeRoute
   ApiPublicExpiryAlertsRoute: typeof ApiPublicExpiryAlertsRoute
@@ -304,6 +317,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VehiclesRegRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/jobs/inactivity': {
+      id: '/api/jobs/inactivity'
+      path: '/api/jobs/inactivity'
+      fullPath: '/api/jobs/inactivity'
+      preLoaderRoute: typeof ApiJobsInactivityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/agent-webhook': {
       id: '/api/public/agent-webhook'
       path: '/api/public/agent-webhook'
@@ -347,6 +367,7 @@ const rootRouteChildren: RootRouteChildren = {
   VehiclesRegRoute: VehiclesRegRoute,
   ServiceHistoryIndexRoute: ServiceHistoryIndexRoute,
   VehiclesIndexRoute: VehiclesIndexRoute,
+  ApiJobsInactivityRoute: ApiJobsInactivityRoute,
   ApiPublicAgentWebhookRoute: ApiPublicAgentWebhookRoute,
   ApiPublicAiIntakeRoute: ApiPublicAiIntakeRoute,
   ApiPublicExpiryAlertsRoute: ApiPublicExpiryAlertsRoute,
