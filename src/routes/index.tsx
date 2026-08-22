@@ -1077,8 +1077,13 @@ function LogService({
 
       <Grid2>
         <Field label="Service Type">
-          <select value={type} onChange={(e) => setType(e.target.value)} className={inputCls}>
-            {SERVICE_TYPES.map((s) => <option key={s}>{s}</option>)}
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+            className={`${inputCls} text-white`}
+            style={{ colorScheme: "dark", backgroundColor: "#242936", color: T.text }}
+          >
+            {SERVICE_TYPES.map((s) => <option key={s} className="bg-[#242936] text-white">{s}</option>)}
           </select>
         </Field>
         <Field label="Service Date"><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} /></Field>

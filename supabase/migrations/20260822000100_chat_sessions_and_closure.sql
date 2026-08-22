@@ -1,6 +1,7 @@
 alter table public.whatsapp_leads
   add column if not exists session_id text,
-  add column if not exists closed_at timestamptz;
+  add column if not exists closed_at timestamptz,
+  add column if not exists last_message_at timestamptz default now();
 
 alter table public.messages
   add column if not exists session_id text;
