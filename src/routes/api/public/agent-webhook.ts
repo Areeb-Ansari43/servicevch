@@ -274,7 +274,11 @@ async function generateReply(
         },
       },
     };
-    const requestHeaders = { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" };
+    const requestHeaders = {
+      "Content-Type": "application/json",
+      "Lovable-API-Key": lovableKey,
+      "X-Lovable-AIG-SDK": "fetch",
+    };
     let res = await fetch(endpoint, {
       method: "POST",
       headers: requestHeaders,
@@ -291,7 +295,12 @@ async function generateReply(
       responseBody = await res.text();
     }
     if (!res.ok) {
-      console.error("[agent-webhook] AI gateway error", { status: res.status, statusText: res.statusText, responseBody });
+      console.error("[agent-webhook] AI gateway error", {
+        status: res.status,
+        statusText: res.statusText,
+        responseBody: responseBody.slice(0, 2000),
+        authHeaderMode: "Lovable-API-Key",
+      });
       return fallback;
     }
     const data = JSON.parse(responseBody) as { choices?: { message?: { content?: string } }[] };
