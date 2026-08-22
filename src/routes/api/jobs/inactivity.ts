@@ -82,11 +82,23 @@ export const Route = createFileRoute("/api/jobs/inactivity")({
           const promptedAt = typeof lead.inactivity_prompted_at === "string" ? lead.inactivity_prompted_at : null;
           const lastMessageAt = typeof lead.last_message_at === "string" ? new Date(lead.last_message_at).getTime() : 0;
           if (!promptedAt && lastMessageAt <= new Date(fiveMinutesAgo).getTime()) {
+            // Claim the prompt before sending it. Multiple cron invocations can overlap;
+            // the conditional update ensures only one invocation sends the follow-up.
+            const claimedAt = new Date().toISOString();
+            const { data: claim } = await (db.from("whatsapp_leads") as any)
+              .update({ inactivity_prompted_at: claimedAt })
+              .eq("id", leadId)
+              .is("inactivity_prompted_at", null)
+              .select("id")
+              .maybeSingle();
+            if (!claim) continue;
             const outbound = await sendOpenWaText({ phone: chatId, text: "Are you still there? If you need more help, please reply here." });
             if (outbound.sent) {
               await db.from("messages").insert({ user_id: lead.user_id, lead_id: leadId, sender: "ai_agent", content: "Are you still there? If you need more help, please reply here." } as never);
-              await db.from("whatsapp_leads").update({ inactivity_prompted_at: new Date().toISOString() } as never).eq("id", leadId);
               prompted += 1;
+            } else {
+              // Allow a later run to retry if the WhatsApp send itself failed.
+              await (db.from("whatsapp_leads") as any).update({ inactivity_prompted_at: null }).eq("id", leadId).eq("inactivity_prompted_at", claimedAt);
             }
             continue;
           }
