@@ -12,6 +12,23 @@ const modeSchema = z.object({
   paused: z.boolean(),
 });
 
+function isMissingColumn(error: unknown, column: string): boolean {
+  const text = error instanceof Error ? error.message : JSON.stringify(error);
+  return new RegExp(`${column}["']?\\s+column|column\\s+["']?${column}|schema cache`, "i").test(text ?? "");
+}
+
+async function insertMessageWithCompatibility(supabase: any, row: Record<string, unknown>) {
+  let compatibleRow = { ...row };
+  let result = await supabase.from("messages").insert(compatibleRow);
+  for (const column of ["session_id", "handoff"]) {
+    if (!result.error || !(column in compatibleRow) || !isMissingColumn(result.error, column)) continue;
+    const { [column]: _removed, ...nextRow } = compatibleRow;
+    compatibleRow = nextRow;
+    result = await supabase.from("messages").insert(compatibleRow);
+  }
+  return result;
+}
+
 /** Send a reply as a human agent: logs it, halts AI for the lead, routes it outward. */
 export const sendHumanReply = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -27,7 +44,7 @@ export const sendHumanReply = createServerFn({ method: "POST" })
     if (leadErr) throw new Error(leadErr.message);
     if (!lead) throw new Error("Lead not found");
 
-    const { error: msgErr } = await supabase.from("messages").insert({
+    const { error: msgErr } = await insertMessageWithCompatibility(supabase, {
       user_id: userId,
       lead_id: lead.id,
       sender: "human",

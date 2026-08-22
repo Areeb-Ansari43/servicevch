@@ -58,6 +58,7 @@ export async function sendOpenWaText(params: {
     .replace(/\/api\/sessions\/[^/]+\/messages\/send-text\/?$/i, "")
     .replace(/\/api\/?$/i, "");
   const endpoint = `${gatewayBase}/api/sessions/${encodeURIComponent(sessionId)}/messages/send-text`;
+  console.info("[openwa] sending outbound text", { sessionId, chatId, textLength: params.text.length });
   try {
     const response = await fetch(endpoint, {
       method: "POST",
@@ -66,11 +67,14 @@ export async function sendOpenWaText(params: {
     });
     if (!response.ok) {
       const detail = (await response.text().catch(() => "")).slice(0, 240).replace(/\s+/g, " ");
+      console.error("[openwa] outbound request rejected", { sessionId, chatId, status: response.status, detail });
       return { sent: false, reason: `openwa_http_${response.status}${detail ? `: ${detail}` : ""}` };
     }
     const body = (await response.json().catch(() => ({}))) as { messageId?: string };
+    console.info("[openwa] outbound text accepted", { sessionId, chatId, status: response.status, messageId: body.messageId });
     return { sent: true, messageId: body.messageId };
-  } catch {
+  } catch (error) {
+    console.error("[openwa] outbound request failed", { sessionId, chatId, error: error instanceof Error ? error.message : String(error) });
     return { sent: false, reason: "openwa_network_error" };
   }
 }

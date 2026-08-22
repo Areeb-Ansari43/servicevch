@@ -42,9 +42,9 @@ const json = (body: unknown, status = 200) =>
 const escapeHtml = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-function isMissingSessionColumn(error: unknown): boolean {
+function isMissingColumn(error: unknown, column: string): boolean {
   const text = error instanceof Error ? error.message : JSON.stringify(error);
-  return /session_id["']?\s+column|column\s+["']?session_id|schema cache/i.test(text ?? "");
+  return new RegExp(`${column}["']?\\s+column|column\\s+["']?${column}|schema cache`, "i").test(text ?? "");
 }
 
 async function insertWithSessionFallback(
@@ -57,11 +57,14 @@ async function insertWithSessionFallback(
     const query = db.from(table).insert(value);
     return select ? query.select(select).single() : query;
   };
-  const result = await runInsert(row);
-  if (result.error && "session_id" in row && isMissingSessionColumn(result.error)) {
-    const { session_id: _sessionId, ...legacyRow } = row;
-    console.warn(`[agent-webhook] ${table} has no session_id; using legacy insert`);
-    return runInsert(legacyRow);
+  let currentRow = { ...row };
+  let result = await runInsert(currentRow);
+  for (const column of ["session_id", "handoff"]) {
+    if (!result.error || !(column in currentRow) || !isMissingColumn(result.error, column)) continue;
+    const { [column]: _removed, ...compatibleRow } = currentRow;
+    currentRow = compatibleRow;
+    console.warn(`[agent-webhook] ${table} has no ${column}; retrying with compatible schema`);
+    result = await runInsert(currentRow);
   }
   return result;
 }
@@ -144,7 +147,11 @@ async function generateReply(
 
   try {
     const lovableKey = getRuntimeEnv("LOVABLE_API_KEY");
-    if (!lovableKey) return fallback;
+    console.info("[agent-webhook] AI generation start", { historyLength: history.length, hasMedia, hasLovableKey: Boolean(lovableKey) });
+    if (!lovableKey) {
+      console.error("[agent-webhook] AI generation skipped: LOVABLE_API_KEY is not configured");
+      return fallback;
+    }
     const content = hasMedia
       ? [
           { type: "text", text: userText },
@@ -188,6 +195,7 @@ async function generateReply(
     const parsed = JSON.parse(data.choices?.[0]?.message?.content ?? "{}");
     const reply = typeof parsed.reply === "string" && parsed.reply.trim() ? parsed.reply.trim() : "";
     if (!reply) return fallback;
+    console.info("[agent-webhook] AI generation complete", { replyLength: reply.length, needsHuman: Boolean(parsed.needs_human) });
     return {
       reply,
       needs_human: Boolean(parsed.needs_human),
@@ -481,12 +489,14 @@ export async function handleAgentWebhookRequest(request: Request) {
   const { data: fleet } = await db
     .from("vehicles")
     .select("reg, make, model, year, fuel_type, status, next_mot_date, pco_expiry_date");
+  console.info("[agent-webhook] awaiting AI response", { leadId, historyLength: history.length, fleetCount: fleet?.length ?? 0 });
   const ai = await generateReply(
     history,
     content,
     Boolean(mediaUrl),
     (fleet ?? []) as FleetVehicle[],
   );
+  console.info("[agent-webhook] AI response ready", { leadId, needsHuman: ai.needs_human, replyLength: ai.reply.length });
   const needsHuman = Boolean(ai.needs_human);
   const finalReply =
     needsHuman && !ai.reply ? "I’m connecting you with a member of our team now." : ai.reply;
@@ -507,7 +517,9 @@ export async function handleAgentWebhookRequest(request: Request) {
     } as never)
     .eq("id", leadId);
 
+  console.info("[agent-webhook] awaiting OpenWA AI dispatch", { leadId, sessionId: sessionId ?? "vch-bot", hasPhone: Boolean(phone) });
   const outbound = await sendOpenWaText({ phone, text: finalReply, sessionId: sessionId ?? undefined });
+  console.info("[agent-webhook] OpenWA AI dispatch complete", { leadId, sent: outbound.sent, reason: outbound.sent ? undefined : outbound.reason });
   const deliveryFailed = !outbound.sent;
   let alert: { sent: boolean; reason?: string } = { sent: false, reason: "not_needed" };
   if (needsHuman || deliveryFailed) {
