@@ -6,6 +6,7 @@ type JsonRecord = Record<string, unknown>;
 type NormalizedMessage = {
   eventName: string;
   phone?: string;
+  chat_id?: string;
   name?: string;
   content: string;
   media_url?: string;
@@ -178,15 +179,17 @@ function normalizeInbound(raw: JsonRecord): NormalizedMessage | null {
   )
     return null;
 
-  const phone = phoneFromCandidates(
-    recordValue(sender, "phone", "number", "wid", "userId"),
+  const chatId = phoneFromCandidates(
+    recordValue(sender, "wid", "userId", "id", "phone", "number"),
     recordValue(messageData, "from", "author", "chatId", "chat_id"),
-    recordValue(chat, "phone", "number"),
+    recordValue(chat, "id", "chatId", "wid"),
     recordValue(message, "from", "author", "chatId", "chat_id"),
-    recordValue(raw, "from", "phone", "chatId"),
-    recordValue(sender, "id"),
-    recordValue(chat, "id", "chatId"),
+    recordValue(raw, "from", "chatId", "chat_id"),
   );
+  const senderPhone = phoneFrom(
+    recordValue(message, "senderPhone", "sender_phone"),
+  ) ?? phoneFrom(recordValue(messageData, "senderPhone", "sender_phone"));
+  const phone = senderPhone ?? (chatId && /@(?:c|g)\.us$/i.test(chatId) ? chatId : undefined);
   const name = stringValue(
     recordValue(sender, "pushname", "pushName", "name", "formattedName"),
     recordValue(message, "notifyName", "notify_name", "pushname", "pushName", "name"),
@@ -210,7 +213,9 @@ function normalizeInbound(raw: JsonRecord): NormalizedMessage | null {
     name,
     content: content ?? "(media)",
     ...(mediaUrl ? { media_url: mediaUrl } : {}),
-    ...(sessionId ? { session_id: sessionId } : {}),
+    ...(chatId ? { chat_id: chatId } : {}),
+    ...(chatId ? { session_id: `wa:${chatId}` } : sessionId ? { session_id: sessionId } : {}),
+    ...(sessionId ? { openwa_session_id: sessionId } : {}),
   };
 }
 

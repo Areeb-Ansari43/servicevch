@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { fetchOpenWaHistory } from "@/lib/openwa.server";
 import { z } from "zod";
 
 const replySchema = z.object({
@@ -11,6 +12,17 @@ const modeSchema = z.object({
   leadId: z.string().uuid(),
   paused: z.boolean(),
 });
+
+const historySchema = z.object({ leadId: z.string().uuid() });
+
+type ConversationMessage = {
+  id: string;
+  sender: string;
+  content: string;
+  media_url: string | null;
+  handoff: boolean;
+  created_at: string;
+};
 
 function isMissingColumn(error: unknown, column: string): boolean {
   const text = error instanceof Error ? error.message : JSON.stringify(error);
@@ -28,6 +40,67 @@ async function insertMessageWithCompatibility(supabase: any, row: Record<string,
   }
   return result;
 }
+
+/** Load the complete local CRM history and merge older messages still held by OpenWA. */
+export const getLeadConversation = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => historySchema.parse(d))
+  .handler(async ({ data, context }) => {
+    const { data: lead, error: leadError } = await context.supabase
+      .from("whatsapp_leads")
+      .select("phone, session_id")
+      .eq("id", data.leadId)
+      .maybeSingle();
+    if (leadError) throw new Error(leadError.message);
+    if (!lead) throw new Error("Lead not found");
+
+    const pageSize = 500;
+    const localMessages: ConversationMessage[] = [];
+    for (let page = 0; ; page += 1) {
+      const { data: batch, error } = await context.supabase
+        .from("messages")
+        .select("id, sender, content, media_url, handoff, created_at")
+        .eq("lead_id", data.leadId)
+        .order("created_at", { ascending: true })
+        .range(page * pageSize, page * pageSize + pageSize - 1);
+      if (error) throw new Error(error.message);
+      localMessages.push(...((batch ?? []) as unknown as ConversationMessage[]));
+      if ((batch ?? []).length < pageSize) break;
+    }
+
+    const linkedChatId = lead.session_id?.startsWith("wa:") ? lead.session_id.slice(3) : lead.phone;
+    const remote = await fetchOpenWaHistory({ chatId: linkedChatId });
+    const remoteMessages: ConversationMessage[] = remote.ok
+      ? remote.messages
+          .map((message, index) => {
+            const text = message.body ?? message.text ?? "";
+            if (!text && !message.media?.url) return null;
+            const timestamp = Number(message.timestamp);
+            const createdAt = Number.isFinite(timestamp)
+              ? new Date(timestamp < 10_000_000_000 ? timestamp * 1000 : timestamp).toISOString()
+              : new Date().toISOString();
+            return {
+              id: `openwa:${message.id ?? `${createdAt}:${index}`}`,
+              sender: message.fromMe || message.from_me ? "human" : "customer",
+              content: text || "(media)",
+              media_url: message.media?.url ?? null,
+              handoff: false,
+              created_at: createdAt,
+            };
+          })
+          .filter((message): message is ConversationMessage => message !== null)
+      : [];
+
+    const merged: ConversationMessage[] = [...localMessages, ...remoteMessages].filter((message, index, all) => {
+      const duplicate = all.findIndex((candidate) =>
+        candidate !== message && candidate.sender === message.sender && candidate.content === message.content &&
+        Math.abs(new Date(String(candidate.created_at)).getTime() - new Date(String(message.created_at)).getTime()) < 120_000,
+      );
+      return duplicate === -1 || index < duplicate;
+    });
+    merged.sort((a, b) => new Date(String(a.created_at)).getTime() - new Date(String(b.created_at)).getTime());
+    return { messages: merged };
+  });
 
 /** Send a reply as a human agent: logs it, halts AI for the lead, routes it outward. */
 export const sendHumanReply = createServerFn({ method: "POST" })
@@ -64,12 +137,13 @@ export const sendHumanReply = createServerFn({ method: "POST" })
     if (updErr) throw new Error(updErr.message);
 
     const { routeOutbound } = await import("@/lib/chat.server");
+    const linkedChatId = lead.session_id?.startsWith("wa:") ? lead.session_id.slice(3) : null;
     const outbound = await routeOutbound({
-      phone: lead.phone ?? null,
+      phone: linkedChatId ?? lead.phone ?? null,
       name: lead.contact_name,
       content: data.content,
       leadId: lead.id,
-      sessionId: lead.session_id ?? null,
+      sessionId: linkedChatId ? null : (lead.session_id ?? null),
     });
 
     return { ok: true, outbound };

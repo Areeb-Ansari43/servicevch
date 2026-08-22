@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
-import { sendHumanReply, setLeadAiMode } from "@/lib/chat.functions";
+import { getLeadConversation, sendHumanReply, setLeadAiMode } from "@/lib/chat.functions";
 
 export type ThreadMessage = {
   id: string;
@@ -38,34 +38,22 @@ export function LeadThread({
   const [reply, setReply] = useState("");
   const [busy, setBusy] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const loadConversation = useServerFn(getLeadConversation);
   const send = useServerFn(sendHumanReply);
   const setMode = useServerFn(setLeadAiMode);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const pageSize = 500;
-      const allMessages: ThreadMessage[] = [];
-      for (let page = 0; ; page += 1) {
-        const { data, error } = await supabase
-          .from("messages")
-          .select("id, sender, content, media_url, handoff, created_at")
-          .eq("lead_id", leadId)
-          .order("created_at", { ascending: true })
-          .range(page * pageSize, page * pageSize + pageSize - 1);
-        if (error) throw new Error(error.message);
-        const batch = (data ?? []) as ThreadMessage[];
-        allMessages.push(...batch);
-        if (batch.length < pageSize) break;
-      }
-      setMessages(allMessages);
+      const result = await loadConversation({ data: { leadId } });
+      setMessages(result.messages as ThreadMessage[]);
     } catch (error) {
       setMessages([]);
       toast((error as Error).message || "Could not load conversation history", "error");
     } finally {
       setLoading(false);
     }
-  }, [leadId, toast]);
+  }, [leadId, loadConversation, toast]);
 
   useEffect(() => { setLoading(true); load(); }, [load]);
 

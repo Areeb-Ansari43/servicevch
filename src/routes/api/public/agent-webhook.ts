@@ -27,6 +27,8 @@ type AiResult = {
 
 const bodySchema = z.object({
   phone: z.string().trim().min(3).max(40).optional(),
+  chat_id: z.string().trim().min(3).max(160).optional(),
+  openwa_session_id: z.string().trim().min(1).max(160).optional(),
   name: z.string().trim().max(120).optional(),
   content: z.string().trim().min(1).max(5000),
   media_url: z.string().trim().url().max(2000).optional(),
@@ -277,8 +279,11 @@ export async function handleAgentWebhookRequest(request: Request) {
   const parsed = bodySchema.safeParse(raw);
   if (!parsed.success)
     return json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid payload" }, 400);
-  const { content, media_url: mediaUrl = null, session_id: sessionId = null } = parsed.data;
+  const { content, media_url: mediaUrl = null, session_id: suppliedSessionId = null } = parsed.data;
+  const chatId = parsed.data.chat_id ?? null;
+  const openwaSessionId = parsed.data.openwa_session_id ?? null;
   const phone = parsed.data.phone ?? null;
+  const sessionId = suppliedSessionId ?? (chatId ? `wa:${chatId}` : null);
   const suppliedName = parsed.data.name?.trim() || "";
   const name = suppliedName || "Unknown";
   const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
@@ -383,7 +388,7 @@ export async function handleAgentWebhookRequest(request: Request) {
       content: WELCOME_MESSAGE,
       session_id: sessionId,
     });
-    const outbound = await sendOpenWaText({ phone, text: WELCOME_MESSAGE, sessionId: sessionId ?? undefined });
+    const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: WELCOME_MESSAGE, sessionId: openwaSessionId ?? undefined });
     let alert: { sent: boolean; reason?: string } = { sent: false, reason: "not_needed" };
     if (!outbound.sent) {
       alert = await sendTelegramAlert({ name: leadName, phone, reason: `OpenWA welcome failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: WELCOME_MESSAGE }], mediaUrl, closed: false });
@@ -404,7 +409,7 @@ export async function handleAgentWebhookRequest(request: Request) {
       session_id: sessionId,
     });
     await db.from("whatsapp_leads").update({ intent, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
-    const outbound = await sendOpenWaText({ phone, text: reply, sessionId: sessionId ?? undefined });
+    const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
     let alert: { sent: boolean; reason?: string } = { sent: false, reason: "not_needed" };
     if (!outbound.sent) {
       alert = await sendTelegramAlert({ name: leadName, phone, reason: `OpenWA reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
@@ -432,7 +437,7 @@ export async function handleAgentWebhookRequest(request: Request) {
         ai_summary: reply,
       } as never)
       .eq("id", leadId);
-    const outbound = await sendOpenWaText({ phone, text: reply, sessionId: sessionId ?? undefined });
+    const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
     const alert = await sendTelegramAlert({
       name: leadName,
       phone,
@@ -465,7 +470,7 @@ export async function handleAgentWebhookRequest(request: Request) {
         last_message_at: new Date().toISOString(),
       } as never)
       .eq("id", leadId);
-    const outbound = await sendOpenWaText({ phone, text: reply, sessionId: sessionId ?? undefined });
+    const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
     const alert = await sendTelegramAlert({
       name: leadName,
       phone,
@@ -517,8 +522,8 @@ export async function handleAgentWebhookRequest(request: Request) {
     } as never)
     .eq("id", leadId);
 
-  console.info("[agent-webhook] awaiting OpenWA AI dispatch", { leadId, sessionId: sessionId ?? "vch-bot", hasPhone: Boolean(phone) });
-  const outbound = await sendOpenWaText({ phone, text: finalReply, sessionId: sessionId ?? undefined });
+  console.info("[agent-webhook] awaiting OpenWA AI dispatch", { leadId, transportSession: openwaSessionId ?? "vch-bot", chatId: chatId ?? phone, hasPhone: Boolean(phone || chatId) });
+  const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: finalReply, sessionId: openwaSessionId ?? undefined });
   console.info("[agent-webhook] OpenWA AI dispatch complete", { leadId, sent: outbound.sent, reason: outbound.sent ? undefined : outbound.reason });
   const deliveryFailed = !outbound.sent;
   let alert: { sent: boolean; reason?: string } = { sent: false, reason: "not_needed" };
