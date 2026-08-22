@@ -11,6 +11,7 @@ type NormalizedMessage = {
   content: string;
   media_url?: string;
   session_id?: string;
+  openwa_session_id?: string;
 };
 
 const MAX_LOG_BYTES = 512_000;
@@ -411,7 +412,7 @@ export const Route = createFileRoute("/api/webhook")({
                 content: normalized.content,
                 media_url: normalized.media_url,
                 session_id: normalized.session_id,
-                openwa_session_id: recordValue(raw, "sessionId", "session_id", "session") ?? undefined,
+                openwa_session_id: normalized.openwa_session_id ?? undefined,
               }),
             }),
           );
