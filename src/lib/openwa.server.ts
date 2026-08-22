@@ -62,12 +62,24 @@ export async function sendOpenWaText(params: {
   try {
     const response = await fetch(endpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": apiKey,
+        "X-LocalTunnel-No-Client-Warning": "true",
+      },
       body: JSON.stringify({ chatId, text: params.text, linkPreview: false }),
     });
     if (!response.ok) {
-      const detail = (await response.text().catch(() => "")).slice(0, 240).replace(/\s+/g, " ");
-      console.error("[openwa] outbound request rejected", { sessionId, chatId, status: response.status, detail });
+      const responseBody = await response.text().catch(() => "");
+      console.error("[openwa] outbound request rejected", {
+        endpoint,
+        sessionId,
+        chatId,
+        status: response.status,
+        statusText: response.statusText,
+        responseBody,
+      });
+      const detail = responseBody.replace(/\s+/g, " ").slice(0, 500);
       return { sent: false, reason: `openwa_http_${response.status}${detail ? `: ${detail}` : ""}` };
     }
     const body = (await response.json().catch(() => ({}))) as { messageId?: string };
