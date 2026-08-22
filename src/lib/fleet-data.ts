@@ -244,7 +244,7 @@ export function useFleetData() {
     const { data: userData } = await supabase.auth.getUser();
     const userId = userData.user?.id;
     if (!userId) throw new Error("Not signed in");
-    const { error } = await (supabase.from("driver_tracks") as any).insert({
+    const driverPayload = {
       user_id: userId,
       vehicle_id: d.vehicle_id || null,
       reg: d.registration,
@@ -255,7 +255,12 @@ export function useFleetData() {
       current_mileage: d.start_mileage,
       allowance: d.allowance,
       rate_pence: d.excess_rate,
-    });
+    };
+    let { error } = await (supabase.from("driver_tracks") as any).insert(driverPayload);
+    if (error && /phone|column/i.test(error.message)) {
+      const { phone: _phone, ...legacyPayload } = driverPayload;
+      ({ error } = await (supabase.from("driver_tracks") as any).insert(legacyPayload));
+    }
     if (error) throw new Error(error.message);
     await refresh();
   }, [refresh]);

@@ -132,6 +132,14 @@
   --sidebar-ring: oklch(0.551 0.027 264.364);
 }
 
+select,
+select option,
+select optgroup {
+  color-scheme: dark;
+  background-color: #1e222b;
+  color: #eef2f8;
+}
+
 @layer base {
   * {
     border-color: var(--color-border);
