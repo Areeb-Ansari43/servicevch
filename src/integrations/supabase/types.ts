@@ -14,6 +14,51 @@ export type Database = {
   }
   public: {
     Tables: {
+      webhook_events: {
+        Row: {
+          id: string
+          source: string
+          request_id: string | null
+          event_name: string | null
+          headers: Json
+          payload: Json | null
+          payload_text: string | null
+          normalized: Json | null
+          status: string
+          error: string | null
+          received_at: string
+          processed_at: string
+        }
+        Insert: {
+          id?: string
+          source?: string
+          request_id?: string | null
+          event_name?: string | null
+          headers?: Json
+          payload?: Json | null
+          payload_text?: string | null
+          normalized?: Json | null
+          status: string
+          error?: string | null
+          received_at?: string
+          processed_at?: string
+        }
+        Update: {
+          id?: string
+          source?: string
+          request_id?: string | null
+          event_name?: string | null
+          headers?: Json
+          payload?: Json | null
+          payload_text?: string | null
+          normalized?: Json | null
+          status?: string
+          error?: string | null
+          received_at?: string
+          processed_at?: string
+        }
+        Relationships: []
+      }
       accident_cases: {
         Row: {
           ai_summary: string | null

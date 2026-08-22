@@ -217,7 +217,7 @@ async function sendTelegramAlert(params: {
 export const Route = createFileRoute("/api/public/agent-webhook")({
   server: {
     handlers: {
-      POST: async ({ request }) => handleWebhook(request),
+      POST: async ({ request }) => handleAgentWebhookRequest(request),
       OPTIONS: async () =>
         new Response(null, {
           status: 204,
@@ -231,7 +231,7 @@ export const Route = createFileRoute("/api/public/agent-webhook")({
   },
 });
 
-async function handleWebhook(request: Request) {
+export async function handleAgentWebhookRequest(request: Request) {
   let raw: unknown;
   try {
     raw = await request.json();
