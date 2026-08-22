@@ -166,6 +166,12 @@ function normalizeInbound(raw: JsonRecord): NormalizedMessage | null {
   const sender = isRecord(message.sender) ? message.sender : undefined;
   const chat = isRecord(message.chat) ? message.chat : undefined;
   const messageData = isRecord(message._data) ? message._data : undefined;
+  const dataSender = isRecord(messageData?.sender) ? messageData.sender : undefined;
+  const contact = isRecord(message.contact)
+    ? message.contact
+    : isRecord(messageData?.contact)
+      ? messageData.contact
+      : undefined;
   const media = isRecord(message.media) ? message.media : undefined;
   const content = stringValue(
     recordValue(message, "body", "text", "content", "caption"),
@@ -182,20 +188,25 @@ function normalizeInbound(raw: JsonRecord): NormalizedMessage | null {
 
   const chatId = phoneFromCandidates(
     recordValue(sender, "wid", "userId", "id", "phone", "number"),
+    recordValue(dataSender, "wid", "userId", "id", "phone", "number"),
+    recordValue(contact, "wid", "userId", "id", "phone", "number"),
     recordValue(messageData, "from", "author", "chatId", "chat_id"),
     recordValue(chat, "id", "chatId", "wid"),
     recordValue(message, "from", "author", "chatId", "chat_id"),
     recordValue(raw, "from", "chatId", "chat_id"),
   );
   const senderPhone = phoneFrom(
-    recordValue(message, "senderPhone", "sender_phone"),
-  ) ?? phoneFrom(recordValue(messageData, "senderPhone", "sender_phone"));
+    recordValue(message, "senderPhone", "sender_phone", "phoneNumber", "phone_number"),
+  ) ?? phoneFrom(recordValue(messageData, "senderPhone", "sender_phone", "phoneNumber", "phone_number"))
+    ?? phoneFrom(recordValue(contact, "senderPhone", "sender_phone", "phoneNumber", "phone_number", "phone", "number"));
   // OpenWA can legitimately provide only an @lid. The CRM phone column is
   // non-null in existing deployments, so retain the exact chat ID as a safe
   // fallback until RESOLVE_LID_TO_PHONE supplies senderPhone.
   const phone = senderPhone ?? chatId ?? undefined;
   const name = stringValue(
-    recordValue(sender, "pushname", "pushName", "name", "formattedName"),
+    recordValue(sender, "pushname", "pushName", "notifyName", "notify_name", "name", "formattedName"),
+    recordValue(dataSender, "pushname", "pushName", "notifyName", "notify_name", "name", "formattedName"),
+    recordValue(contact, "pushname", "pushName", "notifyName", "notify_name", "name", "formattedName"),
     recordValue(message, "notifyName", "notify_name", "pushname", "pushName", "name"),
     recordValue(messageData, "notifyName", "notify_name", "pushname", "pushName", "name"),
     recordValue(chat, "name", "formattedName"),
