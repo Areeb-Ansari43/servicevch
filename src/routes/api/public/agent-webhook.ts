@@ -2,10 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
 import { getRuntimeEnv } from "@/integrations/supabase/config";
-import { sendOpenWaText } from "@/lib/openwa.server";
+import { sendOpenWaImage, sendOpenWaText } from "@/lib/openwa.server";
 
 const CRM_BASE = "https://servicevch.pages.dev";
 const VCH_WEBSITE = "https://virtualcarhire.pages.dev/our-fleet";
+const WELCOME_IMAGE_URL = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663646717561/LWsrZDwfCPweeEQG.webp";
 const WELCOME_MENU =
   "👋 Hello, and welcome to Virtual Car Hire\n" +
   "🚘 London's number one PCO car hire company with 4.8 stars across Google and Trustpilot.\n\n" +
@@ -247,6 +248,9 @@ function formatFleet(fleet: FleetVehicle[]): string {
 }
 
 async function sendWelcomeMenu(phone: unknown, sessionId?: string) {
+  const image = await sendOpenWaImage({ phone, url: WELCOME_IMAGE_URL, caption: WELCOME_MENU, sessionId });
+  if (image.sent) return image;
+  console.warn("[agent-webhook] welcome image unavailable; falling back to text menu", { reason: image.reason });
   return sendOpenWaText({ phone, text: WELCOME_MENU, sessionId });
 }
 
