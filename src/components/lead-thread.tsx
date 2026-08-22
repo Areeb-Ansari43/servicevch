@@ -98,12 +98,12 @@ export function LeadThread({
   };
 
   return (
-    <div className="fixed inset-0 z-[95] flex justify-end bg-black/50 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[95] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-md sm:p-6" onClick={onClose}>
       <div
-        className="flex h-full w-full max-w-lg flex-col border-l border-white/10 bg-[#0b0d12]/95 backdrop-blur-2xl"
+        className="flex h-[88vh] max-h-[900px] w-full max-w-4xl flex-col overflow-hidden rounded-[28px] border border-white/15 bg-white/[0.08] shadow-[0_24px_100px_rgba(0,0,0,0.55)] backdrop-blur-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-3 border-b border-white/10 px-5 py-4">
+        <div className="flex items-center gap-3 border-b border-white/10 bg-white/[0.04] px-5 py-4 sm:px-7">
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold text-white">{contactName}</div>
             <div className="text-[11px] text-[#8b95a8]">
@@ -124,7 +124,7 @@ export function LeadThread({
           <button onClick={onClose} className="rounded-full px-2 py-1 text-xs text-[#8b95a8] hover:bg-white/10 hover:text-white">Close</button>
         </div>
 
-        <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
+        <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-5 py-5 sm:px-7">
           {loading ? (
             <p className="text-xs text-[#8b95a8]">Loading conversation…</p>
           ) : messages.length === 0 ? (
@@ -146,7 +146,7 @@ export function LeadThread({
           )}
         </div>
 
-        <form onSubmit={submit} className="flex items-center gap-2 border-t border-white/10 px-5 py-3">
+        <form onSubmit={submit} className="flex items-center gap-2 border-t border-white/10 bg-white/[0.04] px-5 py-4 sm:px-7">
           <input
             value={reply}
             onChange={(e) => setReply(e.target.value)}

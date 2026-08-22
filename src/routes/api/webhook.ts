@@ -40,9 +40,18 @@ function recordValue(record: JsonRecord | undefined, ...keys: string[]): unknown
 }
 
 function phoneFrom(value: unknown): string | undefined {
+  if (isRecord(value)) value = stringValue(value._serialized, value.serialized, value.user, value.id);
   if (typeof value !== "string") return undefined;
-  const cleaned = value.trim().replace(/@(c|g)\.us$/i, "");
-  return cleaned.length >= 3 ? cleaned : undefined;
+  const cleaned = value.trim().replace(/^whatsapp:/i, "");
+  if (/@lid$/i.test(cleaned)) return cleaned;
+  const normalized = cleaned.replace(/@s\.whatsapp\.net$/i, "@c.us");
+  const jid = /@(c|g)\.us$/i.test(normalized) ? normalized : `${normalized.replace(/\D/g, "")}@c.us`;
+  return jid.length >= 9 ? jid : undefined;
+}
+
+function phoneFromCandidates(...values: unknown[]): string | undefined {
+  const candidates = values.map(phoneFrom).filter((value): value is string => Boolean(value));
+  return candidates.find((value) => /@c\.us$/i.test(value)) ?? candidates[0];
 }
 
 function describeError(error: unknown): string {
@@ -154,6 +163,7 @@ function normalizeInbound(raw: JsonRecord): NormalizedMessage | null {
 
   const sender = isRecord(message.sender) ? message.sender : undefined;
   const chat = isRecord(message.chat) ? message.chat : undefined;
+  const messageData = isRecord(message._data) ? message._data : undefined;
   const media = isRecord(message.media) ? message.media : undefined;
   const content = stringValue(
     recordValue(message, "body", "text", "content", "caption"),
@@ -168,18 +178,21 @@ function normalizeInbound(raw: JsonRecord): NormalizedMessage | null {
   )
     return null;
 
-  const phone = phoneFrom(
-    stringValue(
-      recordValue(message, "from", "author", "chatId", "chat_id"),
-      recordValue(chat, "id", "chatId"),
-      recordValue(sender, "id", "phone", "number"),
-      recordValue(raw, "from", "phone", "chatId"),
-    ),
+  const phone = phoneFromCandidates(
+    recordValue(sender, "phone", "number", "wid", "userId"),
+    recordValue(messageData, "from", "author", "chatId", "chat_id"),
+    recordValue(chat, "phone", "number"),
+    recordValue(message, "from", "author", "chatId", "chat_id"),
+    recordValue(raw, "from", "phone", "chatId"),
+    recordValue(sender, "id"),
+    recordValue(chat, "id", "chatId"),
   );
   const name = stringValue(
-    recordValue(sender, "pushname", "name", "formattedName"),
-    recordValue(message, "notifyName", "name"),
-    recordValue(raw, "name"),
+    recordValue(sender, "pushname", "pushName", "name", "formattedName"),
+    recordValue(message, "notifyName", "notify_name", "pushname", "pushName", "name"),
+    recordValue(messageData, "notifyName", "notify_name", "pushname", "pushName", "name"),
+    recordValue(chat, "name", "formattedName"),
+    recordValue(raw, "notifyName", "notify_name", "name"),
   );
   const mediaUrl = stringValue(
     recordValue(media, "url", "mediaUrl"),

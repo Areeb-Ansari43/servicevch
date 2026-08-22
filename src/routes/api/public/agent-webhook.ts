@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
 import { getRuntimeEnv } from "@/integrations/supabase/config";
+import { sendOpenWaText, WELCOME_MESSAGE } from "@/lib/openwa.server";
 
 const CRM_BASE = "https://servicevch.pages.dev";
 
@@ -66,8 +67,11 @@ async function insertWithSessionFallback(
 }
 
 function parseMenuOption(text: string): 1 | 2 | 3 | null {
-  const m = text.trim().match(/^(?:option\s*)?\[?([123])\]?[.)]?$/i);
-  return m ? (Number(m[1]) as 1 | 2 | 3) : null;
+  const normalized = text.trim().toLowerCase();
+  if (/^(?:option\s*)?\[?1\]?[.)]?$/.test(normalized) || normalized === "book a car") return 1;
+  if (/^(?:option\s*)?\[?2\]?[.)]?$/.test(normalized) || normalized === "report accident") return 2;
+  if (/^(?:option\s*)?\[?3\]?[.)]?$/.test(normalized) || normalized === "speak to human") return 3;
+  return null;
 }
 
 function isPositiveClosure(text: string): boolean {
@@ -124,7 +128,7 @@ async function generateReply(
     "Use only the supplied live fleet data: never invent availability, prices, dates, MOT or PCO information. " +
     "Treat only vehicles marked available/active/in stock as available; rented, assigned, in-service and off-road vehicles are unavailable. " +
     "If the requested car is unavailable, explicitly say so and suggest alternatives under exactly these headings: Electric, Plug-in-Hybrid, Petrol. " +
-    "If the customer asks for a human, reports an accident, damage, breakdown, insurance, legal, payment/refund dispute, complains, or you are uncertain, set needs_human true. " +
+    "If you cannot safely answer, the AI service fails, or you become stuck, set needs_human true; otherwise keep needs_human false. For an accident report, gather the details for the CRM accident workflow instead of handing off immediately. " +
     "At the end of a standard interaction, ask exactly: Is that all for today? " +
     'Respond ONLY as JSON: {"reply": string, "needs_human": boolean, "reason": string, "asks_closure": boolean}. ' +
     "Set asks_closure true when the reply contains that exact question.\n\n" +
@@ -269,7 +273,8 @@ export async function handleAgentWebhookRequest(request: Request) {
     return json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid payload" }, 400);
   const { content, media_url: mediaUrl = null, session_id: sessionId = null } = parsed.data;
   const phone = parsed.data.phone ?? null;
-  const name = parsed.data.name || "Unknown";
+  const suppliedName = parsed.data.name?.trim() || "";
+  const name = suppliedName || "Unknown";
   const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
 
   const { data: owner } = await db.from("vehicles").select("user_id").limit(1).maybeSingle();
@@ -277,6 +282,7 @@ export async function handleAgentWebhookRequest(request: Request) {
   if (!userId) return json({ ok: false, error: "No fleet owner account found" }, 500);
 
   let leadId: string | null = null;
+  let isNewLead = false;
   let aiPaused = false;
   let closed = false;
   let leadName = name;
@@ -309,10 +315,11 @@ export async function handleAgentWebhookRequest(request: Request) {
   }
 
   if (!leadId) {
+    isNewLead = true;
     const { data: created, error } = await insertWithSessionFallback(db, "whatsapp_leads", {
       user_id: userId,
-      contact_name: name,
-      phone,
+        contact_name: name,
+        phone,
       message: content,
       media_url: mediaUrl,
       status: "new",
@@ -324,7 +331,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     await db
       .from("whatsapp_leads")
       .update({
-        contact_name: name || leadName,
+        ...(suppliedName ? { contact_name: suppliedName } : {}),
         last_message_at: new Date().toISOString(),
         ...(mediaUrl ? { media_url: mediaUrl } : {}),
       } as never)
@@ -362,6 +369,43 @@ export async function handleAgentWebhookRequest(request: Request) {
   }
 
   const option = parseMenuOption(content);
+  if (isNewLead && !option) {
+    await insertWithSessionFallback(db, "messages", {
+      user_id: userId,
+      lead_id: leadId,
+      sender: "ai_agent",
+      content: WELCOME_MESSAGE,
+      session_id: sessionId,
+    });
+    const outbound = await sendOpenWaText({ phone, text: WELCOME_MESSAGE, sessionId: sessionId ?? undefined });
+    let alert: { sent: boolean; reason?: string } = { sent: false, reason: "not_needed" };
+    if (!outbound.sent) {
+      alert = await sendTelegramAlert({ name: leadName, phone, reason: `OpenWA welcome failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: WELCOME_MESSAGE }], mediaUrl, closed: false });
+    }
+    return json({ ok: true, lead_id: leadId, reply: WELCOME_MESSAGE, welcome_menu: true, needs_human: !outbound.sent, ai_paused: !outbound.sent, telegram_alert: alert, outbound });
+  }
+
+  if (option === 1 || option === 2) {
+    const reply = option === 1
+      ? "Great — I can help you book a car. Please tell me which make/model you need, your preferred dates, and whether you need a PCO rental. Is that all for today?"
+      : "I’m sorry to hear that. Please send the vehicle registration, incident date, location, and a short description of what happened. You can also attach photos. Is that all for today?";
+    const intent = option === 1 ? "book_car" : "report_accident";
+    await insertWithSessionFallback(db, "messages", {
+      user_id: userId,
+      lead_id: leadId,
+      sender: "ai_agent",
+      content: reply,
+      session_id: sessionId,
+    });
+    await db.from("whatsapp_leads").update({ intent, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+    const outbound = await sendOpenWaText({ phone, text: reply, sessionId: sessionId ?? undefined });
+    let alert: { sent: boolean; reason?: string } = { sent: false, reason: "not_needed" };
+    if (!outbound.sent) {
+      alert = await sendTelegramAlert({ name: leadName, phone, reason: `OpenWA reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
+    }
+    return json({ ok: true, lead_id: leadId, reply, needs_human: !outbound.sent, ai_paused: !outbound.sent, telegram_alert: alert, outbound });
+  }
+
   if (option === 3) {
     const reply =
       "No problem — I’m connecting you with a member of our team now. They’ll reply here shortly.";
@@ -382,16 +426,17 @@ export async function handleAgentWebhookRequest(request: Request) {
         ai_summary: reply,
       } as never)
       .eq("id", leadId);
+    const outbound = await sendOpenWaText({ phone, text: reply, sessionId: sessionId ?? undefined });
     const alert = await sendTelegramAlert({
       name: leadName,
       phone,
-      reason: "Customer requested a human",
+      reason: outbound.sent ? "Customer requested a human" : `OpenWA reply failed: ${outbound.reason}`,
       leadId,
       history: [...history, { sender: "ai_agent", content: reply }],
       mediaUrl,
       closed: false,
     });
-    return json({ ok: true, lead_id: leadId, reply, needs_human: true, telegram_alert: alert });
+    return json({ ok: true, lead_id: leadId, reply, needs_human: true, telegram_alert: alert, outbound });
   }
 
   if (isPositiveClosure(content)) {
@@ -414,10 +459,11 @@ export async function handleAgentWebhookRequest(request: Request) {
         last_message_at: new Date().toISOString(),
       } as never)
       .eq("id", leadId);
+    const outbound = await sendOpenWaText({ phone, text: reply, sessionId: sessionId ?? undefined });
     const alert = await sendTelegramAlert({
       name: leadName,
       phone,
-      reason: "Customer confirmed closure",
+      reason: outbound.sent ? "Customer confirmed closure" : `OpenWA reply failed: ${outbound.reason}`,
       leadId,
       history: finalHistory,
       mediaUrl,
@@ -430,6 +476,7 @@ export async function handleAgentWebhookRequest(request: Request) {
       closed: true,
       needs_human: false,
       telegram_alert: alert,
+      outbound,
     });
   }
 
@@ -462,12 +509,14 @@ export async function handleAgentWebhookRequest(request: Request) {
     } as never)
     .eq("id", leadId);
 
+  const outbound = await sendOpenWaText({ phone, text: finalReply, sessionId: sessionId ?? undefined });
+  const deliveryFailed = !outbound.sent;
   let alert: { sent: boolean; reason?: string } = { sent: false, reason: "not_needed" };
-  if (needsHuman) {
+  if (needsHuman || deliveryFailed) {
     alert = await sendTelegramAlert({
       name: leadName,
       phone,
-      reason: ai.reason || "AI trouble or customer needs help",
+      reason: deliveryFailed ? `OpenWA reply failed: ${outbound.reason}` : (ai.reason || "AI trouble or customer needs help"),
       leadId,
       history: [...history, { sender: "ai_agent", content: finalReply }],
       mediaUrl,
@@ -478,8 +527,9 @@ export async function handleAgentWebhookRequest(request: Request) {
     ok: true,
     lead_id: leadId,
     reply: finalReply,
-    needs_human: needsHuman,
-    ai_paused: needsHuman,
+    needs_human: needsHuman || deliveryFailed,
+    ai_paused: needsHuman || deliveryFailed,
     telegram_alert: alert,
+    outbound,
   });
 }

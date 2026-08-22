@@ -1,13 +1,15 @@
-/**
- * Outbound routing for human replies sent from the CRM.
- * Degrades gracefully when no outbound channel is configured.
- */
+/** Outbound routing for human replies sent from the CRM. */
 export async function routeOutbound(params: {
   phone: string | null;
   name: string;
   content: string;
   leadId: string;
+  sessionId?: string | null;
 }): Promise<{ routed: boolean; channel: string; reason?: string }> {
+  const { sendOpenWaText } = await import("@/lib/openwa.server");
+  const openwa = await sendOpenWaText({ phone: params.phone, text: params.content, sessionId: params.sessionId ?? undefined });
+  if (openwa.sent) return { routed: true, channel: "openwa" };
+
   const url = process.env["OUTBOUND_WEBHOOK_URL"];
   if (url) {
     try {
@@ -38,11 +40,5 @@ export async function routeOutbound(params: {
     }
   }
 
-  const { sendTelegramAlert } = await import("@/lib/telegram.server");
-  const sent = await sendTelegramAlert(
-    `💬 <b>Human reply sent</b>\n<b>To:</b> ${params.name}${params.phone ? ` (${params.phone})` : ""}\n\n${params.content}`,
-  );
-  return sent.sent
-    ? { routed: true, channel: "telegram" }
-    : { routed: false, channel: "telegram", reason: sent.reason };
+  return { routed: false, channel: "openwa", reason: openwa.reason };
 }

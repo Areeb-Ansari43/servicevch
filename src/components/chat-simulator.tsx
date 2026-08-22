@@ -9,8 +9,8 @@ type Entry = {
 };
 
 const OPTIONS = [
-  { key: "1", label: "[1] Rent a Car" },
-  { key: "2", label: "[2] Report an Accident" },
+  { key: "1", label: "[1] Book a Car" },
+  { key: "2", label: "[2] Report Accident" },
   { key: "3", label: "[3] Speak to Human" },
 ];
 

@@ -21,7 +21,7 @@ export const sendHumanReply = createServerFn({ method: "POST" })
 
     const { data: lead, error: leadErr } = await supabase
       .from("whatsapp_leads")
-      .select("id, contact_name, phone")
+      .select("id, contact_name, phone, session_id")
       .eq("id", data.leadId)
       .maybeSingle();
     if (leadErr) throw new Error(leadErr.message);
@@ -32,6 +32,7 @@ export const sendHumanReply = createServerFn({ method: "POST" })
       lead_id: lead.id,
       sender: "human",
       content: data.content,
+      session_id: lead.session_id ?? null,
     });
     if (msgErr) throw new Error(msgErr.message);
 
@@ -51,6 +52,7 @@ export const sendHumanReply = createServerFn({ method: "POST" })
       name: lead.contact_name,
       content: data.content,
       leadId: lead.id,
+      sessionId: lead.session_id ?? null,
     });
 
     return { ok: true, outbound };
