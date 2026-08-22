@@ -17,7 +17,7 @@ export const Route = createFileRoute("/api/public/telegram-bot")({
   },
 });
 
-const CRM_BASE = "https://servicevch.lovable.app";
+const CRM_BASE = "https://servicevch.pages.dev";
 const STATUSES = ["new", "contacted", "handed over", "human", "closed"] as const;
 
 const json = (body: unknown, status = 200) =>
@@ -35,7 +35,12 @@ async function sendMessage(chatId: number | string, text: string) {
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML", disable_web_page_preview: true }),
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+      }),
     });
     if (!res.ok) console.warn("[telegram-bot] sendMessage failed", res.status, await res.text());
   } catch (err) {
@@ -96,7 +101,14 @@ async function parseIntent(text: string): Promise<Intent> {
               properties: {
                 action: {
                   type: "string",
-                  enum: ["list_leads", "lead_status", "update_status", "add_note", "pause_ai", "help"],
+                  enum: [
+                    "list_leads",
+                    "lead_status",
+                    "update_status",
+                    "add_note",
+                    "pause_ai",
+                    "help",
+                  ],
                 },
                 name: { type: "string" },
                 status: { type: "string" },
@@ -126,11 +138,17 @@ async function parseIntent(text: string): Promise<Intent> {
       case "lead_status":
         return p.name ? { action: "lead_status", name: p.name } : { action: "help" };
       case "update_status":
-        return p.name && p.status ? { action: "update_status", name: p.name, status: p.status } : { action: "help" };
+        return p.name && p.status
+          ? { action: "update_status", name: p.name, status: p.status }
+          : { action: "help" };
       case "add_note":
-        return p.name && p.note ? { action: "add_note", name: p.name, note: p.note } : { action: "help" };
+        return p.name && p.note
+          ? { action: "add_note", name: p.name, note: p.note }
+          : { action: "help" };
       case "pause_ai":
-        return p.name ? { action: "pause_ai", name: p.name, paused: Boolean(p.paused) } : { action: "help" };
+        return p.name
+          ? { action: "pause_ai", name: p.name, paused: Boolean(p.paused) }
+          : { action: "help" };
       default:
         return { action: "help" };
     }
@@ -167,7 +185,10 @@ async function runIntent(intent: Intent, userId: string): Promise<string> {
       .order("last_message_at", { ascending: false })
       .limit(10);
     if (intent.status) {
-      q = intent.status.toLowerCase() === "active" ? q.neq("status", "closed") : q.eq("status", intent.status.toLowerCase());
+      q =
+        intent.status.toLowerCase() === "active"
+          ? q.neq("status", "closed")
+          : q.eq("status", intent.status.toLowerCase());
     }
     const { data, error } = await q;
     if (error) return `⚠️ Query failed: ${esc(error.message)}`;
@@ -194,14 +215,19 @@ async function runIntent(intent: Intent, userId: string): Promise<string> {
       `<b>Status:</b> ${esc(lead.status)}${lead.ai_paused ? " (human handling)" : " (AI active)"}\n` +
       `<b>Phone:</b> ${esc(lead.phone ?? "n/a")}\n` +
       `<b>Last activity:</b> ${new Date(lead.last_message_at).toLocaleString("en-GB")}\n\n` +
-      (lead.ai_summary ? `${esc(lead.ai_summary)}\n\n` : `${esc((lead.message ?? "").slice(0, 400))}\n\n`) +
+      (lead.ai_summary
+        ? `${esc(lead.ai_summary)}\n\n`
+        : `${esc((lead.message ?? "").slice(0, 400))}\n\n`) +
       `<a href="${link}">Open in CRM →</a>`
     );
   }
 
   if (intent.action === "update_status") {
     const status = intent.status.toLowerCase();
-    const { error } = await db.from("whatsapp_leads").update({ status } as never).eq("id", lead.id);
+    const { error } = await db
+      .from("whatsapp_leads")
+      .update({ status } as never)
+      .eq("id", lead.id);
     if (error) return `⚠️ Update failed: ${esc(error.message)}`;
     return `✅ <b>${esc(lead.contact_name)}</b> status set to <b>${esc(status)}</b>.\n<a href="${link}">Open in CRM →</a>`;
   }
@@ -261,7 +287,11 @@ async function handleUpdate(request: Request) {
   }
 
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data: owner } = await supabaseAdmin.from("vehicles").select("user_id").limit(1).maybeSingle();
+  const { data: owner } = await supabaseAdmin
+    .from("vehicles")
+    .select("user_id")
+    .limit(1)
+    .maybeSingle();
   if (!owner?.user_id) {
     await sendMessage(chatId, "⚠️ No fleet owner account found in the CRM.");
     return json({ ok: true });

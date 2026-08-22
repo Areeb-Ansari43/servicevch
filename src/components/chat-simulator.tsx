@@ -15,6 +15,19 @@ const OPTIONS = [
 ];
 
 const uid = () => Math.random().toString(36).slice(2);
+const SESSION_STORAGE_KEY = "servicevch.test-chat.session.v1";
+
+function getSimulatorSessionId(): string {
+  if (typeof window === "undefined") return `sim-${uid()}-${Date.now()}`;
+  const existing = window.localStorage.getItem(SESSION_STORAGE_KEY);
+  if (existing) return existing;
+  const created =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? `sim-${crypto.randomUUID()}`
+      : `sim-${uid()}-${Date.now()}`;
+  window.localStorage.setItem(SESSION_STORAGE_KEY, created);
+  return created;
+}
 
 /** Test-chat drawer: fires mock customer messages at the live agent webhook. */
 export function ChatSimulator() {
@@ -25,6 +38,7 @@ export function ChatSimulator() {
   const [busy, setBusy] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [log, setLog] = useState<Entry[]>([]);
+  const [sessionId] = useState(getSimulatorSessionId);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const push = (e: Omit<Entry, "id">) => setLog((l) => [...l, { id: uid(), ...e }]);
@@ -37,7 +51,9 @@ export function ChatSimulator() {
       push({ direction: "system", text: `Upload failed: ${error.message}` });
       return null;
     }
-    const { data } = await supabase.storage.from("chat-test-media").createSignedUrl(path, 60 * 60 * 24 * 7);
+    const { data } = await supabase.storage
+      .from("chat-test-media")
+      .createSignedUrl(path, 60 * 60 * 24 * 7);
     return data?.signedUrl ?? null;
   };
 
@@ -50,6 +66,7 @@ export function ChatSimulator() {
       const body = {
         phone: phone.trim() || undefined,
         name: name.trim() || undefined,
+        session_id: sessionId,
         content: content || "(photo)",
         ...(mediaUrl ? { media_url: mediaUrl } : {}),
       };
@@ -74,7 +91,10 @@ export function ChatSimulator() {
       if (!res.ok || !data.ok) {
         push({ direction: "system", text: `Webhook error: ${data.error ?? res.status}` });
       } else if (data.ai_paused) {
-        push({ direction: "system", text: "AI is paused for this lead — a human must reply from the CRM." });
+        push({
+          direction: "system",
+          text: "AI is paused for this lead — a human must reply from the CRM.",
+        });
       } else {
         push({ direction: "received", text: data.reply ?? "(no reply)" });
         if (data.needs_human) {
@@ -107,9 +127,14 @@ export function ChatSimulator() {
         <div className="flex items-center gap-3 border-b border-white/10 px-5 py-4">
           <div className="min-w-0">
             <div className="text-sm font-semibold text-white">Chat Simulator</div>
-            <div className="text-[11px] text-[#8b95a8]">Mock customer messages hit the live agent webhook</div>
+            <div className="text-[11px] text-[#8b95a8]">
+              Mock customer messages hit the live agent webhook
+            </div>
           </div>
-          <button onClick={() => setOpen(false)} className="ml-auto rounded-full px-2 py-1 text-xs text-[#8b95a8] hover:bg-white/10 hover:text-white">
+          <button
+            onClick={() => setOpen(false)}
+            className="ml-auto rounded-full px-2 py-1 text-xs text-[#8b95a8] hover:bg-white/10 hover:text-white"
+          >
             Close
           </button>
         </div>
@@ -131,7 +156,9 @@ export function ChatSimulator() {
 
         <div className="flex-1 space-y-2 overflow-y-auto px-5 py-4">
           {log.length === 0 && (
-            <p className="text-xs text-[#8b95a8]">Send a message or pick a menu option to run the full webhook workflow.</p>
+            <p className="text-xs text-[#8b95a8]">
+              Send a message or pick a menu option to run the full webhook workflow.
+            </p>
           )}
           {log.map((e) => (
             <div
@@ -146,7 +173,12 @@ export function ChatSimulator() {
             >
               {e.text}
               {e.mediaUrl && (
-                <img src={e.mediaUrl} alt="Test attachment" className="mt-2 max-h-40 rounded-lg" loading="lazy" />
+                <img
+                  src={e.mediaUrl}
+                  alt="Test attachment"
+                  className="mt-2 max-h-40 rounded-lg"
+                  loading="lazy"
+                />
               )}
             </div>
           ))}
@@ -174,7 +206,13 @@ export function ChatSimulator() {
               className="w-full text-[11px] text-[#8b95a8] file:mr-2 file:rounded-full file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-[11px] file:text-white"
             />
           </div>
-          <form onSubmit={(e) => { e.preventDefault(); send(text); }} className="flex items-center gap-2">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              send(text);
+            }}
+            className="flex items-center gap-2"
+          >
             <input
               value={text}
               onChange={(e) => setText(e.target.value)}

@@ -156,6 +156,7 @@ export type Database = {
           lead_id: string | null
           media_url: string | null
           sender: string
+          session_id: string | null
           user_id: string
         }
         Insert: {
@@ -166,6 +167,7 @@ export type Database = {
           lead_id?: string | null
           media_url?: string | null
           sender?: string
+          session_id?: string | null
           user_id: string
         }
         Update: {
@@ -176,6 +178,7 @@ export type Database = {
           lead_id?: string | null
           media_url?: string | null
           sender?: string
+          session_id?: string | null
           user_id?: string
         }
         Relationships: [
@@ -357,6 +360,8 @@ export type Database = {
           phone: string | null
           status: string
           user_id: string
+          session_id: string | null
+          closed_at: string | null
         }
         Insert: {
           ai_paused?: boolean
@@ -370,7 +375,9 @@ export type Database = {
           message: string
           phone?: string | null
           status?: string
-          user_id: string
+          user_id?: string
+          session_id?: string | null
+          closed_at?: string | null
         }
         Update: {
           ai_paused?: boolean
@@ -385,6 +392,8 @@ export type Database = {
           phone?: string | null
           status?: string
           user_id?: string
+          session_id?: string | null
+          closed_at?: string | null
         }
         Relationships: []
       }

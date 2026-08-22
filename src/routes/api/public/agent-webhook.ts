@@ -1,17 +1,219 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
-/**
- * AI communication engine webhook.
- *
- * POST /api/public/agent-webhook
- * { "phone": "+44...", "name": "Jane", "content": "hi", "media_url": "https://..." }
- *
- * 1. Upserts the lead + logs the inbound message into the CRM.
- * 2. Asks Gemini Flash for a natural reply using the conversation history.
- * 3. Logs the reply back as an `ai_agent` message.
- * 4. Alerts the team on Telegram when a human handoff is needed.
- */
+const CRM_BASE = "https://servicevch.pages.dev";
+
+type Turn = { sender: string; content: string; media_url?: string | null };
+type FleetVehicle = {
+  reg: string;
+  make: string;
+  model: string;
+  year: number | null;
+  fuel_type: string | null;
+  status: string | null;
+  next_mot_date: string | null;
+  pco_expiry_date: string | null;
+};
+
+type AiResult = {
+  reply: string;
+  needs_human: boolean;
+  reason: string;
+  asks_closure: boolean;
+};
+
+const bodySchema = z.object({
+  phone: z.string().trim().min(3).max(40).optional(),
+  name: z.string().trim().max(120).optional(),
+  content: z.string().trim().min(1).max(5000),
+  media_url: z.string().trim().url().max(2000).optional(),
+  session_id: z.string().trim().min(8).max(160).optional(),
+});
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+  });
+
+const escapeHtml = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+function parseMenuOption(text: string): 1 | 2 | 3 | null {
+  const m = text.trim().match(/^(?:option\s*)?\[?([123])\]?[.)]?$/i);
+  return m ? (Number(m[1]) as 1 | 2 | 3) : null;
+}
+
+function isPositiveClosure(text: string): boolean {
+  return /^(?:yes|yeah|yep|yup|that'?s all|all good|no thanks|no thank you|that is all|that’s all)[.!\s]*$/i.test(
+    text.trim(),
+  );
+}
+
+function includesClosureQuestion(text: string): boolean {
+  return /is that all for today\??/i.test(text);
+}
+
+function fuelCategory(value: string | null): "Electric" | "Plug-in-Hybrid" | "Petrol" {
+  const fuel = (value ?? "").toLowerCase().replace(/[\s_-]/g, "");
+  if (fuel.includes("electric") || fuel === "ev") return "Electric";
+  if (fuel.includes("hybrid") || fuel.includes("phev") || fuel.includes("plugin"))
+    return "Plug-in-Hybrid";
+  return "Petrol";
+}
+
+function isAvailable(vehicle: FleetVehicle): boolean {
+  const status = (vehicle.status ?? "").toLowerCase();
+  return ["available", "active", "in stock"].includes(status);
+}
+
+function formatFleet(fleet: FleetVehicle[]): string {
+  const available = fleet.filter(isAvailable);
+  const grouped = ["Electric", "Plug-in-Hybrid", "Petrol"].map((category) => {
+    const cars = available
+      .filter((vehicle) => fuelCategory(vehicle.fuel_type) === category)
+      .map((vehicle) => `${vehicle.make} ${vehicle.model} (${vehicle.reg})`)
+      .join(", ");
+    return `${category}: ${cars || "none currently available"}`;
+  });
+  return `Available vehicles (${available.length}/${fleet.length}; rented, in-service and off-road vehicles excluded):\n${grouped.join("\n")}`;
+}
+
+async function generateReply(
+  history: Turn[],
+  latest: string,
+  hasMedia: boolean,
+  fleet: FleetVehicle[],
+): Promise<AiResult> {
+  const fallback: AiResult = {
+    reply:
+      "I’m sorry, I’m having trouble helping with that right now. I’m connecting you with a member of our team now.",
+    needs_human: true,
+    reason: "ai_unavailable_or_error",
+    asks_closure: false,
+  };
+  const system =
+    "You are the WhatsApp assistant for Virtual Car Hire (VCH), a UK PCO/private-hire car rental company. " +
+    "Reply naturally and briefly in UK English, maximum 4 short sentences. Use £ for prices. " +
+    "Use only the supplied live fleet data: never invent availability, prices, dates, MOT or PCO information. " +
+    "Treat only vehicles marked available/active/in stock as available; rented, assigned, in-service and off-road vehicles are unavailable. " +
+    "If the requested car is unavailable, explicitly say so and suggest alternatives under exactly these headings: Electric, Plug-in-Hybrid, Petrol. " +
+    "If the customer asks for a human, reports an accident, damage, breakdown, insurance, legal, payment/refund dispute, complains, or you are uncertain, set needs_human true. " +
+    "At the end of a standard interaction, ask exactly: Is that all for today? " +
+    'Respond ONLY as JSON: {"reply": string, "needs_human": boolean, "reason": string, "asks_closure": boolean}. ' +
+    "Set asks_closure true when the reply contains that exact question.\n\n" +
+    formatFleet(fleet);
+  const convo = history
+    .slice(-16)
+    .map((m) => `${m.sender === "ai_agent" ? "Agent" : "Customer"}: ${m.content}`)
+    .join("\n");
+  const userText =
+    (convo ? `Conversation so far:\n${convo}\n\n` : "") +
+    `New customer message: ${latest}` +
+    (hasMedia ? "\nThe customer attached media; acknowledge it if relevant." : "");
+
+  try {
+    const lovableKey = process.env["LOVABLE_API_KEY"];
+    if (!lovableKey) return fallback;
+    const content = hasMedia
+      ? [
+          { type: "text", text: userText },
+          { type: "image_url", image_url: { url: history.at(-1)?.media_url ?? "" } },
+        ]
+      : userText;
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "agent_reply",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              required: ["reply", "needs_human", "reason", "asks_closure"],
+              properties: {
+                reply: { type: "string" },
+                needs_human: { type: "boolean" },
+                reason: { type: "string" },
+                asks_closure: { type: "boolean" },
+              },
+            },
+          },
+        },
+      }),
+    });
+    if (!res.ok) {
+      console.error("[agent-webhook] AI gateway error", res.status, await res.text());
+      return fallback;
+    }
+    const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    const parsed = JSON.parse(data.choices?.[0]?.message?.content ?? "{}");
+    const reply =
+      typeof parsed.reply === "string" && parsed.reply.trim()
+        ? parsed.reply.trim()
+        : fallback.reply;
+    return {
+      reply,
+      needs_human: Boolean(parsed.needs_human),
+      reason: typeof parsed.reason === "string" ? parsed.reason : "",
+      asks_closure: Boolean(parsed.asks_closure) || includesClosureQuestion(reply),
+    };
+  } catch (error) {
+    console.error("[agent-webhook] AI failure", error);
+    return fallback;
+  }
+}
+
+async function sendTelegramAlert(params: {
+  name: string;
+  phone: string | null;
+  reason: string;
+  leadId: string;
+  history: Turn[];
+  mediaUrl: string | null;
+  closed: boolean;
+}) {
+  const token = process.env["TELEGRAM_BOT_TOKEN"];
+  const chatId = process.env["TELEGRAM_CHAT_ID"];
+  if (!token || !chatId) return { sent: false, reason: "not_configured" };
+  const transcript = params.history
+    .slice(-20)
+    .map((m) => `${m.sender}: ${m.content}`)
+    .join("\n");
+  const text =
+    `${params.closed ? "✅ <b>Conversation closed</b>" : "🚨 <b>Human handoff needed</b>"}\n\n` +
+    `<b>Customer:</b> ${escapeHtml(params.name)}\n` +
+    (params.phone ? `<b>Phone:</b> ${escapeHtml(params.phone)}\n` : "") +
+    `<b>Reason:</b> ${escapeHtml(params.reason)}\n` +
+    (params.mediaUrl ? `<b>Media:</b> ${escapeHtml(params.mediaUrl)}\n` : "") +
+    `\n<b>Complete recent conversation:</b>\n${escapeHtml(transcript).slice(0, 5000)}\n\n` +
+    `<a href="${CRM_BASE}/whatsapp-leads?lead=${encodeURIComponent(params.leadId)}">Open in CRM →</a>`;
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+      }),
+    });
+    if (!res.ok) return { sent: false, reason: `http_${res.status}` };
+    return { sent: true };
+  } catch {
+    return { sent: false, reason: "network_error" };
+  }
+}
+
 export const Route = createFileRoute("/api/public/agent-webhook")({
   server: {
     handlers: {
@@ -29,175 +231,6 @@ export const Route = createFileRoute("/api/public/agent-webhook")({
   },
 });
 
-const CRM_BASE = "https://servicevch.lovable.app";
-
-const bodySchema = z.object({
-  phone: z.string().trim().min(3).max(40).optional(),
-  name: z.string().trim().max(120).optional(),
-  content: z.string().trim().min(1).max(5000),
-  media_url: z.string().trim().url().max(1000).optional(),
-});
-
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-  });
-
-const escapeHtml = (s: string) =>
-  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-type Turn = { sender: string; content: string };
-
-/** Detects "[2]", "2", "2." or "option 2" style menu replies. */
-function parseMenuOption(text: string): 1 | 2 | 3 | null {
-  const m = text.trim().match(/^(?:option\s*)?\[?([123])\]?[.)]?$/i);
-  return m ? (Number(m[1]) as 1 | 2 | 3) : null;
-}
-
-
-/** Ask Gemini Flash for a reply + whether a human should take over. */
-async function generateReply(history: Turn[], latest: string, hasMedia: boolean) {
-  const geminiKey = process.env["GEMINI_API_KEY"];
-  const lovableKey = process.env["LOVABLE_API_KEY"];
-
-  const system =
-    "You are the WhatsApp assistant for Virtual Car Hire (VCH), a UK PCO/private-hire car rental company. " +
-    "Reply naturally and briefly (max 3 short sentences), friendly and professional, UK English, £ for prices. " +
-    "Help with availability, pricing, rental terms, servicing and MOT questions. " +
-    "Never invent specific prices, dates or vehicle availability you were not given — offer to check instead. " +
-    'Respond ONLY with JSON: {"reply": string, "needs_human": boolean, "reason": string}. ' +
-    "Set needs_human true if the customer asks for a person/manager, is complaining or upset, reports an accident, " +
-    "damage, breakdown, insurance, legal or payment/refund dispute, or if you cannot confidently help.";
-
-  const convo = history
-    .slice(-10)
-    .map((m) => `${m.sender === "ai_agent" ? "Agent" : "Customer"}: ${m.content}`)
-    .join("\n");
-  const userText =
-    (convo ? `Conversation so far:\n${convo}\n\n` : "") +
-    `New customer message: ${latest}` +
-    (hasMedia ? "\n(The customer also attached a photo or file.)" : "");
-
-  const fallback = {
-    reply: "Thanks for your message — one of our team will get back to you shortly.",
-    needs_human: true,
-    reason: "ai_unavailable",
-  };
-
-  try {
-    if (geminiKey) {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: system }] },
-            contents: [{ role: "user", parts: [{ text: userText }] }],
-            generationConfig: { responseMimeType: "application/json" },
-          }),
-        },
-      );
-      if (!res.ok) {
-        console.error("[agent-webhook] Gemini error", res.status, await res.text());
-        return fallback;
-      }
-      const data = (await res.json()) as {
-        candidates?: { content?: { parts?: { text?: string }[] } }[];
-      };
-      return { ...fallback, ...JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}") };
-    }
-
-    if (!lovableKey) return fallback;
-
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: userText },
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "agent_reply",
-            strict: true,
-            schema: {
-              type: "object",
-              additionalProperties: false,
-              required: ["reply", "needs_human", "reason"],
-              properties: {
-                reply: { type: "string" },
-                needs_human: { type: "boolean" },
-                reason: { type: "string" },
-              },
-            },
-          },
-        },
-      }),
-    });
-    if (!res.ok) {
-      console.error("[agent-webhook] AI gateway error", res.status, await res.text());
-      return fallback;
-    }
-    const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-    return { ...fallback, ...JSON.parse(data.choices?.[0]?.message?.content ?? "{}") };
-  } catch (err) {
-    console.error("[agent-webhook] AI failure", err);
-    return fallback;
-  }
-}
-
-async function alertTeam(params: {
-  name: string;
-  phone: string | null;
-  content: string;
-  mediaUrl: string | null;
-  reason: string;
-  leadId: string | null;
-}) {
-  const token = process.env["TELEGRAM_BOT_TOKEN"];
-  const chatId = process.env["TELEGRAM_CHAT_ID"];
-  if (!token || !chatId) {
-    console.warn("[agent-webhook] Telegram alert skipped — TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID not set.");
-    return { sent: false, reason: "not_configured" };
-  }
-
-  const handoffLink = `${CRM_BASE}/whatsapp-leads${params.leadId ? `?lead=${params.leadId}` : ""}`;
-  const text =
-    `🚨 <b>Human handoff needed</b>\n\n` +
-    `<b>Customer:</b> ${escapeHtml(params.name)}\n` +
-    (params.phone ? `<b>Phone:</b> ${escapeHtml(params.phone)}\n` : "") +
-    `<b>Reason:</b> ${escapeHtml(params.reason)}\n\n` +
-    `<b>Message:</b>\n${escapeHtml(params.content).slice(0, 900)}\n` +
-    (params.mediaUrl ? `\n<b>Media:</b> ${escapeHtml(params.mediaUrl)}\n` : "") +
-    `\n<a href="${handoffLink}">Take over in the CRM →</a>`;
-
-  try {
-    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text,
-        parse_mode: "HTML",
-        disable_web_page_preview: true,
-      }),
-    });
-    if (!res.ok) {
-      console.warn("[agent-webhook] Telegram sendMessage failed", res.status, await res.text());
-      return { sent: false, reason: `http_${res.status}` };
-    }
-    return { sent: true };
-  } catch (err) {
-    console.warn("[agent-webhook] Telegram error", err);
-    return { sent: false, reason: "network_error" };
-  }
-}
-
 async function handleWebhook(request: Request) {
   let raw: unknown;
   try {
@@ -205,46 +238,52 @@ async function handleWebhook(request: Request) {
   } catch {
     return json({ ok: false, error: "Invalid JSON body" }, 400);
   }
-
   const parsed = bodySchema.safeParse(raw);
-  if (!parsed.success) {
+  if (!parsed.success)
     return json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid payload" }, 400);
-  }
-  const { content, media_url } = parsed.data;
+  const { content, media_url: mediaUrl = null, session_id: sessionId = null } = parsed.data;
   const phone = parsed.data.phone ?? null;
   const name = parsed.data.name || "Unknown";
-  const mediaUrl = media_url ?? null;
+  const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
 
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-
-  // Everything is filed against the fleet owner account.
-  const { data: owner } = await supabaseAdmin.from("vehicles").select("user_id").limit(1).maybeSingle();
+  const { data: owner } = await db.from("vehicles").select("user_id").limit(1).maybeSingle();
   const userId = owner?.user_id;
   if (!userId) return json({ ok: false, error: "No fleet owner account found" }, 500);
 
-  // Find an existing open lead for this phone number, otherwise create one.
   let leadId: string | null = null;
   let aiPaused = false;
-  if (phone) {
-    const { data: existing } = await supabaseAdmin
+  let closed = false;
+  let leadName = name;
+  if (sessionId) {
+    const { data: existing } = await db
       .from("whatsapp_leads")
-      .select("id, ai_paused")
+      .select("id, contact_name, ai_paused, status, closed_at")
       .eq("user_id", userId)
-      .eq("phone", phone)
-      .order("created_at", { ascending: false })
+      .eq("session_id", sessionId)
+      .order("last_message_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     leadId = existing?.id ?? null;
-    aiPaused = Boolean((existing as { ai_paused?: boolean } | null)?.ai_paused);
+    aiPaused = Boolean(existing?.ai_paused);
+    closed = Boolean(existing?.closed_at) || existing?.status === "closed";
+    leadName = existing?.contact_name || leadName;
+  } else if (phone) {
+    const { data: existing } = await db
+      .from("whatsapp_leads")
+      .select("id, contact_name, ai_paused, status, closed_at")
+      .eq("user_id", userId)
+      .eq("phone", phone)
+      .order("last_message_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    leadId = existing?.id ?? null;
+    aiPaused = Boolean(existing?.ai_paused);
+    closed = Boolean(existing?.closed_at) || existing?.status === "closed";
+    leadName = existing?.contact_name || leadName;
   }
 
-  if (leadId) {
-    await supabaseAdmin
-      .from("whatsapp_leads")
-      .update({ last_message_at: new Date().toISOString(), ...(mediaUrl ? { media_url: mediaUrl } : {}) })
-      .eq("id", leadId);
-  } else {
-    const { data: created, error: leadErr } = await supabaseAdmin
+  if (!leadId) {
+    const { data: created, error } = await db
       .from("whatsapp_leads")
       .insert({
         user_id: userId,
@@ -253,115 +292,170 @@ async function handleWebhook(request: Request) {
         message: content,
         media_url: mediaUrl,
         status: "new",
-      })
+        session_id: sessionId,
+      } as never)
       .select("id")
       .single();
-    if (leadErr) return json({ ok: false, error: leadErr.message }, 500);
+    if (error) return json({ ok: false, error: error.message }, 500);
     leadId = created.id;
+  } else {
+    await db
+      .from("whatsapp_leads")
+      .update({
+        contact_name: name || leadName,
+        last_message_at: new Date().toISOString(),
+        ...(mediaUrl ? { media_url: mediaUrl } : {}),
+      } as never)
+      .eq("id", leadId);
   }
 
-  // Prior conversation for context.
-  const { data: history } = await supabaseAdmin
+  const { data: oldHistory } = await db
     .from("messages")
-    .select("sender, content")
+    .select("sender, content, media_url")
     .eq("lead_id", leadId)
     .order("created_at", { ascending: true })
-    .limit(20);
-
-  const { error: inboundErr } = await supabaseAdmin.from("messages").insert({
+    .limit(40);
+  const inbound: Turn = { sender: "customer", content, media_url: mediaUrl };
+  const { error: inboundError } = await db.from("messages").insert({
     user_id: userId,
     lead_id: leadId,
     sender: "customer",
     content,
     media_url: mediaUrl,
-  });
-  if (inboundErr) return json({ ok: false, error: inboundErr.message }, 500);
+    session_id: sessionId,
+  } as never);
+  if (inboundError) return json({ ok: false, error: inboundError.message }, 500);
+  const history = [...((oldHistory ?? []) as Turn[]), inbound];
 
-  // A human has taken over this conversation — never auto-reply.
-  if (aiPaused) {
-    await supabaseAdmin
+  if (closed || aiPaused) {
+    if (closed)
+      return json({ ok: true, lead_id: leadId, closed: true, reply: null, needs_human: false });
+    await db
       .from("whatsapp_leads")
       .update({ status: "human" } as never)
       .eq("id", leadId);
     return json({ ok: true, lead_id: leadId, ai_paused: true, reply: null, needs_human: true });
   }
 
-  // Menu selections: [1] Rent a Car, [2] Report an Accident, [3] Speak to Human.
   const option = parseMenuOption(content);
   if (option === 3) {
-    const reply = "No problem — I'm connecting you with a member of our team now. They'll reply here shortly.";
-    await supabaseAdmin.from("messages").insert({
+    const reply =
+      "No problem — I’m connecting you with a member of our team now. They’ll reply here shortly.";
+    await db.from("messages").insert({
       user_id: userId,
       lead_id: leadId,
       sender: "ai_agent",
       content: reply,
       handoff: true,
-    });
-    await supabaseAdmin
+      session_id: sessionId,
+    } as never);
+    await db
       .from("whatsapp_leads")
-      .update({ ai_summary: reply, status: "needs_human", ai_paused: true, intent: "speak_to_human" } as never)
+      .update({
+        status: "needs_human",
+        ai_paused: true,
+        intent: "speak_to_human",
+        ai_summary: reply,
+      } as never)
       .eq("id", leadId);
-    const menuAlert = await alertTeam({
-      name,
+    const alert = await sendTelegramAlert({
+      name: leadName,
       phone,
-      content,
-      mediaUrl,
-      reason: "Customer chose [3] Speak to Human",
+      reason: "Customer requested a human",
       leadId,
+      history: [...history, { sender: "ai_agent", content: reply }],
+      mediaUrl,
+      closed: false,
     });
-    return json({ ok: true, lead_id: leadId, reply, needs_human: true, telegram_alert: menuAlert });
+    return json({ ok: true, lead_id: leadId, reply, needs_human: true, telegram_alert: alert });
   }
 
-  if (option === 1 || option === 2) {
-    await supabaseAdmin
+  if (isPositiveClosure(content)) {
+    const reply = "Thanks for contacting Virtual Car Hire. Your conversation is now closed.";
+    await db.from("messages").insert({
+      user_id: userId,
+      lead_id: leadId,
+      sender: "ai_agent",
+      content: reply,
+      session_id: sessionId,
+    } as never);
+    const finalHistory = [...history, { sender: "ai_agent", content: reply }];
+    await db
       .from("whatsapp_leads")
-      .update({ intent: option === 1 ? "rent_a_car" : "report_accident" } as never)
+      .update({
+        status: "closed",
+        ai_paused: true,
+        closed_at: new Date().toISOString(),
+        ai_summary: reply,
+        last_message_at: new Date().toISOString(),
+      } as never)
       .eq("id", leadId);
+    const alert = await sendTelegramAlert({
+      name: leadName,
+      phone,
+      reason: "Customer confirmed closure",
+      leadId,
+      history: finalHistory,
+      mediaUrl,
+      closed: true,
+    });
+    return json({
+      ok: true,
+      lead_id: leadId,
+      reply,
+      closed: true,
+      needs_human: false,
+      telegram_alert: alert,
+    });
   }
 
-  const latest =
-    option === 1
-      ? `${content}\n(Menu selection: [1] Rent a Car — help them with availability and pricing next steps.)`
-      : option === 2
-        ? `${content}\n(Menu selection: [2] Report an Accident — gather registration, date, location and what happened.)`
-        : content;
-
-  const ai = await generateReply((history ?? []) as Turn[], latest, Boolean(mediaUrl));
-
-
-  await supabaseAdmin.from("messages").insert({
+  const { data: fleet } = await db
+    .from("vehicles")
+    .select("reg, make, model, year, fuel_type, status, next_mot_date, pco_expiry_date");
+  const ai = await generateReply(
+    history,
+    content,
+    Boolean(mediaUrl),
+    (fleet ?? []) as FleetVehicle[],
+  );
+  const needsHuman = Boolean(ai.needs_human);
+  const finalReply =
+    needsHuman && !ai.reply ? "I’m connecting you with a member of our team now." : ai.reply;
+  await db.from("messages").insert({
     user_id: userId,
     lead_id: leadId,
     sender: "ai_agent",
-    content: ai.reply,
-    handoff: Boolean(ai.needs_human),
-  });
-
-  await supabaseAdmin
+    content: finalReply,
+    handoff: needsHuman,
+    session_id: sessionId,
+  } as never);
+  await db
     .from("whatsapp_leads")
     .update({
-      ai_summary: ai.reply,
-      ...(ai.needs_human ? { status: "needs_human" } : {}),
-    })
+      ai_summary: finalReply,
+      ...(needsHuman ? { status: "needs_human", ai_paused: true } : {}),
+      last_message_at: new Date().toISOString(),
+    } as never)
     .eq("id", leadId);
 
   let alert: { sent: boolean; reason?: string } = { sent: false, reason: "not_needed" };
-  if (ai.needs_human) {
-    alert = await alertTeam({
-      name,
+  if (needsHuman) {
+    alert = await sendTelegramAlert({
+      name: leadName,
       phone,
-      content,
-      mediaUrl,
-      reason: ai.reason || "Customer requested a human",
+      reason: ai.reason || "AI trouble or customer needs help",
       leadId,
+      history: [...history, { sender: "ai_agent", content: finalReply }],
+      mediaUrl,
+      closed: false,
     });
   }
-
   return json({
     ok: true,
     lead_id: leadId,
-    reply: ai.reply,
-    needs_human: Boolean(ai.needs_human),
+    reply: finalReply,
+    needs_human: needsHuman,
+    ai_paused: needsHuman,
     telegram_alert: alert,
   });
 }
