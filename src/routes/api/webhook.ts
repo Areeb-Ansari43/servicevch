@@ -320,7 +320,20 @@ export const Route = createFileRoute("/api/webhook")({
           headers = headerSnapshot(request);
           rawBody = await request.text();
 
-          if (!verifyWebhookApiKey(request) || !(await verifyWebhookSecret(request, rawBody))) {
+          const apiKeyConfigured = Boolean(getRuntimeEnv("OPENWA_API_KEY"));
+          const webhookSecretConfigured = Boolean(getRuntimeEnv("OPENWA_WEBHOOK_SECRET"));
+          const apiKeyAccepted = verifyWebhookApiKey(request);
+          const signatureAccepted = await verifyWebhookSecret(request, rawBody);
+          console.info("[openwa-webhook] authentication check", {
+            requestId,
+            apiKeyConfigured,
+            apiKeyAccepted,
+            webhookSecretConfigured,
+            signatureAccepted,
+            hasApiKeyHeader: Boolean(request.headers.get("x-api-key") || request.headers.get("authorization")),
+            hasSignatureHeader: Boolean(request.headers.get("x-openwa-signature") || request.headers.get("x-webhook-signature")),
+          });
+          if (!apiKeyAccepted && !signatureAccepted) {
             await requestLog({
               headers,
               requestId,
