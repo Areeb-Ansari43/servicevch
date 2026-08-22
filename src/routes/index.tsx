@@ -178,6 +178,29 @@ function serviceStyle(type: string) {
   return { cls: "border-slate-500/30 bg-slate-500/10 text-slate-300", I: Icon.Info };
 }
 
+function DarkSelect({ value, onChange, options, placeholder, className = inputCls }: { value: string; onChange: (value: string) => void; options: { value: string; label: string }[]; placeholder?: string; className?: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent) => { if (!ref.current?.contains(event.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+  const selected = options.find((option) => option.value === value);
+  return (
+    <div ref={ref} className="relative">
+      <button type="button" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((current) => !current)} className={`${className} flex items-center justify-between text-left`}>
+        <span className={selected ? "text-white" : "text-[#9aa5b8]"}>{selected?.label ?? placeholder ?? "Choose…"}</span>
+        <span className="ml-3 text-[#cbd5e1]">▾</span>
+      </button>
+      {open && <div role="listbox" className="absolute left-0 right-0 z-[80] mt-1 max-h-64 overflow-y-auto rounded-lg border p-1 shadow-2xl" style={{ borderColor: T.border, background: "#1e222b" }}>
+        {options.map((option) => <button key={option.value} type="button" role="option" aria-selected={option.value === value} onClick={() => { onChange(option.value); setOpen(false); }} className={`block w-full rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-[#ff6a00] hover:text-white ${option.value === value ? "bg-[#ff6a00]/20 text-white" : "text-[#eef2f8]"}`}>{option.label}</button>)}
+      </div>}
+    </div>
+  );
+}
+
 function ServiceTypePicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const [open, setOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -806,17 +829,12 @@ function VehiclesList({
             style={{ borderColor: T.border, background: T.panel }}
           />
         </div>
-        <select
+        <DarkSelect
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-lg border px-3 py-2.5 text-sm text-white focus:border-[#ff6a00] focus:outline-none focus:ring-2 focus:ring-[#ff6a00]/30"
-          style={{ borderColor: T.border, background: T.panel }}
-        >
-          <option value="all">All Statuses</option>
-          <option value="Active">Available</option>
-          <option value="In Service">In Service</option>
-          <option value="Off Road">Off Road</option>
-        </select>
+          onChange={setStatusFilter}
+          options={[{ value: "all", label: "All Statuses" }, { value: "Active", label: "Available" }, { value: "In Service", label: "In Service" }, { value: "Off Road", label: "Off Road" }]}
+          className="min-w-[170px] rounded-lg border px-3 py-2.5 text-sm text-white focus:border-[#ff6a00] focus:outline-none focus:ring-2 focus:ring-[#ff6a00]/30"
+        />
       </div>
 
       {filtered.length === 0 ? (
@@ -955,18 +973,14 @@ function AddVehicle({
       <Grid2>
         <Field label="Year"><input type="number" value={v.year} onChange={(e) => setV({ ...v, year: +e.target.value })} className={inputCls} /></Field>
         <Field label="Fuel Type">
-          <select value={v.fuel_type} onChange={(e) => setV({ ...v, fuel_type: e.target.value as Vehicle["fuel_type"] })} className={inputCls}>
-            <option>Petrol</option><option>Diesel</option><option>Hybrid</option><option>Electric</option>
-          </select>
+          <DarkSelect value={v.fuel_type} onChange={(value) => setV({ ...v, fuel_type: value as Vehicle["fuel_type"] })} options={["Petrol", "Diesel", "Hybrid", "Electric"].map((value) => ({ value, label: value }))} />
         </Field>
       </Grid2>
 
       <Grid2>
         <Field label="Current Mileage"><input type="number" inputMode="numeric" value={mileageStr} onChange={(e) => setMileageStr(e.target.value.replace(/^0+(?=\d)/, ""))} placeholder="0" className={inputCls} /></Field>
         <Field label="Status">
-          <select value={v.status} onChange={(e) => setV({ ...v, status: e.target.value as Vehicle["status"] })} className={inputCls}>
-            <option>Active</option><option>In Service</option><option>Off Road</option>
-          </select>
+          <DarkSelect value={v.status} onChange={(value) => setV({ ...v, status: value as Vehicle["status"] })} options={["Active", "In Service", "Off Road"].map((value) => ({ value, label: value }))} />
         </Field>
       </Grid2>
 
@@ -1028,17 +1042,13 @@ export function EditVehicleModal({ vehicle, onClose, onSave }: { vehicle: Vehicl
           <Grid2>
             <Field label="Year"><input type="number" value={v.year} onChange={(e) => setV({ ...v, year: +e.target.value })} className={inputCls} /></Field>
             <Field label="Fuel Type">
-              <select value={v.fuel_type} onChange={(e) => setV({ ...v, fuel_type: e.target.value as Vehicle["fuel_type"] })} className={inputCls}>
-                <option>Petrol</option><option>Diesel</option><option>Hybrid</option><option>Electric</option>
-              </select>
+              <DarkSelect value={v.fuel_type} onChange={(value) => setV({ ...v, fuel_type: value as Vehicle["fuel_type"] })} options={["Petrol", "Diesel", "Hybrid", "Electric"].map((value) => ({ value, label: value }))} />
             </Field>
           </Grid2>
           <Grid2>
             <Field label="Current Mileage"><input type="number" value={v.current_mileage} onChange={(e) => setV({ ...v, current_mileage: +e.target.value })} className={inputCls} /></Field>
             <Field label="Status">
-              <select value={v.status} onChange={(e) => setV({ ...v, status: e.target.value as Vehicle["status"] })} className={inputCls}>
-                <option>Active</option><option>In Service</option><option>Off Road</option>
-              </select>
+              <DarkSelect value={v.status} onChange={(value) => setV({ ...v, status: value as Vehicle["status"] })} options={["Active", "In Service", "Off Road"].map((value) => ({ value, label: value }))} />
             </Field>
           </Grid2>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -1345,10 +1355,7 @@ function DriversView({ vehicles, drivers, data, toast }: { vehicles: Vehicle[]; 
           <Field label="Full name"><input value={name} onChange={(event) => setName(event.target.value)} className={inputCls} placeholder="Areeb Ansari" /></Field>
           <Field label="Client phone number"><input value={phone} onChange={(event) => setPhone(event.target.value)} className={inputCls} placeholder="+44 7721 502779" /></Field>
           <Field label="Linked vehicle">
-            <select value={vehicleId} onChange={(event) => setVehicleId(event.target.value)} className={inputCls}>
-              <option value="">Choose a vehicle…</option>
-              {vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.registration} — {vehicle.make} {vehicle.model}</option>)}
-            </select>
+            <DarkSelect value={vehicleId} onChange={setVehicleId} placeholder="Choose a vehicle…" options={vehicles.map((vehicle) => ({ value: vehicle.id, label: `${vehicle.registration} — ${vehicle.make} ${vehicle.model}` }))} />
           </Field>
         </div>
         <div className="mt-4 flex justify-end"><button disabled={saving} className="rounded-lg bg-[#ff6a00] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Saving…" : "Save Driver"}</button></div>
