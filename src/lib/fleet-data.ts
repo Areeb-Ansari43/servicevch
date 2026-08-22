@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { getNextMotDate, getPcoExpiryDate } from "@/lib/vehicle-date-fields";
 
 export type Vehicle = {
   id: string;
@@ -67,8 +68,8 @@ const vFromRow = (r: any): Vehicle => ({
   current_mileage: r.current_mileage ?? 0,
   status: statusFromDb(r.status ?? "available"),
   next_service_date: r.next_service_date ?? "",
-  next_mot_date: r.next_mot_date ?? "",
-  insurance_expiry: r.pco_expiry_date ?? "",
+  next_mot_date: getNextMotDate(r),
+  insurance_expiry: getPcoExpiryDate(r),
   notes: r.notes ?? "",
 });
 
@@ -136,7 +137,39 @@ export function useFleetData() {
   }, []);
 
   useEffect(() => {
-    refresh();
+    void refresh();
+
+    const channel = supabase
+      .channel("fleet-data-sync")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "vehicles" },
+        () => void refresh(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "service_records" },
+        () => void refresh(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "driver_tracks" },
+        () => void refresh(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "mileage_logs" },
+        () => void refresh(),
+      )
+      .subscribe((status) => {
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          console.warn(`[FleetData] Realtime sync status: ${status}`);
+        }
+      });
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
   }, [refresh]);
 
   const saveVehicle = useCallback(async (v: Vehicle, isNew: boolean) => {

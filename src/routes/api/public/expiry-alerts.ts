@@ -1,5 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { getNextMotDate, getPcoExpiryDate } from "@/lib/vehicle-date-fields";
+import { getRuntimeEnv } from "@/integrations/supabase/config";
+
 const ALERT_TO = "admin@fa-ibi.co.uk";
 // Until fa-ibi.co.uk is verified in Resend, send from the shared verified sender.
 const ALERT_FROM = "Virtual Car Hire <onboarding@resend.dev>";
@@ -14,7 +17,7 @@ export const Route = createFileRoute("/api/public/expiry-alerts")({
 });
 
 async function runExpiryScan() {
-  const resendKey = process.env.RESEND_API_KEY;
+  const resendKey = getRuntimeEnv("RESEND_API_KEY");
   if (!resendKey) {
     return new Response(JSON.stringify({ ok: false, error: "Email not configured: RESEND_API_KEY missing" }), { status: 500 });
   }
@@ -22,7 +25,7 @@ async function runExpiryScan() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data: vehicles, error } = await supabaseAdmin
     .from("vehicles")
-    .select("reg, make, model, next_mot_date, pco_expiry_date");
+    .select("*");
   if (error) return new Response(JSON.stringify({ ok: false, error: error.message }), { status: 500 });
 
   const now = Date.now();
@@ -39,8 +42,8 @@ async function runExpiryScan() {
         items.push({ reg: v.reg, make: v.make, model: v.model, type, date, days, expired: days <= 0 });
       }
     };
-    check("MOT", v.next_mot_date, 7);
-    check("PCO License", v.pco_expiry_date, 10);
+    check("MOT", getNextMotDate(v), 7);
+    check("PCO License", getPcoExpiryDate(v), 10);
   }
 
   if (items.length === 0) {
@@ -105,7 +108,7 @@ async function runExpiryScan() {
       ? `⚠️ Fleet expiry — ${expiredItems.length} expired, ${reminderItems.length} upcoming`
       : `Fleet expiry reminder — ${reminderItems.length} upcoming`;
 
-  const lovableKey = process.env.LOVABLE_API_KEY;
+  const lovableKey = getRuntimeEnv("LOVABLE_API_KEY");
   if (!lovableKey) {
     return new Response(JSON.stringify({ ok: false, error: "Email not configured: LOVABLE_API_KEY missing" }), { status: 500 });
   }

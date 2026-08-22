@@ -41,7 +41,36 @@ export function useLeadsData() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    void refresh();
+
+    const channel = supabase
+      .channel("crm-data-sync")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "whatsapp_leads" },
+        () => void refresh(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "accident_cases" },
+        () => void refresh(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "messages" },
+        () => void refresh(),
+      )
+      .subscribe((status) => {
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          console.warn(`[LeadsData] Realtime sync status: ${status}`);
+        }
+      });
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [refresh]);
 
   const setLeadStatus = useCallback(async (id: string, status: string) => {
     await supabase.from("whatsapp_leads").update({ status }).eq("id", id);
