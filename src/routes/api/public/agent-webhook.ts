@@ -576,7 +576,9 @@ export async function handleAgentWebhookRequest(request: Request) {
     .from("vehicles")
     .select("reg, make, model, year, fuel_type, status, next_mot_date, pco_expiry_date");
 
-  if ((isNewLead || closed) && !isMenuReset(content)) {
+  const rawOption = parseMenuOption(content);
+
+  if ((isNewLead || closed) && !isMenuReset(content) && !rawOption) {
     const reply = WELCOME_MENU;
     const outbound = await sendWelcomeMenu(chatId ?? phone, openwaSessionId ?? undefined);
     if (outbound.sent) {
@@ -636,7 +638,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     aiPaused = false;
   }
 
-  const option = parseMenuOption(content) ??
+  const option = rawOption ??
     (!leadIntent && isAccidentRequest(content) ? 2 : !leadIntent && isCarRequest(content) ? 1 : null);
 
   if (!option && leadIntent === "book_car" && lastAgentMessage.toLowerCase().includes("full name") && isLikelyFullName(content)) {
