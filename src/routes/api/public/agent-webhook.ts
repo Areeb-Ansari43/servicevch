@@ -7,7 +7,7 @@ import { sendOpenWaText } from "@/lib/openwa.server";
 const CRM_BASE = "https://servicevch.pages.dev";
 const VCH_WEBSITE = "https://virtualcarhire.pages.dev/our-fleet";
 const WELCOME_MENU =
-  "Virtual Car Hire\n" +
+  "Hello, and welcome to Virtual Car Hire\n" +
   "London's number one PCO car hire company with 4.8 stars across Google and Trustpilot.\n\n" +
   "How can we assist you today? Please reply with the number corresponding to your choice:\n" +
   "1. Enquire about a car\n" +
@@ -185,9 +185,27 @@ function formatCustomerFleet(fleet: FleetVehicle[]): string {
   const lines = available.map((vehicle, index) => {
     const catalog = websiteMatch(vehicle);
     const price = catalog?.price ?? "Price to confirm";
-    return `${index + 1}. ${vehicle.make} ${vehicle.model}${vehicle.year ? ` (${vehicle.year})` : ""} — ${catalog?.fuel ?? vehicle.fuel_type ?? "PCO-ready"} — ${price}`;
+    return `${index + 1}. ${vehicle.make} ${vehicle.model}${vehicle.year ? ` (${vehicle.year})` : ""} — ${catalog?.fuel ?? fuelCategory(vehicle.fuel_type)} — ${price}`;
   });
-  return `Thank you for your interest in our PCO fleet. Here are all vehicles currently marked available:\n\n${lines.join("\n")}\n\n${STANDARD_TERMS}\n\nAre you fully aware of and happy with these contract length and mileage details? Please reply Yes or No.\n\nPrices shown from ${VCH_WEBSITE}; vehicles without a published website rate are marked Price to confirm.`;
+  return `Thank you for your interest in our PCO fleet. Here are all vehicles currently marked available:\n\n${lines.join("\n")}\n\nPlease tell me which vehicle you would like to go with, and I will provide its complete contract details.\n\nPrices shown from ${VCH_WEBSITE}; vehicles without a published website rate are marked Price to confirm.`;
+}
+
+function findSelectedVehicle(text: string, fleet: FleetVehicle[]): FleetVehicle | undefined {
+  const value = text.toLowerCase();
+  const available = fleet.filter(isAvailable);
+  return available.find((vehicle) => {
+    const make = vehicle.make.toLowerCase();
+    const model = vehicle.model.toLowerCase();
+    const reg = vehicle.reg.toLowerCase();
+    return value.includes(reg) || (value.includes(make) && value.includes(model)) ||
+      value.includes(model) || (value.includes(make) && /\b(?:300|350|220)\b/.test(value) && model.includes(value.match(/\b(?:300|350|220)\b/)?.[0] ?? ""));
+  });
+}
+
+function formatVehicleDetails(vehicle: FleetVehicle): string {
+  const catalog = websiteMatch(vehicle);
+  const price = catalog?.price ?? "Price to confirm";
+  return `Thank you for choosing the ${vehicle.make} ${vehicle.model}.\n\nVehicle: ${vehicle.make} ${vehicle.model}${vehicle.year ? ` (${vehicle.year})` : ""}\nFuel category: ${catalog?.fuel ?? fuelCategory(vehicle.fuel_type)}\nContract length: Minimum 4-week flexible term\nMileage allowance: 1,000 miles per month (standard plan)\nWeekly rate: ${price}\nIncluded: Servicing, maintenance and roadside breakdown cover\n\nAre you fully aware of and happy with these contract length and mileage details? Please reply Yes or No.`;
 }
 
 function formatFleet(fleet: FleetVehicle[]): string {
@@ -220,9 +238,8 @@ async function generateReply(
     "Reply naturally and briefly in UK English, maximum 4 short sentences. Use £ for prices. " +
     "Use only the supplied live fleet data: never invent availability, prices, dates, MOT or PCO information. " +
     "Treat only vehicles marked available/active/in stock as available; rented, assigned, in-service and off-road vehicles are unavailable. " +
-    "If the customer asks for a car, wants to hire/rent, asks what is available, or uses any natural wording with the same meaning, treat it as a car enquiry and show all currently available vehicles from the supplied fleet, grouped clearly under Electric, Plug-in-Hybrid, Petrol where possible. If the requested car is unavailable, explicitly say so and suggest alternatives under exactly these headings: Electric, Plug-in-Hybrid, Petrol. " +
+    "If the customer asks for a car, wants to hire/rent, asks what is available, or uses any natural wording with the same meaning, treat it as a car enquiry and show all currently available vehicles from the supplied fleet, grouped clearly under Electric, Plug-in-Hybrid, Petrol where possible. If the conversation already contains the complete available-fleet list and the customer names a vehicle, respond with that vehicle's complete contract details: contract length, mileage allowance, weekly rate, and inclusions, then ask for Yes or No confirmation. If the requested car is unavailable, explicitly say so and suggest alternatives under exactly these headings: Electric, Plug-in-Hybrid, Petrol. Do not repeat the full fleet list when the customer has selected a vehicle. " +
     "If you cannot safely answer, the AI service fails, or you become stuck, set needs_human true; otherwise keep needs_human false. For an accident report, gather the details for the CRM accident workflow instead of handing off immediately. " +
-    "At the end of a standard interaction, ask exactly: Is that all for today? " +
     'Respond ONLY as JSON: {"reply": string, "needs_human": boolean, "reason": string, "asks_closure": boolean}. ' +
     "Set asks_closure true when the reply contains that exact question.\n\n" +
     formatFleet(fleet);
@@ -564,6 +581,20 @@ export async function handleAgentWebhookRequest(request: Request) {
     await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
     const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
     return json({ ok: true, lead_id: leadId, reply, outbound, needs_human: !outbound.sent });
+  }
+
+  if (!option && leadIntent === "book_car" && findSelectedVehicle(content, (fleet ?? []) as FleetVehicle[]) && /(which vehicle|which car|available|fleet|vehicles currently marked)/i.test(lastAgentMessage)) {
+    const selected = findSelectedVehicle(content, (fleet ?? []) as FleetVehicle[]);
+    if (selected) {
+      const reply = formatVehicleDetails(selected);
+      const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
+      if (outbound.sent) {
+        await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
+        await db.from("whatsapp_leads").update({ ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+      }
+      const alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `OpenWA reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
+      return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, needs_human: !outbound.sent, telegram_alert: alert });
+    }
   }
 
   if (!option && leadIntent === "report_accident" && lastAgentMessage.toLowerCase().includes("full name") && isLikelyFullName(content)) {
