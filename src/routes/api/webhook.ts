@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { getRuntimeEnv } from "@/integrations/supabase/config";
 import { handleAgentWebhookRequest } from "./public/agent-webhook";
 
 type JsonRecord = Record<string, unknown>;
@@ -44,6 +45,15 @@ function phoneFrom(value: unknown): string | undefined {
   return cleaned.length >= 3 ? cleaned : undefined;
 }
 
+function describeError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
 function headerSnapshot(request: Request): JsonRecord {
   const safe: JsonRecord = {};
   request.headers.forEach((value, key) => {
@@ -64,7 +74,7 @@ function constantTimeEqual(left: string, right: string): boolean {
 }
 
 async function verifyWebhookSecret(request: Request, rawBody: string): Promise<boolean> {
-  const expectedSecret = process.env["OPENWA_WEBHOOK_SECRET"];
+  const expectedSecret = getRuntimeEnv("OPENWA_WEBHOOK_SECRET");
   if (!expectedSecret) return true;
   const provided =
     request.headers.get("x-openwa-signature") ?? request.headers.get("x-webhook-signature");
@@ -85,7 +95,7 @@ async function verifyWebhookSecret(request: Request, rawBody: string): Promise<b
 }
 
 function verifyWebhookApiKey(request: Request): boolean {
-  const expectedKey = process.env["OPENWA_API_KEY"];
+  const expectedKey = getRuntimeEnv("OPENWA_API_KEY");
   if (!expectedKey) return true;
   const apiKey = request.headers.get("x-api-key");
   const authorization = request.headers.get("authorization");
@@ -95,10 +105,23 @@ function verifyWebhookApiKey(request: Request): boolean {
   );
 }
 
-function unwrapPayload(raw: JsonRecord): { eventName: string; message: JsonRecord } {
-  const eventName = stringValue(raw.event, raw.type, raw.eventName, raw.name) ?? "message.received";
+function unwrapPayload(raw: JsonRecord): {
+  eventName: string;
+  message: JsonRecord;
+  session?: string;
+} {
   const data = isRecord(raw.data) ? raw.data : undefined;
   const payload = isRecord(raw.payload) ? raw.payload : undefined;
+  const eventName =
+    stringValue(
+      raw.event,
+      raw.type,
+      raw.eventName,
+      data?.event,
+      data?.type,
+      payload?.event,
+      payload?.type,
+    ) ?? "message.received";
   const message = isRecord(raw.message)
     ? raw.message
     : isRecord(data?.message)
@@ -106,12 +129,23 @@ function unwrapPayload(raw: JsonRecord): { eventName: string; message: JsonRecor
       : isRecord(payload?.message)
         ? payload.message
         : (data ?? payload ?? raw);
-  return { eventName, message };
+  const session = stringValue(
+    raw.session,
+    raw.sessionId,
+    raw.session_id,
+    data?.session,
+    data?.sessionId,
+    data?.session_id,
+    payload?.session,
+    payload?.sessionId,
+    payload?.session_id,
+  );
+  return { eventName, message, ...(session ? { session } : {}) };
 }
 
 function normalizeInbound(raw: JsonRecord): NormalizedMessage | null {
-  const { eventName, message } = unwrapPayload(raw);
-  const receivedFlag = raw.message && isRecord(raw.message) ? raw.message.received : undefined;
+  const { eventName, message, session } = unwrapPayload(raw);
+  const receivedFlag = recordValue(message, "received");
   const isInbound =
     receivedFlag === true ||
     /message[._]received/i.test(eventName) ||
@@ -153,6 +187,7 @@ function normalizeInbound(raw: JsonRecord): NormalizedMessage | null {
     recordValue(raw, "mediaUrl", "media_url"),
   );
   const sessionId = stringValue(
+    session,
     recordValue(raw, "sessionId", "session_id"),
     recordValue(message, "sessionId", "session_id"),
   );
@@ -178,30 +213,65 @@ async function logEvent(params: {
   receivedAt: string;
   method?: string;
   url?: string;
-}) {
+}): Promise<boolean> {
+  const payloadText = params.payloadText?.slice(0, MAX_TEXT_BYTES);
+  const serialized = params.payload ? JSON.stringify(params.payload) : (payloadText ?? "");
+  const payload =
+    serialized.length <= MAX_LOG_BYTES ? (params.payload ?? null) : { truncated: true };
+  const baseRow = {
+    source: "openwa",
+    request_id: params.requestId,
+    event_name: params.eventName ?? null,
+    headers: params.headers,
+    payload,
+    payload_text: payloadText ?? null,
+    normalized: params.normalized ?? null,
+    status: params.status,
+    error: params.error ?? null,
+    received_at: params.receivedAt,
+    processed_at: new Date().toISOString(),
+  };
+  const rowWithRequestMetadata = {
+    ...baseRow,
+    method: params.method ?? "POST",
+    url: params.url ?? null,
+  };
+
   try {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const payloadText = params.payloadText?.slice(0, MAX_TEXT_BYTES);
-    const serialized = params.payload ? JSON.stringify(params.payload) : (payloadText ?? "");
-    const payload =
-      serialized.length <= MAX_LOG_BYTES ? (params.payload ?? null) : { truncated: true };
-    await supabaseAdmin.from("webhook_events").insert({
-      source: "openwa",
-      request_id: params.requestId,
-      method: params.method ?? "POST",
-      url: params.url ?? null,
-      event_name: params.eventName ?? null,
-      headers: params.headers,
-      payload,
-      payload_text: payloadText ?? null,
-      normalized: params.normalized ?? null,
+    const firstAttempt = await supabaseAdmin
+      .from("webhook_events")
+      .insert(rowWithRequestMetadata as never);
+    if (!firstAttempt.error) return true;
+
+    const firstError = describeError(firstAttempt.error);
+    console.error("[openwa-webhook] diagnostic insert failed", {
+      requestId: params.requestId,
       status: params.status,
-      error: params.error ?? null,
-      received_at: params.receivedAt,
-      processed_at: new Date().toISOString(),
-    } as never);
+      error: firstError,
+    });
+
+    // Older deployments may have the original table without method/url. Retry
+    // with only the original columns so the raw event is still persisted.
+    const fallbackAttempt = await supabaseAdmin.from("webhook_events").insert(baseRow as never);
+    if (!fallbackAttempt.error) {
+      console.warn("[openwa-webhook] diagnostic insert succeeded using legacy schema", {
+        requestId: params.requestId,
+      });
+      return true;
+    }
+
+    console.error("[openwa-webhook] diagnostic fallback insert failed", {
+      requestId: params.requestId,
+      error: describeError(fallbackAttempt.error),
+    });
+    return false;
   } catch (error) {
-    console.error("[openwa-webhook] diagnostic logging failed", error);
+    console.error("[openwa-webhook] diagnostic logging failed", {
+      requestId: params.requestId,
+      error: describeError(error),
+    });
+    return false;
   }
 }
 

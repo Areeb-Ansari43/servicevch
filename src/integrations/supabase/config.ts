@@ -13,6 +13,16 @@ function firstNonEmpty(...values: unknown[]): string | undefined {
     ?.trim();
 }
 
+export function getRuntimeEnv(name: string): string | undefined {
+  const cloudflareEnv = (
+    globalThis as typeof globalThis & {
+      __env__?: Record<string, unknown>;
+    }
+  ).__env__;
+  const processEnv = typeof process !== "undefined" ? process.env : undefined;
+  return firstNonEmpty(cloudflareEnv?.[name], processEnv?.[name]);
+}
+
 export function resolveSupabaseUrl(values: { projectId?: unknown; url?: unknown }): string {
   const projectId = firstNonEmpty(values.projectId) ?? CANONICAL_PROJECT_ID;
   const configuredUrl = firstNonEmpty(values.url);
