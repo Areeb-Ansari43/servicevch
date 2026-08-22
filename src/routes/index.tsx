@@ -1575,6 +1575,20 @@ function displayLeadPhone(phone: string | null | undefined): string {
   return phone.replace(/@c\.us$/i, "");
 }
 
+function customerTypeLabel(value: string | null | undefined): string {
+  if (value === "existing_customer") return "Existing customer";
+  if (value === "needs_human") return "Needs human handoff";
+  if (value === "fake") return "Fake";
+  return "New customer";
+}
+
+function customerTypePill(value: string | null | undefined): string {
+  if (value === "existing_customer") return "border-sky-400/30 bg-sky-400/10 text-sky-200";
+  if (value === "needs_human") return "border-amber-400/30 bg-amber-400/10 text-amber-200";
+  if (value === "fake") return "border-red-400/30 bg-red-400/10 text-red-200";
+  return "border-emerald-400/30 bg-emerald-400/10 text-emerald-200";
+}
+
 function statusPill(status: string) {
   const s = status.toLowerCase();
   if (s === "new" || s === "open") return "border-emerald-400/30 bg-emerald-400/10 text-emerald-300";
@@ -1638,6 +1652,7 @@ function WhatsAppLeadsView({ toast }: { toast: (m: string, t?: Toast["type"]) =>
                   <div className="truncate text-sm font-semibold">{l.contact_name}</div>
                   <div className="truncate text-xs text-[#9aa5b8]">{displayLeadPhone(l.phone)} · {new Date(l.created_at).toLocaleString("en-GB")}</div>
                 </div>
+                <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${customerTypePill(l.customer_type)}`}>{customerTypeLabel(l.customer_type)}</span>
                 {l.ai_paused && (
                   <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-[11px] font-semibold text-amber-200">Human handling</span>
                 )}

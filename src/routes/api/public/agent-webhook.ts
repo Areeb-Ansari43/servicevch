@@ -54,6 +54,21 @@ type AiResult = {
   asks_closure: boolean;
 };
 
+type AccidentData = {
+  driverName?: string;
+  driverReg?: string;
+  verified?: boolean;
+  vehicleId?: string | null;
+  atFaultDriverName?: string;
+  atFaultDriverLicenseUrl?: string;
+  atFaultVehicleReg?: string;
+  incidentDate?: string;
+  incidentTime?: string;
+  location?: string;
+  description?: string;
+  evidenceUrls?: string[];
+};
+
 const bodySchema = z.object({
   phone: z.string().trim().min(3).max(40).optional(),
   chat_id: z.string().trim().min(3).max(160).optional(),
@@ -129,6 +144,82 @@ function isCarRequest(text: string): boolean {
 
 function isAccidentRequest(text: string): boolean {
   return /\b(?:accident|crash|collision|bumped|damage|damaged|smash|hit|incident)\b/i.test(text);
+}
+
+function normalizeReg(value: string): string {
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function canonicalPhoneKey(value: string | null | undefined): string | null {
+  if (!value || /@lid$/i.test(value)) return null;
+  let digits = value.replace(/@(?:c|s\.whatsapp\.net)$/i, "").replace(/\D/g, "");
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  if (digits.startsWith("0") && digits.length === 11) digits = `44${digits.slice(1)}`;
+  return digits.length >= 10 ? digits : null;
+}
+
+function extractReg(value: string): string | null {
+  const match = value.toUpperCase().match(/\b[A-Z]{1,3}\s*\d{1,4}\s*[A-Z]{1,3}\b|\b[A-Z]{2}\d{2}\s?[A-Z]{3}\b/);
+  return match ? normalizeReg(match[0]) : null;
+}
+
+function extractDate(value: string): string | null {
+  const iso = value.match(/\b(20\d{2})[-/](\d{1,2})[-/](\d{1,2})\b/);
+  if (iso) return `${iso[1]}-${iso[2].padStart(2, "0")}-${iso[3].padStart(2, "0")}`;
+  const uk = value.match(/\b(\d{1,2})[/-](\d{1,2})[/-](20\d{2})\b/);
+  return uk ? `${uk[3]}-${uk[2].padStart(2, "0")}-${uk[1].padStart(2, "0")}` : null;
+}
+
+function extractTime(value: string): string | null {
+  const match = value.match(/\b([01]?\d|2[0-3]):([0-5]\d)\s*(am|pm)?\b/i);
+  if (!match) return null;
+  let hour = Number(match[1]);
+  if (match[3]?.toLowerCase() === "pm" && hour < 12) hour += 12;
+  if (match[3]?.toLowerCase() === "am" && hour === 12) hour = 0;
+  return `${String(hour).padStart(2, "0")}:${match[2]}:00`;
+}
+
+function labeledValue(text: string, labels: string[]): string | null {
+  const escaped = labels.map((label) => label.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")).join("|");
+  const match = text.match(new RegExp(`(?:${escaped})\\s*[:=-]\\s*(.+)`, "i"));
+  return match?.[1]?.trim() || null;
+}
+
+function normalizeDriverName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function accidentMissing(data: AccidentData): string[] {
+  const missing: string[] = [];
+  if (!data.atFaultDriverName) missing.push("the other driver’s full name");
+  if (!data.atFaultDriverLicenseUrl) missing.push("a clear photo of their driving licence");
+  if (!data.atFaultVehicleReg) missing.push("their vehicle registration");
+  if (!data.incidentDate) missing.push("the date of the accident");
+  if (!data.incidentTime) missing.push("the time of the accident");
+  if (!data.location) missing.push("the place of the accident");
+  if (!data.description) missing.push("a short description of what happened");
+  if (!data.evidenceUrls?.length) missing.push("all accident photos and videos");
+  return missing;
+}
+
+function formatAccidentSummary(data: AccidentData): string {
+  return [
+    "🚨 Accident report summary",
+    "",
+    `Your driver: ${data.driverName ?? "Not supplied"}`,
+    `Your vehicle registration: ${data.driverReg ?? "Not supplied"}`,
+    "",
+    `Other driver: ${data.atFaultDriverName ?? "Not supplied"}`,
+    `Other vehicle registration: ${data.atFaultVehicleReg ?? "Not supplied"}`,
+    `Licence image: ${data.atFaultDriverLicenseUrl ? "Received" : "Missing"}`,
+    `Accident date: ${data.incidentDate ?? "Not supplied"}`,
+    `Accident time: ${data.incidentTime ?? "Not supplied"}`,
+    `Location: ${data.location ?? "Not supplied"}`,
+    `Description: ${data.description ?? "Not supplied"}`,
+    `Photos/videos: ${data.evidenceUrls?.length ? `${data.evidenceUrls.length} file(s) received` : "Missing"}`,
+    "",
+    "Is this information correct? Please reply Yes or No.",
+  ].join("\\n");
 }
 
 function isLikelyFullName(text: string): boolean {
@@ -478,11 +569,12 @@ export async function handleAgentWebhookRequest(request: Request) {
   let closed = false;
   let leadName = name;
   let leadIntent: string | null = null;
+  let customerType = "new_customer";
+  let accidentData: AccidentData = {};
   const canonicalPhone = phone && !/@lid$/i.test(phone) ? phone : null;
   if (canonicalPhone) {
-    const { data: existing } = await db
-      .from("whatsapp_leads")
-      .select("id, contact_name, ai_paused, status, closed_at, intent")
+    const { data: existing } = await (db.from("whatsapp_leads") as any)
+      .select("id, contact_name, ai_paused, status, closed_at, intent, accident_data, customer_type")
       .eq("user_id", userId)
       .eq("phone", canonicalPhone)
       .order("last_message_at", { ascending: false })
@@ -493,11 +585,29 @@ export async function handleAgentWebhookRequest(request: Request) {
     closed = Boolean(existing?.closed_at) || existing?.status === "closed";
     leadName = existing?.contact_name && existing.contact_name !== "Unknown" ? existing.contact_name : leadName;
     leadIntent = existing?.intent ?? null;
+    customerType = existing?.customer_type ?? customerType;
+    accidentData = (existing?.accident_data ?? {}) as AccidentData;
+  }
+  if (!leadId && canonicalPhone) {
+    const { data: candidates } = await (db.from("whatsapp_leads") as any)
+      .select("id, contact_name, phone, ai_paused, status, closed_at, intent, accident_data, customer_type")
+      .eq("user_id", userId)
+      .order("last_message_at", { ascending: false })
+      .limit(500);
+    const existing = (candidates ?? []).find((candidate: { phone?: string | null }) => canonicalPhoneKey(candidate.phone) === canonicalPhoneKey(canonicalPhone));
+    if (existing) {
+      leadId = existing.id;
+      aiPaused = Boolean(existing.ai_paused);
+      closed = Boolean(existing.closed_at) || existing.status === "closed";
+      leadName = existing.contact_name && existing.contact_name !== "Unknown" ? existing.contact_name : leadName;
+      leadIntent = existing.intent ?? null;
+      customerType = existing.customer_type ?? customerType;
+      accidentData = (existing.accident_data ?? {}) as AccidentData;
+    }
   }
   if (!leadId && sessionId) {
-    const { data: existing } = await db
-      .from("whatsapp_leads")
-      .select("id, contact_name, ai_paused, status, closed_at, intent")
+    const { data: existing } = await (db.from("whatsapp_leads") as any)
+      .select("id, contact_name, ai_paused, status, closed_at, intent, accident_data, customer_type")
       .eq("user_id", userId)
       .eq("session_id", sessionId)
       .order("last_message_at", { ascending: false })
@@ -508,10 +618,11 @@ export async function handleAgentWebhookRequest(request: Request) {
     closed = Boolean(existing?.closed_at) || existing?.status === "closed";
     leadName = existing?.contact_name && existing.contact_name !== "Unknown" ? existing.contact_name : leadName;
     leadIntent = existing?.intent ?? null;
+    customerType = existing?.customer_type ?? customerType;
+    accidentData = (existing?.accident_data ?? {}) as AccidentData;
   } else if (!leadId && phone) {
-    const { data: existing } = await db
-      .from("whatsapp_leads")
-      .select("id, contact_name, ai_paused, status, closed_at, intent")
+    const { data: existing } = await (db.from("whatsapp_leads") as any)
+      .select("id, contact_name, ai_paused, status, closed_at, intent, accident_data, customer_type")
       .eq("user_id", userId)
       .eq("phone", phone)
       .order("last_message_at", { ascending: false })
@@ -522,6 +633,8 @@ export async function handleAgentWebhookRequest(request: Request) {
     closed = Boolean(existing?.closed_at) || existing?.status === "closed";
     leadName = existing?.contact_name && existing.contact_name !== "Unknown" ? existing.contact_name : leadName;
     leadIntent = existing?.intent ?? null;
+    customerType = existing?.customer_type ?? customerType;
+    accidentData = (existing?.accident_data ?? {}) as AccidentData;
   }
 
   if (!leadId) {
@@ -676,7 +789,7 @@ export async function handleAgentWebhookRequest(request: Request) {
   if (option === 1 || option === 2) {
     const reply = option === 1
       ? "Car Enquiry\n\nThank you for your interest in our PCO fleet. Before we look at available vehicles, could you please tell me your full name?"
-      : "Accident Support\n\nWe are sorry to hear you've been in an accident. We are here to help guide you through the next steps safely.\n\nTo get started, please provide your full name:";
+      : "🚨 Accident Support\n\nWe are sorry to hear you've been in an accident. We are here to help guide you through the next steps safely.\n\nTo get started, please provide your full name:";
     const intent = option === 1 ? "book_car" : "report_accident";
     const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
     if (outbound.sent) {
@@ -696,10 +809,121 @@ export async function handleAgentWebhookRequest(request: Request) {
     return json({ ok: true, lead_id: leadId, reply, needs_human: !outbound.sent, ai_paused: !outbound.sent, telegram_alert: alert, outbound });
   }
 
+  if (!option && leadIntent === "report_accident") {
+    const next: AccidentData = { ...accidentData, evidenceUrls: [...(accidentData.evidenceUrls ?? [])] };
+    const lowerLast = lastAgentMessage.toLowerCase();
+
+    if (!next.driverName || !next.driverReg) {
+      const reg = extractReg(content);
+      if (reg) {
+        next.driverReg = next.driverReg ?? reg;
+        const possibleName = content.replace(reg, "").replace(/^[\\s,;:-]+|[\\s,;:-]+$/g, "").trim();
+        if (possibleName && isLikelyFullName(possibleName)) next.driverName = next.driverName ?? possibleName;
+      } else if (!next.driverName && isLikelyFullName(content)) {
+        next.driverName = content.trim();
+      }
+      if (!next.driverName || !next.driverReg) {
+        const reply = `🚨 Accident verification\\n\\nPlease send the missing detail: ${!next.driverName ? "your full name" : "your vehicle registration"}.`;
+        const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
+        if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
+        await db.from("whatsapp_leads").update({ accident_data: next, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+        const alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `OpenWA reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
+        return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, telegram_alert: alert });
+      }
+    }
+
+    if (!next.verified && next.driverName && next.driverReg) {
+      const { data: drivers } = await db
+        .from("driver_tracks")
+        .select("vehicle_id, reg, driver_name")
+        .eq("user_id", userId)
+        .eq("active", true)
+        .limit(500);
+      const driver = (drivers ?? []).find((candidate: { vehicle_id?: string | null; reg?: string | null; driver_name?: string | null }) =>
+        normalizeReg(candidate.reg ?? "") === normalizeReg(next.driverReg ?? "") &&
+        normalizeDriverName(candidate.driver_name ?? "") === normalizeDriverName(next.driverName ?? ""),
+      );
+      if (!driver) {
+        const reply = "🚨 I could not verify that driver name and registration together in our CRM. Please check the spelling and registration and send them again.";
+        const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
+        if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
+        const alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `OpenWA reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
+        return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, telegram_alert: alert });
+      }
+      next.verified = true;
+      next.vehicleId = driver.vehicle_id ?? null;
+      customerType = "existing_customer";
+      const reply = "✅ Your driver details have been verified in our CRM. Please now send the following information:\\n\\n1. The other driver’s full name and a clear picture of their driving licence\\n2. Their vehicle registration\\n3. The date and time of the accident\\n4. The place of the accident\\n5. A description of what happened\\n6. All photos and videos of the accident\\n\\nYou can send the details in separate messages. I will tell you if anything is still missing.";
+      const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
+      if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
+      await db.from("whatsapp_leads").update({ accident_data: next, customer_type: customerType, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+      const alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `OpenWA reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
+      return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, telegram_alert: alert });
+    }
+
+    const licenseUrl = labeledValue(content, ["licence", "license", "driving licence", "driving license"]) ? mediaUrl : null;
+    next.atFaultDriverLicenseUrl = next.atFaultDriverLicenseUrl ?? licenseUrl ?? undefined;
+    next.atFaultDriverName = next.atFaultDriverName ?? labeledValue(content, ["other driver", "driver name", "their name"]) ?? undefined;
+    next.atFaultVehicleReg = next.atFaultVehicleReg ?? labeledValue(content, ["their car reg", "their vehicle reg", "other car reg", "other vehicle registration"]) ?? extractReg(content) ?? undefined;
+    next.incidentDate = next.incidentDate ?? labeledValue(content, ["date", "accident date"]) ?? extractDate(content) ?? undefined;
+    next.incidentTime = next.incidentTime ?? labeledValue(content, ["time", "accident time"]) ?? extractTime(content) ?? undefined;
+    next.location = next.location ?? labeledValue(content, ["place", "location", "accident location"]) ?? undefined;
+    next.description = next.description ?? labeledValue(content, ["description", "what happened", "details"]) ?? undefined;
+    const evidenceUrls = next.evidenceUrls ?? (next.evidenceUrls = []);
+    if (mediaUrl && !evidenceUrls.includes(mediaUrl)) evidenceUrls.push(mediaUrl);
+
+    const missing = accidentMissing(next);
+    if (lowerLast.includes("is this information correct") && isTermsResponse(content)) {
+      if (/^yes[.!\\s]*$/i.test(content.trim())) {
+        const summary = formatAccidentSummary(next).replace(/\\n\\nIs this information correct\\? Please reply Yes or No\\./, "");
+        const { error: caseError } = await db.from("accident_cases").insert({
+          user_id: userId,
+          vehicle_id: next.vehicleId ?? null,
+          source_lead_id: leadId,
+          customer_phone: phone,
+          reg: next.driverReg ?? "",
+          driver_name: next.driverName ?? "",
+          at_fault_driver_name: next.atFaultDriverName,
+          at_fault_driver_license_url: next.atFaultDriverLicenseUrl,
+          at_fault_vehicle_reg: next.atFaultVehicleReg,
+          incident_date: next.incidentDate,
+          incident_time: next.incidentTime,
+          location: next.location,
+          description: next.description,
+          evidence_urls: next.evidenceUrls,
+          ai_summary: summary,
+          severity: "minor",
+          status: "open",
+        } as never);
+        if (caseError) console.error("[agent-webhook] accident case insert failed", { leadId, error: caseError.message });
+        const reply = "✅ Thank you. Your accident report has been saved and sent to our team for review. This conversation is now closed.";
+        const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
+        if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, handoff: true, session_id: sessionId });
+        await db.from("whatsapp_leads").update({ accident_data: next, customer_type: "existing_customer", status: "closed", ai_paused: true, closed_at: new Date().toISOString(), ai_summary: summary, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+        const alert = await sendTelegramAlert({ name: leadName, phone, reason: caseError ? "Accident report requires manual CRM review" : "Verified accident report confirmed by customer", leadId, history: [...history, { sender: "ai_agent", content: summary }, { sender: "ai_agent", content: reply }], mediaUrl, closed: true });
+        return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, telegram_alert: alert, accident_case_saved: !caseError });
+      }
+      const reply = "No problem. Please tell me which part is incorrect, and I will update the accident report.";
+      const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
+      if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
+      await db.from("whatsapp_leads").update({ accident_data: next, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+      return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound });
+    }
+
+    const reply = missing.length
+      ? `🚨 Accident report\\n\\nThank you. I still need ${missing.join(", ")}. Please send the missing information; you can send photos and videos as separate messages.`
+      : formatAccidentSummary(next);
+    const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
+    if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
+    await db.from("whatsapp_leads").update({ accident_data: next, customer_type: customerType, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+    const alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `OpenWA reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
+    return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, telegram_alert: alert, missing });
+  }
+
   if (!option && isTermsResponse(content) && lastAgentMessage.toLowerCase().includes("are you fully aware")) {
     const reply = "Thank you for contacting us. A team member will reply back to you within 24 hours to secure your place in this car.";
     await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, handoff: true, session_id: sessionId });
-    await db.from("whatsapp_leads").update({ status: "needs_human", ai_paused: true, intent: leadIntent ?? "book_car", ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+    await db.from("whatsapp_leads").update({ status: "needs_human", customer_type: "needs_human", ai_paused: true, intent: leadIntent ?? "book_car", ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
     const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
     const alert = await sendTelegramAlert({ name: leadName, phone, reason: outbound.sent ? "Customer confirmed vehicle terms" : `OpenWA reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
     return json({ ok: true, lead_id: leadId, reply, needs_human: true, telegram_alert: alert, outbound });
@@ -720,6 +944,7 @@ export async function handleAgentWebhookRequest(request: Request) {
       .from("whatsapp_leads")
       .update({
         status: "needs_human",
+        customer_type: "needs_human",
         ai_paused: true,
         intent: "speak_to_human",
         ai_summary: reply,
