@@ -554,7 +554,10 @@ export async function handleAgentWebhookRequest(request: Request) {
   const chatId = parsed.data.chat_id ?? null;
   const openwaSessionId = parsed.data.openwa_session_id ?? null;
   const phone = parsed.data.phone ?? null;
-  const sessionId = suppliedSessionId ?? (chatId ? `wa:${chatId}` : null);
+  // WhatsApp may omit `phone` on some events while still providing chat_id.
+  // Use the chat identifier for identity lookup, but keep it hidden from display.
+  const identityPhone = phone ?? chatId;
+  const sessionId = chatId ? `wa:${chatId}` : suppliedSessionId;
   const suppliedName = parsed.data.name?.trim() || "";
   const name = suppliedName || "Unknown";
   const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
@@ -571,7 +574,7 @@ export async function handleAgentWebhookRequest(request: Request) {
   let leadIntent: string | null = null;
   let customerType = "new_customer";
   let accidentData: AccidentData = {};
-  const canonicalPhone = phone && !/@lid$/i.test(phone) ? phone : null;
+  const canonicalPhone = identityPhone && !/@lid$/i.test(identityPhone) ? identityPhone : null;
   if (canonicalPhone) {
     const { data: existing } = await (db.from("whatsapp_leads") as any)
       .select("id, contact_name, ai_paused, status, closed_at, intent, accident_data, customer_type")
@@ -655,8 +658,9 @@ export async function handleAgentWebhookRequest(request: Request) {
       .from("whatsapp_leads")
       .update({
         ...(suppliedName && suppliedName !== "Unknown" ? { contact_name: suppliedName } : {}),
-        ...(phone ? { phone } : {}),
-        ...(chatId ? { session_id: `wa:${chatId}` } : {}),
+        ...(phone && !/@lid$/i.test(phone) ? { phone } : {}),
+        // Do not overwrite the canonical session key when OpenWA alternates
+        // between a linked ID and a resolved @c.us chat identifier.
         last_message_at: new Date().toISOString(),
         inactivity_prompted_at: null,
         inactivity_alerted_at: null,
