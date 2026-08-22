@@ -24,18 +24,27 @@ export function getRuntimeEnv(name: string): string | undefined {
 }
 
 export function resolveSupabaseUrl(values: { projectId?: unknown; url?: unknown }): string {
-  const projectId = firstNonEmpty(values.projectId) ?? CANONICAL_PROJECT_ID;
-  const configuredUrl = firstNonEmpty(values.url);
-  const expectedUrl =
-    projectId === CANONICAL_PROJECT_ID ? CANONICAL_URL : `https://${projectId}.supabase.co`;
+  const configuredProjectId = firstNonEmpty(values.projectId);
+  const configuredUrl = firstNonEmpty(values.url)?.replace(/\/$/, "");
 
-  if (configuredUrl && configuredUrl.replace(/\/$/, "") !== expectedUrl) {
-    throw new Error(
-      `Supabase project mismatch: expected ${expectedUrl}, received ${configuredUrl}`,
+  if (configuredProjectId && configuredProjectId !== CANONICAL_PROJECT_ID) {
+    console.warn(
+      `[Supabase] Ignoring mismatched project ID ${configuredProjectId}; using ${CANONICAL_PROJECT_ID}.`,
     );
   }
+  if (configuredUrl && configuredUrl !== CANONICAL_URL) {
+    console.warn(`[Supabase] Ignoring mismatched URL ${configuredUrl}; using ${CANONICAL_URL}.`);
+  }
 
-  return expectedUrl;
+  return CANONICAL_URL;
+}
+
+export function resolveSupabasePublishableKey(value: unknown): string {
+  const configuredKey = firstNonEmpty(value);
+  if (configuredKey && configuredKey !== CANONICAL_PUBLISHABLE_KEY) {
+    console.warn("[Supabase] Ignoring a non-canonical publishable key.");
+  }
+  return CANONICAL_PUBLISHABLE_KEY;
 }
 
 export const SUPABASE_PROJECT_ID = CANONICAL_PROJECT_ID;

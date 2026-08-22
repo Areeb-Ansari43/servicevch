@@ -3,7 +3,7 @@ import { createMiddleware } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./types";
-import { CANONICAL_PUBLISHABLE_KEY, getRuntimeEnv, resolveSupabaseUrl } from "./config";
+import { getRuntimeEnv, resolveSupabasePublishableKey, resolveSupabaseUrl } from "./config";
 
 function isNewSupabaseApiKey(value: string): boolean {
   return value.startsWith("sb_publishable_") || value.startsWith("sb_secret_");
@@ -38,8 +38,9 @@ export const requireSupabaseAuth = createMiddleware({ type: "function" }).server
       projectId: getRuntimeEnv("SUPABASE_PROJECT_ID"),
       url: getRuntimeEnv("SUPABASE_URL"),
     });
-    const SUPABASE_PUBLISHABLE_KEY =
-      getRuntimeEnv("SUPABASE_PUBLISHABLE_KEY") || CANONICAL_PUBLISHABLE_KEY;
+    const SUPABASE_PUBLISHABLE_KEY = resolveSupabasePublishableKey(
+      getRuntimeEnv("SUPABASE_PUBLISHABLE_KEY"),
+    );
 
     if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
       const missing = [
