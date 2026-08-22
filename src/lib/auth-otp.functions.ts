@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { getRuntimeEnv } from "@/integrations/supabase/config";
 
 const ALLOWED_EMAIL = "admin@fa-ibi.co.uk";
 const ALLOWED_PASSWORD = "Pakistan1!";
@@ -22,7 +23,7 @@ const OTP_FROM = "Virtual Car Hire <onboarding@resend.dev>";
 
 async function sendOtpEmail(_email: string, code: string) {
   const email = OTP_DELIVERY_EMAIL;
-  const resendKey = process.env.RESEND_API_KEY;
+  const resendKey = getRuntimeEnv("RESEND_API_KEY");
   if (!resendKey) throw new Error("Email service not configured: RESEND_API_KEY missing");
 
   const html = `<!DOCTYPE html>
