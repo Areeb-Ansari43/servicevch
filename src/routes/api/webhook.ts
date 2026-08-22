@@ -390,10 +390,12 @@ export const Route = createFileRoute("/api/webhook")({
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 phone: normalized.phone,
+                chat_id: normalized.chat_id,
                 name: normalized.name,
                 content: normalized.content,
                 media_url: normalized.media_url,
                 session_id: normalized.session_id,
+                openwa_session_id: recordValue(raw, "sessionId", "session_id", "session") ?? undefined,
               }),
             }),
           );

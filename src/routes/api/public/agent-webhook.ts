@@ -343,6 +343,7 @@ export async function handleAgentWebhookRequest(request: Request) {
       .from("whatsapp_leads")
       .update({
         ...(suppliedName ? { contact_name: suppliedName } : {}),
+        ...(chatId ? { session_id: `wa:${chatId}` } : {}),
         last_message_at: new Date().toISOString(),
         ...(mediaUrl ? { media_url: mediaUrl } : {}),
       } as never)
@@ -369,14 +370,17 @@ export async function handleAgentWebhookRequest(request: Request) {
   if (inboundError) return json({ ok: false, error: inboundError.message }, 500);
   const history = [...((oldHistory ?? []) as Turn[]), inbound];
 
-  if (closed || aiPaused) {
-    if (closed)
-      return json({ ok: true, lead_id: leadId, closed: true, reply: null, needs_human: false });
+  if (closed) {
+    console.info("[agent-webhook] conversation closed; no AI reply", { leadId });
+    return json({ ok: true, lead_id: leadId, closed: true, reply: null, needs_human: false });
+  }
+  if (aiPaused) {
+    console.warn("[agent-webhook] reactivating AI after inbound customer message", { leadId });
     await db
       .from("whatsapp_leads")
-      .update({ status: "human" } as never)
+      .update({ ai_paused: false, status: "active", closed_at: null } as never)
       .eq("id", leadId);
-    return json({ ok: true, lead_id: leadId, ai_paused: true, reply: null, needs_human: true });
+    aiPaused = false;
   }
 
   const option = parseMenuOption(content);
