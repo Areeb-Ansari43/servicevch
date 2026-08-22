@@ -163,10 +163,18 @@ const Icon = {
 
 function serviceStyle(type: string) {
   const t = type.toLowerCase();
-  if (t.includes("full service") || t.includes("interim")) return { cls: "border-blue-500/30 bg-blue-500/10 text-blue-300", I: Icon.Wrench };
-  if (t.includes("oil")) return { cls: "border-orange-500/30 bg-orange-500/10 text-orange-300", I: Icon.Gauge };
   if (t.includes("mot")) return { cls: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300", I: Icon.Calendar };
-  if (t.includes("tyre") || t.includes("brake")) return { cls: "border-amber-500/30 bg-amber-500/10 text-amber-300", I: Icon.Disc };
+  if (t.includes("full service")) return { cls: "border-blue-500/30 bg-blue-500/10 text-blue-300", I: Icon.Wrench };
+  if (t.includes("interim")) return { cls: "border-cyan-500/30 bg-cyan-500/10 text-cyan-300", I: Icon.Wrench };
+  if (t.includes("oil")) return { cls: "border-orange-500/30 bg-orange-500/10 text-orange-300", I: Icon.Gauge };
+  if (t.includes("tyre")) return { cls: "border-amber-500/30 bg-amber-500/10 text-amber-300", I: Icon.Disc };
+  if (t.includes("brake")) return { cls: "border-red-500/30 bg-red-500/10 text-red-300", I: Icon.Alert };
+  if (t.includes("battery")) return { cls: "border-violet-500/30 bg-violet-500/10 text-violet-300", I: Icon.Gauge };
+  if (t.includes("filter")) return { cls: "border-lime-500/30 bg-lime-500/10 text-lime-300", I: Icon.Disc };
+  if (t.includes("electrical")) return { cls: "border-yellow-500/30 bg-yellow-500/10 text-yellow-300", I: Icon.Alert };
+  if (t.includes("diagnostic")) return { cls: "border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-300", I: Icon.Info };
+  if (t.includes("bodywork")) return { cls: "border-pink-500/30 bg-pink-500/10 text-pink-300", I: Icon.Car };
+  if (t.includes("coolant") || t.includes("transmission")) return { cls: "border-sky-500/30 bg-sky-500/10 text-sky-300", I: Icon.Wrench };
   return { cls: "border-slate-500/30 bg-slate-500/10 text-slate-300", I: Icon.Info };
 }
 
@@ -277,6 +285,7 @@ export function FleetShell({ view }: { view: View }) {
           ) : view === "services" ? (
             <ServicesList
               services={data.services}
+              vehicles={data.vehicles}
               onAdd={() => go("log-service")}
               onDelete={async (id) => { await data.deleteService(id); toast("Service record removed", "info"); }}
             />
@@ -568,7 +577,7 @@ function Dashboard({ vehicles, services, drivers, goto }: { vehicles: Vehicle[];
                     <st.I className="h-3.5 w-3.5" /> {s.service_type}
                   </span>
                   <UKPlate reg={s.registration} size="sm" />
-                  <div className="flex-1 truncate text-sm text-[#8b95a8]">{s.garage || "—"}</div>
+                  <div className="flex-1 truncate text-sm text-[#8b95a8]">{s.description || "No notes recorded"}</div>
                   <div className="text-sm font-semibold">£{s.cost.toFixed(2)}</div>
                   <div className="text-xs text-[#8b95a8]">{s.service_date}</div>
                 </div>
@@ -1096,11 +1105,26 @@ function LogService({
 }
 
 /* ---------------- Service History ---------------- */
-function ServicesList({ services, onAdd, onDelete }: { services: ServiceRecord[]; onAdd: () => void; onDelete: (id: string) => void }) {
+type ServiceCategory = "Mercedes" | "Toyota" | "Other premium cars";
+
+function serviceCategory(service: ServiceRecord, vehicles: Vehicle[]): ServiceCategory {
+  const make = vehicles.find((v) => v.registration.toLowerCase() === service.registration.toLowerCase())?.make.toLowerCase() ?? "";
+  if (make.includes("mercedes")) return "Mercedes";
+  if (make.includes("toyota")) return "Toyota";
+  return "Other premium cars";
+}
+
+function ServicesList({ services, vehicles, onAdd, onDelete }: { services: ServiceRecord[]; vehicles: Vehicle[]; onAdd: () => void; onDelete: (id: string) => void }) {
   const [q, setQ] = useState("");
-  const filtered = services.filter((s) =>
-    [s.registration, s.service_type, s.garage].some((v) => (v || "").toLowerCase().includes(q.toLowerCase()))
-  );
+  const [category, setCategory] = useState<ServiceCategory | "All">("All");
+  const [selected, setSelected] = useState<ServiceRecord | null>(null);
+  const categories: (ServiceCategory | "All")[] = ["All", "Mercedes", "Toyota", "Other premium cars"];
+  const filtered = services.filter((s) => {
+    const matchesCategory = category === "All" || serviceCategory(s, vehicles) === category;
+    const query = q.toLowerCase();
+    const matchesSearch = [s.registration, s.service_type, s.garage, s.description].some((v) => (v || "").toLowerCase().includes(query));
+    return matchesCategory && matchesSearch;
+  });
   const total = filtered.reduce((a, s) => a + (s.cost || 0), 0);
 
   return (
@@ -1108,7 +1132,7 @@ function ServicesList({ services, onAdd, onDelete }: { services: ServiceRecord[]
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold">Service History</h2>
-          <p className="text-sm text-[#8b95a8]">{services.length} records · £{total.toFixed(2)} total spend</p>
+          <p className="text-sm text-[#8b95a8]">{filtered.length} of {services.length} records · £{total.toFixed(2)} total spend</p>
         </div>
         <div className="flex gap-2">
           <button
@@ -1125,11 +1149,25 @@ function ServicesList({ services, onAdd, onDelete }: { services: ServiceRecord[]
         </div>
       </div>
 
+      <div className="flex flex-wrap gap-2">
+        {categories.map((item) => (
+          <button
+            key={item}
+            type="button"
+            onClick={() => setCategory(item)}
+            className={`rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${category === item ? "border-[#ff6a00] bg-[#ff6a00]/15 text-[#ff9a5c]" : "text-[#9aa5b8] hover:bg-[#1e222b]"}`}
+            style={category === item ? undefined : { borderColor: T.border, background: T.panel }}
+          >
+            {item} {item === "All" ? `(${services.length})` : `(${services.filter((s) => serviceCategory(s, vehicles) === item).length})`}
+          </button>
+        ))}
+      </div>
+
       <div className="relative">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5b6478]"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
         <input
           value={q} onChange={(e) => setQ(e.target.value)}
-          placeholder="Search by registration, garage or service type..."
+          placeholder="Search by registration, notes, garage or service type..."
           className="w-full rounded-lg border py-2.5 pl-9 pr-3 text-sm focus:border-[#ff6a00] focus:outline-none focus:ring-2 focus:ring-[#ff6a00]/30"
           style={{ borderColor: T.border, background: T.panel }}
         />
@@ -1137,14 +1175,22 @@ function ServicesList({ services, onAdd, onDelete }: { services: ServiceRecord[]
 
       {filtered.length === 0 ? (
         <div className="rounded-xl border border-dashed p-12 text-center text-sm text-[#8b95a8]" style={{ borderColor: T.border, background: T.panel }}>
-          {services.length === 0 ? "No service records logged yet." : "No records match your search."}
+          {services.length === 0 ? "No service records logged yet." : "No records match your filters."}
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           {filtered.map((s) => {
             const st = serviceStyle(s.service_type);
             return (
-              <div key={s.id} className="flex items-start gap-4 rounded-xl border p-4 transition-colors hover:border-[#ff6a00]/40" style={{ borderColor: T.border, background: T.panel }}>
+              <div
+                key={s.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => setSelected(s)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelected(s); } }}
+                className="flex cursor-pointer items-start gap-4 rounded-xl border p-4 transition-colors hover:border-[#ff6a00]/40 focus:outline-none focus:ring-2 focus:ring-[#ff6a00]/40"
+                style={{ borderColor: T.border, background: T.panel }}
+              >
                 <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border ${st.cls}`}>
                   <st.I className="h-5 w-5" />
                 </div>
@@ -1154,18 +1200,45 @@ function ServicesList({ services, onAdd, onDelete }: { services: ServiceRecord[]
                     <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium ${st.cls}`}>{s.service_type}</span>
                     <span className="ml-auto text-base font-bold text-[#ff6a00]">£{s.cost.toFixed(2)}</span>
                   </div>
-                  <div className="mt-1.5 text-sm text-[#c5cbd6]">
-                    <span className="font-medium">{s.garage || "Unknown garage"}</span>
-                    <span className="text-[#8b95a8]"> · {s.service_date} · {s.mileage.toLocaleString()} mi</span>
-                  </div>
-                  {s.description && <div className="mt-1 line-clamp-2 text-xs text-[#8b95a8]">{s.description}</div>}
+                  <div className="mt-1.5 text-sm text-[#c5cbd6]">{s.service_date} · {s.mileage.toLocaleString()} mi</div>
+                  <div className="mt-1 line-clamp-2 text-xs text-[#8b95a8]">{s.description || "No notes recorded for this service."}</div>
                 </div>
-                <button onClick={() => { if (confirm("Delete this service record?")) onDelete(s.id); }} className="shrink-0 text-xs text-red-400 hover:text-red-300">Delete</button>
+                <button onClick={(e) => { e.stopPropagation(); if (confirm("Delete this service record?")) onDelete(s.id); }} className="shrink-0 text-xs text-red-400 hover:text-red-300">Delete</button>
               </div>
             );
           })}
         </div>
       )}
+
+      {selected && <ServiceDetailsModal service={selected} onClose={() => setSelected(null)} />}
+    </div>
+  );
+}
+
+function ServiceDetailsModal({ service, onClose }: { service: ServiceRecord; onClose: () => void }) {
+  const st = serviceStyle(service.service_type);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border p-6 shadow-2xl" style={{ borderColor: T.border, background: "#10141d" }} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Service record details">
+        <div className="mb-6 flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className={`flex h-12 w-12 items-center justify-center rounded-xl border ${st.cls}`}><st.I className="h-6 w-6" /></div>
+            <div><h2 className="text-xl font-bold">{service.service_type}</h2><p className="text-sm text-[#8b95a8]">Complete service record</p></div>
+          </div>
+          <button type="button" onClick={onClose} className="text-[#8b95a8] hover:text-white" aria-label="Close service details"><Icon.X className="h-5 w-5" /></button>
+        </div>
+        <div className="mb-5 flex flex-wrap items-center gap-3 rounded-xl border p-4" style={{ borderColor: T.border, background: T.panel }}>
+          <UKPlate reg={service.registration} size="lg" />
+          <div className="ml-auto text-right"><div className="text-xs uppercase tracking-wider text-[#8b95a8]">Total cost</div><div className="text-2xl font-bold text-[#ff8a3d]">£{service.cost.toFixed(2)}</div></div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-lg border p-4" style={{ borderColor: T.border, background: T.panel }}><div className="text-xs uppercase tracking-wider text-[#8b95a8]">Service date</div><div className="mt-1 font-semibold">{service.service_date || "Not recorded"}</div></div>
+          <div className="rounded-lg border p-4" style={{ borderColor: T.border, background: T.panel }}><div className="text-xs uppercase tracking-wider text-[#8b95a8]">Mileage</div><div className="mt-1 font-semibold">{service.mileage.toLocaleString()} mi</div></div>
+          <div className="rounded-lg border p-4 sm:col-span-2" style={{ borderColor: T.border, background: T.panel }}><div className="text-xs uppercase tracking-wider text-[#8b95a8]">Garage / provider</div><div className="mt-1 font-semibold">{service.garage || "Not recorded"}</div></div>
+        </div>
+        <div className="mt-4 rounded-xl border p-5" style={{ borderColor: T.border, background: T.panel }}><div className="mb-2 text-xs uppercase tracking-wider text-[#8b95a8]">Service notes</div><p className="whitespace-pre-wrap text-sm leading-6 text-[#e6eaf0]">{service.description || "No notes were recorded for this service."}</p></div>
+        <div className="mt-6 flex justify-end"><button type="button" onClick={onClose} className="rounded-lg bg-[#ff6a00] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#e05d00]">Close</button></div>
+      </div>
     </div>
   );
 }
