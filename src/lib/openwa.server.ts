@@ -63,7 +63,11 @@ function openWaConfig() {
     getRuntimeEnv("OPENWA_URL"),
     getRuntimeEnv("OPENWA_TUNNEL_URL"),
   );
-  const rawApiKey = firstNonEmpty(getRuntimeEnv("OPENWA_API_KEY"));
+  const rawApiKey = firstNonEmpty(
+    getRuntimeEnv("OPENWA_API_KEY"),
+    getRuntimeEnv("OPENWA_API_TOKEN"),
+    getRuntimeEnv("OPENWA_KEY"),
+  );
   const apiKey = rawApiKey ? normalizeApiKey(rawApiKey) : undefined;
   const sessionId = firstNonEmpty(
     getRuntimeEnv("OPENWA_SESSION_ID"),
@@ -79,11 +83,24 @@ function gatewayBase(value: string): string {
     .replace(/\/api\/?$/i, "");
 }
 
-function openWaHeaders(apiKey: string) {
+function openWaHeaders(apiKey: string, includeBearer = false) {
   return {
     "X-API-Key": apiKey,
+    ...(includeBearer ? { Authorization: `Bearer ${apiKey}` } : {}),
     "X-LocalTunnel-No-Client-Warning": "true",
   };
+}
+
+async function openWaFetch(endpoint: string, apiKey: string, body: unknown): Promise<Response> {
+  const request = (includeBearer: boolean) => fetch(endpoint, {
+    method: "POST",
+    headers: { ...openWaHeaders(apiKey, includeBearer), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const first = await request(false);
+  if (first.status !== 401) return first;
+  console.warn("[openwa] X-API-Key rejected with 401; retrying once with bearer compatibility header", { endpoint, apiKeyFingerprint: secretFingerprint(apiKey) });
+  return request(true);
 }
 
 function resolveTransportSession(requestedSessionId?: string): { sessionId: string; requestedSessionId?: string } {
@@ -124,11 +141,7 @@ export async function sendOpenWaText(params: {
     headers: ["X-API-Key", "X-LocalTunnel-No-Client-Warning"],
   });
   try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { ...openWaHeaders(apiKey), "Content-Type": "application/json" },
-      body: JSON.stringify({ chatId, text: params.text, linkPreview: false }),
-    });
+    const response = await openWaFetch(endpoint, apiKey, { chatId, text: params.text, linkPreview: false });
     if (!response.ok) {
       const responseBody = await response.text().catch(() => "");
       console.error("[openwa] outbound request rejected", { endpoint, sessionId, chatId, status: response.status, statusText: response.statusText, responseBody });
@@ -159,11 +172,7 @@ export async function sendOpenWaImage(params: {
   const endpoint = `${gatewayBase(baseUrl)}/api/sessions/${encodeURIComponent(sessionId)}/messages/send-image`;
   console.info("[openwa] sending outbound welcome image", { endpoint, sessionId, chatId, url: params.url, captionLength: params.caption?.length ?? 0, apiKeyFingerprint: secretFingerprint(apiKey) });
   try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { ...openWaHeaders(apiKey), "Content-Type": "application/json" },
-      body: JSON.stringify({ chatId, url: params.url, caption: params.caption ?? "" }),
-    });
+    const response = await openWaFetch(endpoint, apiKey, { chatId, url: params.url, caption: params.caption ?? "" });
     const responseBody = await response.text().catch(() => "");
     if (!response.ok) {
       console.error("[openwa] outbound image rejected", { endpoint, sessionId, chatId, status: response.status, responseBody });
