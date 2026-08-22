@@ -86,6 +86,25 @@ async function insertWithSessionFallback(
   return result;
 }
 
+function isAbusiveMessage(text: string): boolean {
+  const normalized = text
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[0@]/g, "o")
+    .replace(/[1!|]/g, "i")
+    .replace(/[3]/g, "e")
+    .replace(/[4@]/g, "a")
+    .replace(/[5$]/g, "s")
+    .replace(/[7]/g, "t")
+    .replace(/[^a-z0-9]+/g, " ");
+  const abusiveTerms = [
+    "fuck", "fucking", "fucker", "motherfucker", "shit", "bullshit", "bitch",
+    "bastard", "dickhead", "asshole", "arsehole", "wanker", "twat", "cunt",
+    "prick", "slut", "whore", "piss off", "go to hell",
+  ];
+  return abusiveTerms.some((term) => new RegExp(`(?:^|\\s)${term.replace(/ /g, "\\s+")}(?:$|\\s)`, "i").test(normalized));
+}
+
 function isMenuReset(text: string): boolean {
   return /^(?:menu|main menu|restart|start again|start over|reset|hello|hi)[.!\s]*$/i.test(text.trim());
 }
@@ -201,7 +220,7 @@ async function generateReply(
     "Reply naturally and briefly in UK English, maximum 4 short sentences. Use £ for prices. " +
     "Use only the supplied live fleet data: never invent availability, prices, dates, MOT or PCO information. " +
     "Treat only vehicles marked available/active/in stock as available; rented, assigned, in-service and off-road vehicles are unavailable. " +
-    "If the requested car is unavailable, explicitly say so and suggest alternatives under exactly these headings: Electric, Plug-in-Hybrid, Petrol. " +
+    "If the customer asks for a car, wants to hire/rent, asks what is available, or uses any natural wording with the same meaning, treat it as a car enquiry and show all currently available vehicles from the supplied fleet, grouped clearly under Electric, Plug-in-Hybrid, Petrol where possible. If the requested car is unavailable, explicitly say so and suggest alternatives under exactly these headings: Electric, Plug-in-Hybrid, Petrol. " +
     "If you cannot safely answer, the AI service fails, or you become stuck, set needs_human true; otherwise keep needs_human false. For an accident report, gather the details for the CRM accident workflow instead of handing off immediately. " +
     "At the end of a standard interaction, ask exactly: Is that all for today? " +
     'Respond ONLY as JSON: {"reply": string, "needs_human": boolean, "reason": string, "asks_closure": boolean}. ' +
@@ -464,10 +483,35 @@ export async function handleAgentWebhookRequest(request: Request) {
     return json({ ok: true, lead_id: leadId, reply, welcome_menu: true, needs_human: !outbound.sent, outbound });
   }
 
+  if (isAbusiveMessage(content)) {
+    const reply = "I’m unable to continue this automated conversation when abusive language is used. A human team member will review your message and contact you here.";
+    await insertWithSessionFallback(db, "messages", {
+      user_id: userId,
+      lead_id: leadId,
+      sender: "ai_agent",
+      content: reply,
+      handoff: true,
+      session_id: sessionId,
+    });
+    await db.from("whatsapp_leads").update({ status: "needs_human", ai_paused: true, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+    const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
+    const alert = await sendTelegramAlert({
+      name: leadName,
+      phone,
+      reason: "Abusive or profane customer message detected",
+      leadId,
+      history: [...history, { sender: "ai_agent", content: reply }],
+      mediaUrl,
+      closed: false,
+    });
+    return json({ ok: true, lead_id: leadId, reply, needs_human: true, ai_paused: true, telegram_alert: alert, outbound });
+  }
+
   if (closed) {
     console.info("[agent-webhook] conversation closed; no AI reply", { leadId });
     return json({ ok: true, lead_id: leadId, closed: true, reply: null, needs_human: false });
   }
+
   if (aiPaused) {
     console.warn("[agent-webhook] reactivating AI after inbound customer message", { leadId });
     await db
@@ -478,21 +522,6 @@ export async function handleAgentWebhookRequest(request: Request) {
   }
 
   const option = parseMenuOption(content);
-  if (isNewLead && !option) {
-    await insertWithSessionFallback(db, "messages", {
-      user_id: userId,
-      lead_id: leadId,
-      sender: "ai_agent",
-      content: WELCOME_MENU,
-      session_id: sessionId,
-    });
-    const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: WELCOME_MENU, sessionId: openwaSessionId ?? undefined });
-    let alert: { sent: boolean; reason?: string } = { sent: false, reason: "not_needed" };
-    if (!outbound.sent) {
-      alert = await sendTelegramAlert({ name: leadName, phone, reason: `OpenWA welcome failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: WELCOME_MENU }], mediaUrl, closed: false });
-    }
-    return json({ ok: true, lead_id: leadId, reply: WELCOME_MENU, welcome_menu: true, needs_human: !outbound.sent, ai_paused: !outbound.sent, telegram_alert: alert, outbound });
-  }
 
   if (!option && leadIntent === "book_car" && lastAgentMessage.toLowerCase().includes("full name") && isLikelyFullName(content)) {
     const customerName = content.trim();
@@ -507,13 +536,6 @@ export async function handleAgentWebhookRequest(request: Request) {
     const customerName = content.trim();
     const reply = "Accident Support\n\nThank you, " + customerName + ". Please now send the vehicle registration, incident date, location, a short description of what happened, and any photos. A team member will review this promptly.";
     await db.from("whatsapp_leads").update({ contact_name: customerName, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
-    await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
-    const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
-    return json({ ok: true, lead_id: leadId, reply, outbound, needs_human: !outbound.sent });
-  }
-
-  if (!option && lastAgentMessage.includes("Type 1 or 2 to get started")) {
-    const reply = "We didn't quite catch that. Please reply with 1 to enquire about a car, or 2 to report an accident.";
     await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
     const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
     return json({ ok: true, lead_id: leadId, reply, outbound, needs_human: !outbound.sent });
