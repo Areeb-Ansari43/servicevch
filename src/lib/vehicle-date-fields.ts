@@ -9,9 +9,22 @@ function firstDate(row: UnknownRow, keys: string[]): string {
 }
 
 export function getNextMotDate(row: UnknownRow): string {
-  return firstDate(row, ["next_mot_date", "mot_expiry_date", "mot_date"]);
+  return firstDate(row, [
+    "next_mot_date",
+    "mot_expiry_date",
+    "mot_due_date",
+    "mot_expiry",
+    "mot_date",
+  ]);
 }
 
 export function getPcoExpiryDate(row: UnknownRow): string {
-  return firstDate(row, ["pco_expiry_date", "insurance_expiry", "pco_expiry"]);
+  return firstDate(row, [
+    "pco_expiry_date",
+    "pco_license_expiry_date",
+    "insurance_expiry",
+    "insurance_expiry_date",
+    "pco_expiry",
+    "pco_license_expiry",
+  ]);
 }

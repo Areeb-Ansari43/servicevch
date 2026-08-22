@@ -108,17 +108,11 @@ async function runExpiryScan() {
       ? `⚠️ Fleet expiry — ${expiredItems.length} expired, ${reminderItems.length} upcoming`
       : `Fleet expiry reminder — ${reminderItems.length} upcoming`;
 
-  const lovableKey = getRuntimeEnv("LOVABLE_API_KEY");
-  if (!lovableKey) {
-    return new Response(JSON.stringify({ ok: false, error: "Email not configured: LOVABLE_API_KEY missing" }), { status: 500 });
-  }
-
-  const res = await fetch("https://connector-gateway.lovable.dev/resend/emails", {
+  const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${lovableKey}`,
-      "X-Connection-Api-Key": resendKey,
+      Authorization: `Bearer ${resendKey}`,
     },
     body: JSON.stringify({
       from: ALERT_FROM,
