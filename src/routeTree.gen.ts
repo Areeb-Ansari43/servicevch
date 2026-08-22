@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AccidentCasesRouteImport } from './routes/accident-cases'
 import { Route as AddVehicleRouteImport } from './routes/add-vehicle'
 import { Route as DriverMileageRouteImport } from './routes/driver-mileage'
+import { Route as DriversRouteImport } from './routes/drivers'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as WhatsappLeadsRouteImport } from './routes/whatsapp-leads'
 import { Route as ApiWebhookRouteImport } from './routes/api/webhook'
@@ -44,6 +45,11 @@ const AddVehicleRoute = AddVehicleRouteImport.update({
 const DriverMileageRoute = DriverMileageRouteImport.update({
   id: '/driver-mileage',
   path: '/driver-mileage',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DriversRoute = DriversRouteImport.update({
+  id: '/drivers',
+  path: '/drivers',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -112,6 +118,7 @@ export interface FileRoutesByFullPath {
   '/accident-cases': typeof AccidentCasesRoute
   '/add-vehicle': typeof AddVehicleRoute
   '/driver-mileage': typeof DriverMileageRoute
+  '/drivers': typeof DriversRoute
   '/login': typeof LoginRoute
   '/whatsapp-leads': typeof WhatsappLeadsRoute
   '/api/webhook': typeof ApiWebhookRoute
@@ -130,6 +137,7 @@ export interface FileRoutesByTo {
   '/accident-cases': typeof AccidentCasesRoute
   '/add-vehicle': typeof AddVehicleRoute
   '/driver-mileage': typeof DriverMileageRoute
+  '/drivers': typeof DriversRoute
   '/login': typeof LoginRoute
   '/whatsapp-leads': typeof WhatsappLeadsRoute
   '/api/webhook': typeof ApiWebhookRoute
@@ -149,6 +157,7 @@ export interface FileRoutesById {
   '/accident-cases': typeof AccidentCasesRoute
   '/add-vehicle': typeof AddVehicleRoute
   '/driver-mileage': typeof DriverMileageRoute
+  '/drivers': typeof DriversRoute
   '/login': typeof LoginRoute
   '/whatsapp-leads': typeof WhatsappLeadsRoute
   '/api/webhook': typeof ApiWebhookRoute
@@ -169,6 +178,7 @@ export interface FileRouteTypes {
     | '/accident-cases'
     | '/add-vehicle'
     | '/driver-mileage'
+    | '/drivers'
     | '/login'
     | '/whatsapp-leads'
     | '/api/webhook'
@@ -187,6 +197,7 @@ export interface FileRouteTypes {
     | '/accident-cases'
     | '/add-vehicle'
     | '/driver-mileage'
+    | '/drivers'
     | '/login'
     | '/whatsapp-leads'
     | '/api/webhook'
@@ -205,6 +216,7 @@ export interface FileRouteTypes {
     | '/accident-cases'
     | '/add-vehicle'
     | '/driver-mileage'
+    | '/drivers'
     | '/login'
     | '/whatsapp-leads'
     | '/api/webhook'
@@ -224,6 +236,7 @@ export interface RootRouteChildren {
   AccidentCasesRoute: typeof AccidentCasesRoute
   AddVehicleRoute: typeof AddVehicleRoute
   DriverMileageRoute: typeof DriverMileageRoute
+  DriversRoute: typeof DriversRoute
   LoginRoute: typeof LoginRoute
   WhatsappLeadsRoute: typeof WhatsappLeadsRoute
   ApiWebhookRoute: typeof ApiWebhookRoute
@@ -266,6 +279,13 @@ declare module '@tanstack/react-router' {
       path: '/driver-mileage'
       fullPath: '/driver-mileage'
       preLoaderRoute: typeof DriverMileageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/drivers': {
+      id: '/drivers'
+      path: '/drivers'
+      fullPath: '/drivers'
+      preLoaderRoute: typeof DriversRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -360,6 +380,7 @@ const rootRouteChildren: RootRouteChildren = {
   AccidentCasesRoute: AccidentCasesRoute,
   AddVehicleRoute: AddVehicleRoute,
   DriverMileageRoute: DriverMileageRoute,
+  DriversRoute: DriversRoute,
   LoginRoute: LoginRoute,
   WhatsappLeadsRoute: WhatsappLeadsRoute,
   ApiWebhookRoute: ApiWebhookRoute,
