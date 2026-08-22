@@ -89,6 +89,25 @@ function includesClosureQuestion(text: string): boolean {
   return /is that all for today\??/i.test(text);
 }
 
+function parseAiReply(content: string): Pick<AiResult, "reply" | "needs_human" | "reason" | "asks_closure"> {
+  const cleaned = content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  try {
+    const parsed = JSON.parse(cleaned) as Record<string, unknown>;
+    const reply = typeof parsed.reply === "string" ? parsed.reply.trim() : "";
+    if (reply) {
+      return {
+        reply,
+        needs_human: Boolean(parsed.needs_human),
+        reason: typeof parsed.reason === "string" ? parsed.reason : "",
+        asks_closure: Boolean(parsed.asks_closure) || includesClosureQuestion(reply),
+      };
+    }
+  } catch {
+    // Some compatible gateways return normal text even when JSON was requested.
+  }
+  return { reply: cleaned, needs_human: false, reason: "", asks_closure: includesClosureQuestion(cleaned) };
+}
+
 function fuelCategory(value: string | null): "Electric" | "Plug-in-Hybrid" | "Petrol" {
   const fuel = (value ?? "").toLowerCase().replace(/[\s_-]/g, "");
   if (fuel.includes("electric") || fuel === "ev") return "Electric";
@@ -160,50 +179,59 @@ async function generateReply(
           { type: "image_url", image_url: { url: history.at(-1)?.media_url ?? "" } },
         ]
       : userText;
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content },
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "agent_reply",
-            strict: true,
-            schema: {
-              type: "object",
-              additionalProperties: false,
-              required: ["reply", "needs_human", "reason", "asks_closure"],
-              properties: {
-                reply: { type: "string" },
-                needs_human: { type: "boolean" },
-                reason: { type: "string" },
-                asks_closure: { type: "boolean" },
-              },
-            },
+    const endpoint = "https://ai.gateway.lovable.dev/v1/chat/completions";
+    const baseBody = {
+      model: "google/gemini-2.5-flash",
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content },
+      ],
+    };
+    const jsonSchema = {
+      type: "json_schema",
+      json_schema: {
+        name: "agent_reply",
+        strict: true,
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          required: ["reply", "needs_human", "reason", "asks_closure"],
+          properties: {
+            reply: { type: "string" },
+            needs_human: { type: "boolean" },
+            reason: { type: "string" },
+            asks_closure: { type: "boolean" },
           },
         },
-      }),
+      },
+    };
+    const requestHeaders = { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" };
+    let res = await fetch(endpoint, {
+      method: "POST",
+      headers: requestHeaders,
+      body: JSON.stringify({ ...baseBody, response_format: jsonSchema }),
     });
+    let responseBody = await res.text();
+    if (!res.ok && (res.status === 400 || res.status === 422)) {
+      console.warn("[agent-webhook] AI schema format rejected; retrying standard completion", { status: res.status, responseBody });
+      res = await fetch(endpoint, {
+        method: "POST",
+        headers: requestHeaders,
+        body: JSON.stringify(baseBody),
+      });
+      responseBody = await res.text();
+    }
     if (!res.ok) {
-      console.error("[agent-webhook] AI gateway error", res.status, await res.text());
+      console.error("[agent-webhook] AI gateway error", { status: res.status, statusText: res.statusText, responseBody });
       return fallback;
     }
-    const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-    const parsed = JSON.parse(data.choices?.[0]?.message?.content ?? "{}");
-    const reply = typeof parsed.reply === "string" && parsed.reply.trim() ? parsed.reply.trim() : "";
-    if (!reply) return fallback;
-    console.info("[agent-webhook] AI generation complete", { replyLength: reply.length, needsHuman: Boolean(parsed.needs_human) });
-    return {
-      reply,
-      needs_human: Boolean(parsed.needs_human),
-      reason: typeof parsed.reason === "string" ? parsed.reason : "",
-      asks_closure: Boolean(parsed.asks_closure) || includesClosureQuestion(reply),
-    };
+    const data = JSON.parse(responseBody) as { choices?: { message?: { content?: string } }[] };
+    const contentText = data.choices?.[0]?.message?.content?.trim() ?? "";
+    if (!contentText) return fallback;
+    const parsed = parseAiReply(contentText);
+    if (!parsed.reply) return fallback;
+    console.info("[agent-webhook] AI generation complete", { replyLength: parsed.reply.length, needsHuman: parsed.needs_human });
+    return parsed;
   } catch (error) {
     console.error("[agent-webhook] AI failure", error);
     return fallback;
