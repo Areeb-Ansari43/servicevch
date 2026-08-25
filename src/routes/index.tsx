@@ -845,9 +845,9 @@ function LineChart({ data, height }: { data: [string, number][]; height: number 
 function vehicleArtwork(vehicle: Vehicle) {
   const model = `${vehicle.make} ${vehicle.model}`.toLowerCase();
   if (!model.includes("mercedes")) return null;
-  if (model.includes("vito")) return "/vehicle-artwork/mercedes-vito.webp";
-  if (model.includes("eqe")) return "/vehicle-artwork/mercedes-eqe.webp";
-  if (/(^|[^0-9])(e\s*300|e\s*220|e300|e220)([^0-9]|$)/.test(model)) return "/vehicle-artwork/mercedes-eclass.webp";
+  if (model.includes("vito")) return "/vehicle-artwork/mercedes-vito-transparent.png";
+  if (model.includes("eqe")) return "/vehicle-artwork/mercedes-eqe-transparent.png";
+  if (/(^|[^0-9])(e\s*300|e\s*220|e300|e220)([^0-9]|$)/.test(model)) return "/vehicle-artwork/mercedes-eclass-transparent.png";
   return null;
 }
 
