@@ -842,6 +842,15 @@ function LineChart({ data, height }: { data: [string, number][]; height: number 
 }
 
 /* ---------------- Vehicles ---------------- */
+function vehicleArtwork(vehicle: Vehicle) {
+  const model = `${vehicle.make} ${vehicle.model}`.toLowerCase();
+  if (!model.includes("mercedes")) return null;
+  if (model.includes("vito")) return "/vehicle-artwork/mercedes-vito.webp";
+  if (model.includes("eqe")) return "/vehicle-artwork/mercedes-eqe.webp";
+  if (/(^|[^0-9])(e\s*300|e\s*220|e300|e220)([^0-9]|$)/.test(model)) return "/vehicle-artwork/mercedes-eclass.webp";
+  return null;
+}
+
 function VehiclesList({
   vehicles, drivers, onAdd, onOpen,
 }: { vehicles: Vehicle[]; drivers: DriverTrack[]; onAdd: () => void; onOpen: (v: Vehicle) => void }) {
@@ -899,9 +908,15 @@ function VehiclesList({
               className="group relative flex flex-col overflow-hidden rounded-xl border p-4 transition-all hover:border-[#ff6a00]/60 hover:shadow-lg hover:shadow-orange-500/10"
               style={{ borderColor: T.border, background: T.panel }}
               >
-              <div className="pointer-events-none absolute right-3 top-14 opacity-[0.07] transition-opacity group-hover:opacity-[0.13]">
-                {v.fuel_type === "Electric" ? <Icon.Bolt className="h-28 w-28 text-sky-300" /> : <Icon.Car className={`h-28 w-28 ${v.fuel_type === "Hybrid" ? "text-amber-300" : "text-slate-200"}`} />}
-              </div>
+              {vehicleArtwork(v) ? (
+                <div className="pointer-events-none absolute right-0 top-8 z-0 h-36 w-44 opacity-[0.13] transition-all duration-200 group-hover:opacity-80 group-hover:brightness-[2.1] group-hover:contrast-125 group-hover:drop-shadow-[0_0_16px_rgba(255,255,255,0.55)] sm:h-40 sm:w-48" aria-hidden="true">
+                  <img src={vehicleArtwork(v) as string} alt="" className="h-full w-full object-contain object-right mix-blend-screen" />
+                </div>
+              ) : (
+                <div className="pointer-events-none absolute right-3 top-14 opacity-[0.07] transition-opacity group-hover:opacity-[0.13]">
+                  {v.fuel_type === "Electric" ? <Icon.Bolt className="h-28 w-28 text-sky-300" /> : <Icon.Car className={`h-28 w-28 ${v.fuel_type === "Hybrid" ? "text-amber-300" : "text-slate-200"}`} />}
+                </div>
+              )}
               <div className="relative z-10 mb-3 flex items-start justify-between gap-2">
                 <UKPlate reg={v.registration} size="sm" />
                 <StatusBadge status={v.status} />
