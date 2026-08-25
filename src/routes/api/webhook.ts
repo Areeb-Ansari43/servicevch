@@ -1,488 +1,134 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getRuntimeEnv } from "@/integrations/supabase/config";
-import { resolveOpenWaPhone } from "@/lib/openwa.server";
 import { handleAgentWebhookRequest } from "./public/agent-webhook";
 
-type JsonRecord = Record<string, unknown>;
-type NormalizedMessage = {
-  eventName: string;
-  phone?: string;
-  chat_id?: string;
-  name?: string;
-  content: string;
-  media_url?: string;
-  session_id?: string;
-  openwa_session_id?: string;
-};
+type JsonRecord = Record<string, any>;
 
-const MAX_LOG_BYTES = 512_000;
-const MAX_TEXT_BYTES = 20_000;
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
+const text = (body: string, status = 200) => new Response(body, { status, headers: { "Content-Type": "text/plain", "Access-Control-Allow-Origin": "*" } });
 
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-  });
-
-function isRecord(value: unknown): value is JsonRecord {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+function constantTimeEqual(a: string, b: string) {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return result === 0;
 }
 
-function stringValue(...values: unknown[]): string | undefined {
-  return values
-    .find((value): value is string => typeof value === "string" && value.trim().length > 0)
-    ?.trim();
+async function validMetaSignature(request: Request, body: string) {
+  const appSecret = getRuntimeEnv("META_APP_SECRET")?.trim();
+  if (!appSecret) return true;
+  const header = request.headers.get("x-hub-signature-256") ?? "";
+  if (!header.startsWith("sha256=")) return false;
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(appSecret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const digest = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body));
+  const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return constantTimeEqual(header.slice(7), hex);
 }
 
-function recordValue(record: JsonRecord | undefined, ...keys: string[]): unknown {
-  if (!record) return undefined;
-  for (const key of keys) {
-    if (record[key] !== undefined && record[key] !== null) return record[key];
+function redactHeaders(request: Request) {
+  const headers: JsonRecord = {};
+  request.headers.forEach((value, key) => { headers[key] = /authorization|signature|token|secret|api-key/i.test(key) ? "[redacted]" : value.slice(0, 300); });
+  return headers;
+}
+
+function normalizePhone(value: unknown) {
+  const digits = typeof value === "string" ? value.replace(/\D/g, "") : "";
+  return digits.length >= 8 ? digits : undefined;
+}
+
+function extractMessages(payload: JsonRecord) {
+  const output: Array<{ message: JsonRecord; value: JsonRecord }> = [];
+  for (const entry of Array.isArray(payload.entry) ? payload.entry : []) {
+    for (const change of Array.isArray(entry?.changes) ? entry.changes : []) {
+      const value = change?.value;
+      if (!value || !Array.isArray(value.messages)) continue;
+      for (const message of value.messages) output.push({ message, value });
+    }
   }
-  return undefined;
+  return output;
 }
 
-function phoneFrom(value: unknown): string | undefined {
-  if (isRecord(value)) value = stringValue(value._serialized, value.serialized, value.user, value.id);
-  if (typeof value !== "string") return undefined;
-  const cleaned = value.trim().replace(/^whatsapp:/i, "");
-  if (/@lid$/i.test(cleaned)) return cleaned;
-  const normalized = cleaned.replace(/@s\.whatsapp\.net$/i, "@c.us");
-  const jid = /@(c|g)\.us$/i.test(normalized) ? normalized : `${normalized.replace(/\D/g, "")}@c.us`;
-  return jid.length >= 9 ? jid : undefined;
-}
-
-function phoneFromCandidates(...values: unknown[]): string | undefined {
-  const candidates = values.map(phoneFrom).filter((value): value is string => Boolean(value));
-  return candidates.find((value) => /@c\.us$/i.test(value)) ?? candidates[0];
-}
-
-function describeError(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  try {
-    return JSON.stringify(error);
-  } catch {
-    return String(error);
-  }
-}
-
-function headerSnapshot(request: Request): JsonRecord {
-  const safe: JsonRecord = {};
-  request.headers.forEach((value, key) => {
-    const lower = key.toLowerCase();
-    safe[key] = /authorization|api-key|signature|secret|token/.test(lower)
-      ? "[redacted]"
-      : value.slice(0, 500);
-  });
-  return safe;
-}
-
-function constantTimeEqual(left: string, right: string): boolean {
-  if (left.length !== right.length) return false;
-  let difference = 0;
-  for (let index = 0; index < left.length; index += 1)
-    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
-  return difference === 0;
-}
-
-async function verifyWebhookSecret(request: Request, rawBody: string): Promise<boolean> {
-  const expectedSecret = getRuntimeEnv("OPENWA_WEBHOOK_SECRET");
-  if (!expectedSecret) return true;
-  const provided =
-    request.headers.get("x-openwa-signature") ?? request.headers.get("x-webhook-signature");
-  if (!provided) return false;
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(expectedSecret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(rawBody));
-  const digest = Array.from(new Uint8Array(signature), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
-  const normalized = provided.replace(/^sha256=/i, "").trim();
-  return constantTimeEqual(normalized, digest);
-}
-
-function verifyWebhookApiKey(request: Request): boolean {
-  const expectedKey = getRuntimeEnv("OPENWA_API_KEY");
-  if (!expectedKey) return true;
-  const apiKey = request.headers.get("x-api-key");
-  const authorization = request.headers.get("authorization");
-  const bearer = authorization?.match(/^Bearer\s+(.+)$/i)?.[1];
-  return [apiKey, bearer].some((provided) =>
-    Boolean(provided && constantTimeEqual(provided, expectedKey)),
-  );
-}
-
-function unwrapPayload(raw: JsonRecord): {
-  eventName: string;
-  message: JsonRecord;
-  session?: string;
-} {
-  const data = isRecord(raw.data) ? raw.data : undefined;
-  const payload = isRecord(raw.payload) ? raw.payload : undefined;
-  const eventName =
-    stringValue(
-      raw.event,
-      raw.type,
-      raw.eventName,
-      data?.event,
-      data?.type,
-      payload?.event,
-      payload?.type,
-    ) ?? "message.received";
-  const message = isRecord(raw.message)
-    ? raw.message
-    : isRecord(data?.message)
-      ? data.message
-      : isRecord(payload?.message)
-        ? payload.message
-        : (data ?? payload ?? raw);
-  const session = stringValue(
-    raw.session,
-    raw.sessionId,
-    raw.session_id,
-    data?.session,
-    data?.sessionId,
-    data?.session_id,
-    payload?.session,
-    payload?.sessionId,
-    payload?.session_id,
-  );
-  return { eventName, message, ...(session ? { session } : {}) };
-}
-
-function normalizeInbound(raw: JsonRecord): NormalizedMessage | null {
-  const { eventName, message, session } = unwrapPayload(raw);
-  const receivedFlag = recordValue(message, "received");
-  const isInbound =
-    receivedFlag === true ||
-    /message[._]received/i.test(eventName) ||
-    (eventName === "message" && !recordValue(message, "fromMe", "from_me", "isFromMe"));
-  if (!isInbound) return null;
-
-  const sender = isRecord(message.sender) ? message.sender : undefined;
-  const chat = isRecord(message.chat) ? message.chat : undefined;
-  const messageData = isRecord(message._data) ? message._data : undefined;
-  const dataSender = isRecord(messageData?.sender) ? messageData.sender : undefined;
-  const contact = isRecord(message.contact)
-    ? message.contact
-    : isRecord(messageData?.contact)
-      ? messageData.contact
-      : undefined;
-  const media = isRecord(message.media) ? message.media : undefined;
-  const content = stringValue(
-    recordValue(message, "body", "text", "content", "caption"),
-    recordValue(raw, "body", "text", "content"),
-  );
-  if (
-    !content &&
-    !stringValue(
-      recordValue(media, "url", "mediaUrl"),
-      recordValue(message, "mediaUrl", "media_url"),
-    )
-  )
-    return null;
-
-  const chatId = phoneFromCandidates(
-    recordValue(sender, "wid", "userId", "id", "phone", "number"),
-    recordValue(dataSender, "wid", "userId", "id", "phone", "number"),
-    recordValue(contact, "wid", "userId", "id", "phone", "number"),
-    recordValue(messageData, "from", "author", "chatId", "chat_id"),
-    recordValue(chat, "id", "chatId", "wid"),
-    recordValue(message, "from", "author", "chatId", "chat_id"),
-    recordValue(raw, "from", "chatId", "chat_id"),
-  );
-  const senderPhone = phoneFrom(
-    recordValue(message, "senderPhone", "sender_phone", "phoneNumber", "phone_number"),
-  ) ?? phoneFrom(recordValue(messageData, "senderPhone", "sender_phone", "phoneNumber", "phone_number"))
-    ?? phoneFrom(recordValue(contact, "senderPhone", "sender_phone", "phoneNumber", "phone_number", "phone", "number"));
-  // OpenWA can legitimately provide only an @lid. The CRM phone column is
-  // non-null in existing deployments, so retain the exact chat ID as a safe
-  // fallback until RESOLVE_LID_TO_PHONE supplies senderPhone.
-  const phone = senderPhone ?? chatId ?? undefined;
-  const name = stringValue(
-    recordValue(sender, "pushname", "pushName", "notifyName", "notify_name", "name", "formattedName"),
-    recordValue(dataSender, "pushname", "pushName", "notifyName", "notify_name", "name", "formattedName"),
-    recordValue(contact, "pushname", "pushName", "notifyName", "notify_name", "name", "formattedName"),
-    recordValue(message, "notifyName", "notify_name", "pushname", "pushName", "name"),
-    recordValue(messageData, "notifyName", "notify_name", "pushname", "pushName", "name"),
-    recordValue(chat, "name", "formattedName"),
-    recordValue(raw, "notifyName", "notify_name", "name"),
-  );
-  const mediaUrl = stringValue(
-    recordValue(media, "url", "mediaUrl"),
-    recordValue(message, "mediaUrl", "media_url", "url"),
-    recordValue(raw, "mediaUrl", "media_url"),
-  );
-  const sessionId = stringValue(
-    session,
-    recordValue(raw, "sessionId", "session_id"),
-    recordValue(message, "sessionId", "session_id"),
-  );
+function normalizeMetaMessage(message: JsonRecord, value: JsonRecord) {
+  const contact = Array.isArray(value.contacts) ? value.contacts.find((item: JsonRecord) => item.wa_id === message.from) ?? value.contacts[0] : undefined;
+  const profileName = contact?.profile?.name;
+  const interactive = message.interactive;
+  let content = "";
+  if (message.type === "text") content = String(message.text?.body ?? "");
+  else if (message.type === "interactive") {
+    const reply = interactive?.button_reply ?? interactive?.list_reply;
+    content = String(reply?.id ?? reply?.title ?? "");
+  } else if (message.type === "image") content = String(message.image?.caption ?? "(image)");
+  else if (message.type === "video") content = String(message.video?.caption ?? "(video)");
+  else if (message.type === "document") content = String(message.document?.caption ?? "(document)");
+  else content = `(${message.type ?? "media"})`;
+  const mediaId = message.image?.id ?? message.video?.id ?? message.document?.id ?? message.audio?.id;
   return {
-    eventName,
-    phone,
-    name,
-    content: content ?? "(media)",
-    ...(mediaUrl ? { media_url: mediaUrl } : {}),
-    ...(chatId ? { chat_id: chatId } : {}),
-    ...(chatId ? { session_id: `wa:${chatId}` } : sessionId ? { session_id: sessionId } : {}),
-    ...(sessionId ? { openwa_session_id: sessionId } : {}),
+    eventName: "messages.received",
+    phone: normalizePhone(message.from),
+    chat_id: normalizePhone(message.from),
+    name: typeof profileName === "string" ? profileName : undefined,
+    content: content.trim() || "(media)",
+    ...(mediaId ? { media_url: `https://graph.facebook.com/${encodeURIComponent(mediaId)}` } : {}),
+    session_id: `meta:${message.from}`,
   };
 }
 
-async function logEvent(params: {
-  payload?: unknown;
-  payloadText?: string;
-  headers: JsonRecord;
-  requestId: string;
-  eventName?: string;
-  normalized?: NormalizedMessage | null;
-  status: string;
-  error?: string;
-  receivedAt: string;
-  method?: string;
-  url?: string;
-}): Promise<boolean> {
-  const payloadText = params.payloadText?.slice(0, MAX_TEXT_BYTES);
-  const serialized = params.payload ? JSON.stringify(params.payload) : (payloadText ?? "");
-  const payload =
-    serialized.length <= MAX_LOG_BYTES ? (params.payload ?? null) : { truncated: true };
-  const baseRow = {
-    source: "openwa",
-    request_id: params.requestId,
-    event_name: params.eventName ?? null,
-    headers: params.headers,
-    payload,
-    payload_text: payloadText ?? null,
-    normalized: params.normalized ?? null,
-    status: params.status,
-    error: params.error ?? null,
-    received_at: params.receivedAt,
-    processed_at: new Date().toISOString(),
-  };
-  const rowWithRequestMetadata = {
-    ...baseRow,
-    method: params.method ?? "POST",
-    url: params.url ?? null,
-  };
-
+async function logMetaEvent(params: { payload: unknown; request: Request; status: string; error?: string; normalized?: unknown; requestId: string }) {
   try {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const firstAttempt = await supabaseAdmin
-      .from("webhook_events")
-      .insert(rowWithRequestMetadata as never);
-    if (!firstAttempt.error) return true;
-
-    const firstError = describeError(firstAttempt.error);
-    console.error("[openwa-webhook] diagnostic insert failed", {
-      requestId: params.requestId,
+    await supabaseAdmin.from("webhook_events").insert({
+      source: "meta_whatsapp",
+      request_id: params.requestId,
+      event_name: "messages",
+      headers: redactHeaders(params.request),
+      payload: params.payload,
+      normalized: params.normalized ?? null,
       status: params.status,
-      error: firstError,
-    });
-
-    // Older deployments may have the original table without method/url. Retry
-    // with only the original columns so the raw event is still persisted.
-    const fallbackAttempt = await supabaseAdmin.from("webhook_events").insert(baseRow as never);
-    if (!fallbackAttempt.error) {
-      console.warn("[openwa-webhook] diagnostic insert succeeded using legacy schema", {
-        requestId: params.requestId,
-      });
-      return true;
-    }
-
-    console.error("[openwa-webhook] diagnostic fallback insert failed", {
-      requestId: params.requestId,
-      error: describeError(fallbackAttempt.error),
-    });
-    return false;
+      error: params.error ?? null,
+      received_at: new Date().toISOString(),
+      processed_at: new Date().toISOString(),
+    } as never);
   } catch (error) {
-    console.error("[openwa-webhook] diagnostic logging failed", {
-      requestId: params.requestId,
-      error: describeError(error),
-    });
-    return false;
+    console.error("[meta-webhook] event logging failed", { requestId: params.requestId, error: error instanceof Error ? error.message : String(error) });
   }
 }
 
 export const Route = createFileRoute("/api/webhook")({
   server: {
     handlers: {
-      OPTIONS: async () =>
-        new Response(null, {
-          status: 204,
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers":
-              "content-type, authorization, x-api-key, x-openwa-signature",
-          },
-        }),
+      GET: async ({ request }) => {
+        const url = new URL(request.url);
+        const mode = url.searchParams.get("hub.mode");
+        const token = url.searchParams.get("hub.verify_token") ?? "";
+        const challenge = url.searchParams.get("hub.challenge") ?? "";
+        const expected = getRuntimeEnv("META_WEBHOOK_VERIFY_TOKEN")?.trim() ?? "";
+        if (mode === "subscribe" && expected && constantTimeEqual(token, expected)) return text(challenge, 200);
+        return text("Forbidden", 403);
+      },
+      OPTIONS: async () => new Response(null, { status: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Access-Control-Allow-Headers": "content-type, x-hub-signature-256" } }),
       POST: async ({ request }) => {
-        let requestId = request.headers.get("x-openwa-delivery-id") ?? "unknown";
-        let receivedAt = new Date().toISOString();
-        let headers: JsonRecord = {};
-        let rawBody = "";
-        const requestLog = (params: Parameters<typeof logEvent>[0]) =>
-          logEvent({ ...params, method: request.method, url: request.url });
-
-        try {
-          requestId = request.headers.get("x-openwa-delivery-id") ?? crypto.randomUUID();
-          receivedAt = new Date().toISOString();
-          headers = headerSnapshot(request);
-          rawBody = await request.text();
-
-          const apiKeyConfigured = Boolean(getRuntimeEnv("OPENWA_API_KEY"));
-          const webhookSecretConfigured = Boolean(getRuntimeEnv("OPENWA_WEBHOOK_SECRET"));
-          const apiKeyAccepted = verifyWebhookApiKey(request);
-          const signatureAccepted = await verifyWebhookSecret(request, rawBody);
-          console.info("[openwa-webhook] authentication check", {
-            requestId,
-            apiKeyConfigured,
-            apiKeyAccepted,
-            webhookSecretConfigured,
-            signatureAccepted,
-            hasApiKeyHeader: Boolean(request.headers.get("x-api-key") || request.headers.get("authorization")),
-            hasSignatureHeader: Boolean(request.headers.get("x-openwa-signature") || request.headers.get("x-webhook-signature")),
-          });
-          if (!apiKeyAccepted && !signatureAccepted) {
-            await requestLog({
-              headers,
-              requestId,
-              payloadText: rawBody,
-              status: "unauthorized",
-              error: "OpenWA authentication failed",
-              receivedAt,
-            });
-            return json({ ok: false, error: "Unauthorized" }, 401);
-          }
-
-          let raw: unknown;
-          try {
-            raw = JSON.parse(rawBody);
-          } catch {
-            await requestLog({
-              headers,
-              requestId,
-              payloadText: rawBody,
-              status: "error",
-              error: "Invalid JSON body",
-              receivedAt,
-            });
-            return json({
-              ok: true,
-              received: true,
-              processed: false,
-              error: "Invalid JSON body",
-              request_id: requestId,
-            });
-          }
-          if (!isRecord(raw)) {
-            await requestLog({
-              headers,
-              requestId,
-              payload: raw,
-              status: "error",
-              error: "Expected a JSON object",
-              receivedAt,
-            });
-            return json({
-              ok: true,
-              received: true,
-              processed: false,
-              error: "Expected a JSON object",
-              request_id: requestId,
-            });
-          }
-
-          const normalized = normalizeInbound(raw);
-          if (!normalized) {
-            await requestLog({
-              headers,
-              requestId,
-              payload: raw,
-              eventName: stringValue(raw.event, raw.type, raw.eventName),
-              normalized: null,
-              status: "ignored",
-              receivedAt,
-            });
-            return json({ ok: true, ignored: true, request_id: requestId });
-          }
-
-          const resolvedPhone = normalized.chat_id?.toLowerCase().endsWith("@lid")
-            ? await resolveOpenWaPhone({ chatId: normalized.chat_id, sessionId: normalized.openwa_session_id })
-            : normalized.phone;
-          const routed = { ...normalized, phone: resolvedPhone ?? normalized.phone };
-          console.info("[openwa-webhook] forwarding normalized message", {
-            requestId,
-            chatId: routed.chat_id,
-            phoneResolved: Boolean(resolvedPhone && !resolvedPhone.toLowerCase().endsWith("@lid")),
-            phone: routed.phone,
-          });
-
-          const upstream = await handleAgentWebhookRequest(
-            new Request(request.url, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                phone: routed.phone,
-                chat_id: routed.chat_id,
-                name: routed.name,
-                content: routed.content,
-                media_url: routed.media_url,
-                session_id: routed.session_id,
-                openwa_session_id: routed.openwa_session_id ?? undefined,
-              }),
-            }),
-          );
-          const responseText = await upstream.text();
-          await requestLog({
-            headers,
-            requestId,
-            payload: raw,
-            eventName: normalized.eventName,
-            normalized: routed,
-            status: upstream.ok ? "processed" : "error",
-            error: upstream.ok ? undefined : responseText.slice(0, 1000),
-            receivedAt,
-          });
-          if (!upstream.ok) {
-            return json({
-              ok: true,
-              received: true,
-              processed: false,
-              error: "Webhook received but CRM processing failed",
-              request_id: requestId,
-            });
-          }
-
-          return new Response(responseText, {
-            status: upstream.status,
-            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-          });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          console.error("[openwa-webhook] processing failed", error);
-          await requestLog({
-            headers,
-            requestId,
-            payloadText: rawBody,
-            status: "error",
-            error: message.slice(0, 2_000),
-            receivedAt,
-          });
-          return json({
-            ok: true,
-            received: true,
-            processed: false,
-            error: "Webhook received but processing failed",
-            request_id: requestId,
-          });
+        const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
+        const rawBody = await request.text();
+        let payload: JsonRecord;
+        try { payload = JSON.parse(rawBody); } catch { await logMetaEvent({ payload: rawBody.slice(0, 20000), request, status: "error", error: "Invalid JSON", requestId }); return json({ ok: true, received: true }, 200); }
+        if (!(await validMetaSignature(request, rawBody))) {
+          await logMetaEvent({ payload, request, status: "unauthorized", error: "Meta signature validation failed", requestId });
+          return json({ ok: false, error: "Unauthorized" }, 403);
         }
+        const messages = extractMessages(payload);
+        await logMetaEvent({ payload, request, status: "received", normalized: messages.map(({ message, value }) => normalizeMetaMessage(message, value)), requestId });
+        for (const { message, value } of messages) {
+          const normalized = normalizeMetaMessage(message, value);
+          if (!normalized.phone) continue;
+          try {
+            const response = await handleAgentWebhookRequest(new Request("https://servicevch.pages.dev/api/public/agent-webhook", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(normalized) }));
+            if (!response.ok) console.error("[meta-webhook] agent processing returned non-2xx", { requestId, status: response.status });
+          } catch (error) {
+            console.error("[meta-webhook] agent processing failed", { requestId, error: error instanceof Error ? error.message : String(error) });
+          }
+        }
+        await logMetaEvent({ payload, request, status: "processed", normalized: messages.map(({ message, value }) => normalizeMetaMessage(message, value)), requestId });
+        return json({ ok: true, received: true, processed: messages.length }, 200);
       },
     },
   },

@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
 import { getRuntimeEnv } from "@/integrations/supabase/config";
-import { sendOpenWaImage, sendOpenWaText } from "@/lib/openwa.server";
+import { sendWhatsAppButtons, sendWhatsAppImage, sendWhatsAppText } from "@/lib/meta-whatsapp.server";
 
 const CRM_BASE = "https://servicevch.pages.dev";
 const VCH_WEBSITE = "https://virtualcarhire.pages.dev/our-fleet";
@@ -72,8 +72,7 @@ type AccidentData = {
 const bodySchema = z.object({
   phone: z.string().trim().min(3).max(40).optional(),
   chat_id: z.string().trim().min(3).max(160).optional(),
-  openwa_session_id: z.string().trim().min(1).max(160).optional(),
-  name: z.string().trim().max(120).optional(),
+    name: z.string().trim().max(120).optional(),
   content: z.string().trim().min(1).max(5000),
   media_url: z.string().trim().url().max(2000).optional(),
   session_id: z.string().trim().min(8).max(160).optional(),
@@ -338,11 +337,20 @@ function formatFleet(fleet: FleetVehicle[]): string {
   return `Available vehicles (${available.length}/${fleet.length}; rented, in-service and off-road vehicles excluded):\n${grouped.join("\n")}`;
 }
 
-async function sendWelcomeMenu(phone: unknown, sessionId?: string) {
-  const image = await sendOpenWaImage({ phone, url: WELCOME_IMAGE_URL, caption: WELCOME_MENU, sessionId });
-  if (image.sent) return image;
-  console.warn("[agent-webhook] welcome image unavailable; falling back to text menu", { reason: image.reason });
-  return sendOpenWaText({ phone, text: WELCOME_MENU, sessionId });
+async function sendWelcomeMenu(phone: unknown) {
+  const image = await sendWhatsAppImage({ phone, url: WELCOME_IMAGE_URL, caption: "👋 Welcome to Virtual Car Hire — London's number one PCO car hire company." });
+  const buttons = await sendWhatsAppButtons({
+    phone,
+    body: "How can we assist you today? Please choose an option:",
+    buttons: [
+      { id: "book_car", title: "🚗 Enquire about car" },
+      { id: "report_accident", title: "⚠️ Report accident" },
+    ],
+  });
+  if (buttons.sent) return buttons;
+  console.warn("[agent-webhook] welcome buttons unavailable; falling back to text menu", { reason: buttons.reason, imageSent: image.sent });
+  const fallback = await sendWhatsAppText({ phone, text: WELCOME_MENU });
+  return fallback.sent ? fallback : image.sent ? image : fallback;
 }
 
 async function generateReply(
@@ -552,12 +560,11 @@ export async function handleAgentWebhookRequest(request: Request) {
     return json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid payload" }, 400);
   const { content, media_url: mediaUrl = null, session_id: suppliedSessionId = null } = parsed.data;
   const chatId = parsed.data.chat_id ?? null;
-  const openwaSessionId = parsed.data.openwa_session_id ?? null;
   const phone = parsed.data.phone ?? null;
   // WhatsApp may omit `phone` on some events while still providing chat_id.
   // Use the chat identifier for identity lookup, but keep it hidden from display.
   const identityPhone = phone ?? chatId;
-  const sessionId = chatId ? `wa:${chatId}` : suppliedSessionId;
+  const sessionId = chatId ? `meta:${chatId}` : suppliedSessionId;
   const suppliedName = parsed.data.name?.trim() || "";
   const name = suppliedName || "Unknown";
   const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
@@ -668,7 +675,7 @@ export async function handleAgentWebhookRequest(request: Request) {
       .update({
         ...(suppliedName && suppliedName !== "Unknown" ? { contact_name: suppliedName } : {}),
         ...(phone && !/@lid$/i.test(phone) ? { phone } : {}),
-        // Do not overwrite the canonical session key when OpenWA alternates
+        // Do not overwrite the canonical session key when Meta identifiers vary
         // between a linked ID and a resolved @c.us chat identifier.
         last_message_at: new Date().toISOString(),
         inactivity_prompted_at: null,
@@ -702,27 +709,27 @@ export async function handleAgentWebhookRequest(request: Request) {
     .from("vehicles")
     .select("reg, make, model, year, fuel_type, status, next_mot_date, pco_expiry_date");
 
-  const rawOption = parseMenuOption(content);
+  const rawOption = parseMenuOption(content) ?? (/^(?:book_car|enquire_about_a_car|enquire|report_accident|accident)$/i.test(content.trim()) ? (/(?:accident|report)/i.test(content) ? 2 : 1) : null);
 
   if ((isNewLead || closed) && !isMenuReset(content) && !rawOption) {
     const reply = WELCOME_MENU;
-    const outbound = await sendWelcomeMenu(chatId ?? phone, openwaSessionId ?? undefined);
+    const outbound = await sendWelcomeMenu(phone ?? chatId);
     if (outbound.sent) {
       await db.from("whatsapp_leads").update({ status: "active", ai_paused: false, closed_at: null, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
       await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
     }
-    const telegram_alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `OpenWA reply failed: ${outbound.reason}`, leadId, history, mediaUrl, closed: false });
+    const telegram_alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`, leadId, history, mediaUrl, closed: false });
     return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, welcome_menu: outbound.sent, needs_human: !outbound.sent, telegram_alert, outbound });
   }
 
   if (isMenuReset(content)) {
     const reply = WELCOME_MENU;
-    const outbound = await sendWelcomeMenu(chatId ?? phone, openwaSessionId ?? undefined);
+    const outbound = await sendWelcomeMenu(phone ?? chatId);
     if (outbound.sent) {
       await db.from("whatsapp_leads").update({ status: "active", ai_paused: false, closed_at: null, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
       await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
     }
-    const telegram_alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `OpenWA reply failed: ${outbound.reason}`, leadId, history, mediaUrl, closed: false });
+    const telegram_alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`, leadId, history, mediaUrl, closed: false });
     return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, welcome_menu: outbound.sent, needs_human: !outbound.sent, telegram_alert, outbound });
   }
 
@@ -737,7 +744,7 @@ export async function handleAgentWebhookRequest(request: Request) {
       session_id: sessionId,
     });
     await db.from("whatsapp_leads").update({ status: "needs_human", ai_paused: true, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
-    const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
+    const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
     const alert = await sendTelegramAlert({
       name: leadName,
       phone,
@@ -772,7 +779,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     const reply = formatCustomerFleet((fleet ?? []) as FleetVehicle[]);
     await db.from("whatsapp_leads").update({ contact_name: customerName, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
     await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
-    const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
+    const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
     return json({ ok: true, lead_id: leadId, reply, outbound, needs_human: !outbound.sent });
   }
 
@@ -780,12 +787,12 @@ export async function handleAgentWebhookRequest(request: Request) {
     const selected = findSelectedVehicle(content, (fleet ?? []) as FleetVehicle[]);
     if (selected) {
       const reply = formatVehicleDetails(selected);
-      const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
+      const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
       if (outbound.sent) {
         await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
         await db.from("whatsapp_leads").update({ ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
       }
-      const alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `OpenWA reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
+      const alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
       return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, needs_human: !outbound.sent, telegram_alert: alert });
     }
   }
@@ -795,7 +802,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     const reply = "Accident Support\n\nThank you, " + customerName + ". Please now send the vehicle registration, incident date, location, a short description of what happened, and any photos. A team member will review this promptly.";
     await db.from("whatsapp_leads").update({ contact_name: customerName, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
     await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
-    const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
+    const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
     return json({ ok: true, lead_id: leadId, reply, outbound, needs_human: !outbound.sent });
   }
 
@@ -804,7 +811,7 @@ export async function handleAgentWebhookRequest(request: Request) {
       ? "Car Enquiry\n\nThank you for your interest in our PCO fleet. Before we look at available vehicles, could you please tell me your full name?"
       : "🚨 Accident Support\n\nWe are sorry to hear you've been in an accident. We are here to help guide you through the next steps safely.\n\nTo get started, please provide your full name:";
     const intent = option === 1 ? "book_car" : "report_accident";
-    const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
+    const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
     if (outbound.sent) {
       await insertWithSessionFallback(db, "messages", {
         user_id: userId,
@@ -817,7 +824,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     }
     let alert: { sent: boolean; reason?: string } = { sent: false, reason: "not_needed" };
     if (!outbound.sent) {
-      alert = await sendTelegramAlert({ name: leadName, phone, reason: `OpenWA reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
+      alert = await sendTelegramAlert({ name: leadName, phone, reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
     }
     return json({ ok: true, lead_id: leadId, reply, needs_human: !outbound.sent, ai_paused: !outbound.sent, telegram_alert: alert, outbound });
   }
@@ -837,10 +844,10 @@ export async function handleAgentWebhookRequest(request: Request) {
       }
       if (!next.driverName || !next.driverReg) {
         const reply = `🚨 Accident verification\\n\\nPlease send the missing detail: ${!next.driverName ? "your full name" : "your vehicle registration"}.`;
-        const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
+        const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
         if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
         await db.from("whatsapp_leads").update({ accident_data: next, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
-        const alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `OpenWA reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
+        const alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
         return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, telegram_alert: alert });
       }
     }
@@ -858,19 +865,19 @@ export async function handleAgentWebhookRequest(request: Request) {
       );
       if (!driver) {
         const reply = "🚨 I could not verify that driver name and registration together in our CRM. Please check the spelling and registration and send them again.";
-        const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
+        const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
         if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
-        const alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `OpenWA reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
+        const alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
         return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, telegram_alert: alert });
       }
       next.verified = true;
       next.vehicleId = driver.vehicle_id ?? null;
       customerType = "existing_customer";
       const reply = "✅ Your driver details have been verified in our CRM. Please now send the following information:\\n\\n1. The other driver’s full name and a clear picture of their driving licence\\n2. Their vehicle registration\\n3. The date and time of the accident\\n4. The place of the accident\\n5. A description of what happened\\n6. All photos and videos of the accident\\n\\nYou can send the details in separate messages. I will tell you if anything is still missing.";
-      const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
+      const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
       if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
       await db.from("whatsapp_leads").update({ accident_data: next, customer_type: customerType, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
-      const alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `OpenWA reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
+      const alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
       return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, telegram_alert: alert });
     }
 
@@ -910,14 +917,14 @@ export async function handleAgentWebhookRequest(request: Request) {
         } as never);
         if (caseError) console.error("[agent-webhook] accident case insert failed", { leadId, error: caseError.message });
         const reply = "✅ Thank you. Your accident report has been saved and sent to our team for review. This conversation is now closed.";
-        const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
+        const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
         if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, handoff: true, session_id: sessionId });
         await db.from("whatsapp_leads").update({ accident_data: next, customer_type: "existing_customer", status: "closed", ai_paused: true, closed_at: new Date().toISOString(), ai_summary: summary, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
         const alert = await sendTelegramAlert({ name: leadName, phone, reason: caseError ? "Accident report requires manual CRM review" : "Verified accident report confirmed by customer", leadId, history: [...history, { sender: "ai_agent", content: summary }, { sender: "ai_agent", content: reply }], mediaUrl, closed: true });
         return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, telegram_alert: alert, accident_case_saved: !caseError });
       }
       const reply = "No problem. Please tell me which part is incorrect, and I will update the accident report.";
-      const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
+      const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
       if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
       await db.from("whatsapp_leads").update({ accident_data: next, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
       return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound });
@@ -926,10 +933,10 @@ export async function handleAgentWebhookRequest(request: Request) {
     const reply = missing.length
       ? `🚨 Accident report\\n\\nThank you. I still need ${missing.join(", ")}. Please send the missing information; you can send photos and videos as separate messages.`
       : formatAccidentSummary(next);
-    const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
+    const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
     if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
     await db.from("whatsapp_leads").update({ accident_data: next, customer_type: customerType, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
-    const alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `OpenWA reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
+    const alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
     return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, telegram_alert: alert, missing });
   }
 
@@ -937,8 +944,8 @@ export async function handleAgentWebhookRequest(request: Request) {
     const reply = "Thank you for contacting us. A team member will reply back to you within 24 hours to secure your place in this car.";
     await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, handoff: true, session_id: sessionId });
     await db.from("whatsapp_leads").update({ status: "needs_human", customer_type: "needs_human", ai_paused: true, intent: leadIntent ?? "book_car", ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
-    const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
-    const alert = await sendTelegramAlert({ name: leadName, phone, reason: outbound.sent ? "Customer confirmed vehicle terms" : `OpenWA reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
+    const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
+    const alert = await sendTelegramAlert({ name: leadName, phone, reason: outbound.sent ? "Customer confirmed vehicle terms" : `WhatsApp Cloud API reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
     return json({ ok: true, lead_id: leadId, reply, needs_human: true, telegram_alert: alert, outbound });
   }
 
@@ -963,11 +970,11 @@ export async function handleAgentWebhookRequest(request: Request) {
         ai_summary: reply,
       } as never)
       .eq("id", leadId);
-    const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
+    const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
     const alert = await sendTelegramAlert({
       name: leadName,
       phone,
-      reason: outbound.sent ? "Customer requested a human" : `OpenWA reply failed: ${outbound.reason}`,
+      reason: outbound.sent ? "Customer requested a human" : `WhatsApp Cloud API reply failed: ${outbound.reason}`,
       leadId,
       history: [...history, { sender: "ai_agent", content: reply }],
       mediaUrl,
@@ -996,11 +1003,11 @@ export async function handleAgentWebhookRequest(request: Request) {
         last_message_at: new Date().toISOString(),
       } as never)
       .eq("id", leadId);
-    const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: reply, sessionId: openwaSessionId ?? undefined });
+    const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
     const alert = await sendTelegramAlert({
       name: leadName,
       phone,
-      reason: outbound.sent ? "Customer confirmed closure" : `OpenWA reply failed: ${outbound.reason}`,
+      reason: outbound.sent ? "Customer confirmed closure" : `WhatsApp Cloud API reply failed: ${outbound.reason}`,
       leadId,
       history: finalHistory,
       mediaUrl,
@@ -1028,8 +1035,8 @@ export async function handleAgentWebhookRequest(request: Request) {
   const needsHuman = Boolean(ai.needs_human);
   const finalReply =
     needsHuman && !ai.reply ? "I’m connecting you with a member of our team now." : ai.reply;
-  console.info("[agent-webhook] awaiting OpenWA AI dispatch", { leadId, transportSession: openwaSessionId ?? "vch-bot", chatId: chatId ?? phone, hasPhone: Boolean(phone || chatId) });
-  const outbound = await sendOpenWaText({ phone: chatId ?? phone, text: finalReply, sessionId: openwaSessionId ?? undefined });
+  console.info("[agent-webhook] awaiting Meta WhatsApp AI dispatch", { leadId, transportSession: "meta-cloud-api", chatId: chatId ?? phone, hasPhone: Boolean(phone || chatId) });
+  const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: finalReply,  });
   if (outbound.sent) {
     await insertWithSessionFallback(db, "messages", {
       user_id: userId,
@@ -1048,14 +1055,14 @@ export async function handleAgentWebhookRequest(request: Request) {
       } as never)
       .eq("id", leadId);
   }
-  console.info("[agent-webhook] OpenWA AI dispatch complete", { leadId, sent: outbound.sent, reason: outbound.sent ? undefined : outbound.reason });
+  console.info("[agent-webhook] Meta WhatsApp AI dispatch complete", { leadId, sent: outbound.sent, reason: outbound.sent ? undefined : outbound.reason });
   const deliveryFailed = !outbound.sent;
   let alert: { sent: boolean; reason?: string } = { sent: false, reason: "not_needed" };
   if (needsHuman || deliveryFailed) {
     alert = await sendTelegramAlert({
       name: leadName,
       phone,
-      reason: deliveryFailed ? `OpenWA reply failed: ${outbound.reason}` : (ai.reason || "AI trouble or customer needs help"),
+      reason: deliveryFailed ? `WhatsApp Cloud API reply failed: ${outbound.reason}` : (ai.reason || "AI trouble or customer needs help"),
       leadId,
       history: [...history, { sender: "ai_agent", content: finalReply }],
       mediaUrl,

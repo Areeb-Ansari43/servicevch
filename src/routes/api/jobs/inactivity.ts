@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { getRuntimeEnv } from "@/integrations/supabase/config";
-import { sendOpenWaText } from "@/lib/openwa.server";
+import { sendWhatsAppText } from "@/lib/meta-whatsapp.server";
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -15,7 +15,7 @@ function escapeHtml(value: string): string {
 
 function chatIdFromLead(lead: Record<string, unknown>): string | null {
   const session = typeof lead.session_id === "string" ? lead.session_id : "";
-  if (session.startsWith("wa:")) return session.slice(3);
+  if (session.startsWith("meta:")) return session.slice(5);
   return typeof lead.phone === "string" ? lead.phone : null;
 }
 
@@ -92,7 +92,7 @@ export const Route = createFileRoute("/api/jobs/inactivity")({
               .select("id")
               .maybeSingle();
             if (!claim) continue;
-            const outbound = await sendOpenWaText({ phone: chatId, text: "Are you still there? If you need more help, please reply here." });
+            const outbound = await sendWhatsAppText({ phone: chatId, text: "Are you still there? If you need more help, please reply here." });
             if (outbound.sent) {
               await db.from("messages").insert({ user_id: lead.user_id, lead_id: leadId, sender: "ai_agent", content: "Are you still there? If you need more help, please reply here." } as never);
               prompted += 1;

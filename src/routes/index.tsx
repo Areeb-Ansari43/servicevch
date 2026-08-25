@@ -1639,7 +1639,7 @@ function LogsModal({ driver, onClose }: { driver: DriverTrack; onClose: () => vo
 /* ---------------- WhatsApp Leads ---------------- */
 function displayLeadPhone(phone: string | null | undefined): string {
   if (!phone) return "No number";
-  if (/@lid$/i.test(phone)) return "Phone pending OpenWA resolution";
+  if (/@lid$/i.test(phone)) return "Phone pending resolution";
   const digits = phone.replace(/@c\.us$/i, "").replace(/\D/g, "");
   if (digits.startsWith("44") && digits.length === 12) {
     return `+44 ${digits.slice(2, 6)} ${digits.slice(6)}`;
