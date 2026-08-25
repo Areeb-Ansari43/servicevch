@@ -349,7 +349,7 @@ export function FleetShell({ view }: { view: View }) {
       <Sidebar view={view} setView={(next) => { setMobileNavOpen(false); go(next); }} onSignOut={signOut} account={account} mobileOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
       <div className="relative z-10 ml-0 lg:ml-64">
         <Topbar vehicles={data.vehicles} drivers={data.drivers} services={data.services} goto={go} onMenu={() => setMobileNavOpen(true)} />
-        <main className="p-4 sm:p-6 md:p-8">
+        <main className="mx-auto w-full max-w-[1400px] p-3 sm:p-5 xl:p-6">
 
           {data.loading ? (
             <div className="rounded-xl border p-12 text-center text-sm" style={{ borderColor: T.border, background: T.panel, color: T.muted }}>
@@ -460,15 +460,16 @@ function Sidebar({ view, setView, onSignOut, account, mobileOpen, onClose }: {
   return (
     <>
       {mobileOpen && <button aria-label="Close navigation" onClick={onClose} className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden" />}
-      <aside className={`fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col border-r transition-transform duration-200 lg:z-30 lg:w-64 lg:translate-x-0 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`} style={{ borderColor: T.border, background: "rgba(12,16,27,0.96)", backdropFilter: "blur(24px)" }}>
+      <aside className={`fixed inset-y-0 left-0 z-50 flex w-[min(19rem,88vw)] max-w-[88vw] flex-col border-r transition-transform duration-200 lg:z-30 lg:w-64 lg:translate-x-0 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`} style={{ borderColor: T.border, background: "rgba(12,16,27,0.96)", backdropFilter: "blur(24px)" }}>
       <div className="flex items-center gap-3 px-5 py-4">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-[#ff6a00] shadow-sm" style={{ background: "linear-gradient(135deg,#0b0d12,#1e222b)" }}>
           <Icon.Car className="h-5 w-5" />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-bold leading-tight">Virtual Car Hire</div>
           <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8b95a8]">Fleet Tracker</div>
         </div>
+        <button onClick={onClose} aria-label="Close navigation" className="rounded-xl p-2 text-[#8b95a8] transition hover:bg-white/[0.08] hover:text-white lg:hidden"><Icon.X className="h-4 w-4" /></button>
       </div>
 
       <nav className="flex-1 space-y-1.5 overflow-y-auto px-3 py-2">
@@ -525,12 +526,17 @@ function Sidebar({ view, setView, onSignOut, account, mobileOpen, onClose }: {
 
 function Topbar({ vehicles, drivers, services, goto, onMenu }: { vehicles: Vehicle[]; drivers: DriverTrack[]; services: ServiceRecord[]; goto: (v: View) => void; onMenu: () => void }) {
   return (
-    <header className="sticky top-0 z-20 flex min-h-14 items-center gap-3 border-b px-4 py-2 sm:px-6 md:px-8" style={{ borderColor: T.border, background: "rgba(8,11,19,0.78)", backdropFilter: "blur(20px)" }}>
+    <header className="sticky top-0 z-20 flex min-h-16 items-center gap-3 border-b px-3 py-2 sm:px-6 xl:px-8" style={{ borderColor: T.border, background: "rgba(8,11,19,0.78)", backdropFilter: "blur(20px)" }}>
       <button onClick={onMenu} className="rounded-xl border p-2 text-[#c5cbd6] hover:bg-white/10 lg:hidden" style={{ borderColor: T.border }} aria-label="Open navigation"><Icon.Menu className="h-5 w-5" /></button>
       <span className="hidden shrink-0 items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold text-[#ff6a00] sm:inline-flex" style={{ background: T.orangeSoft }}>
         <span className="h-1.5 w-1.5 rounded-full bg-[#ff6a00]" /> VCH Fleet
       </span>
       <GlobalSearch vehicles={vehicles} drivers={drivers} services={services} goto={goto} />
+      <div className="hidden items-center gap-1.5 text-[#aeb8c9] sm:flex">
+        <button aria-label="Notifications" className="relative rounded-xl p-2 transition hover:bg-white/[0.08]"><span className="absolute right-1.5 top-1 h-1.5 w-1.5 rounded-full bg-[#ff6a00]" /><Icon.Alert className="h-4 w-4" /></button>
+        <button aria-label="Messages" className="relative rounded-xl p-2 transition hover:bg-white/[0.08]"><span className="absolute right-1.5 top-1 h-1.5 w-1.5 rounded-full bg-red-400" /><Icon.Chat className="h-4 w-4" /></button>
+        <button aria-label="Calendar" className="rounded-xl p-2 transition hover:bg-white/[0.08]"><Icon.Calendar className="h-4 w-4" /></button>
+      </div>
     </header>
   );
 }
@@ -619,12 +625,14 @@ function Dashboard({ vehicles, services, drivers, goto }: { vehicles: Vehicle[];
   const [expandedChart, setExpandedChart] = useState<null | "donut" | "line">(null);
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-end justify-between gap-3 border-b pb-3" style={{ borderColor: T.borderSoft }}>
+    <div className="space-y-4 xl:space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b pb-4" style={{ borderColor: T.borderSoft }}>
         <div><h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Dashboard</h1><p className="mt-1 text-sm text-[#8b95a8]">Welcome back, Fleet Admin 👋</p></div>
-        <div className="flex items-center gap-2 rounded-xl border px-3 py-2 text-xs text-[#c5cbd6]" style={{ borderColor: T.border, background: T.panel }}><Icon.Calendar className="h-4 w-4 text-[#ff6a00]" /> {new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</div>
+        <div className="flex items-center gap-2">
+          <ChatSimulator />
+          <div className="flex items-center gap-2 rounded-xl border px-3 py-2 text-xs text-[#c5cbd6]" style={{ borderColor: T.border, background: T.panel }}><Icon.Calendar className="h-4 w-4 text-[#ff6a00]" /> {new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</div>
+        </div>
       </div>
-      <div className="flex justify-end"><ChatSimulator /></div>
       {eomReminders.length > 0 && (
         <div className="rounded-xl border p-5" style={{ borderColor: "rgba(255,106,0,0.4)", background: T.orangeSoft }}>
           <div className="mb-3 flex items-center gap-2">
@@ -673,7 +681,7 @@ function Dashboard({ vehicles, services, drivers, goto }: { vehicles: Vehicle[];
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <Kpi label="Total Vehicles" value={total} accent="#e7eaf0" />
         <Kpi label="In Service" value={inService} accent="#60a5fa" />
         <Kpi label="Overdue Checks" value={overdue} accent="#f87171" />
@@ -682,10 +690,10 @@ function Dashboard({ vehicles, services, drivers, goto }: { vehicles: Vehicle[];
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <ChartCard title="Fleet Status" onClick={() => setExpandedChart(expandedChart === "donut" ? null : "donut")}>
-          <Donut data={statusCounts} height={expandedChart === "donut" ? 320 : 180} />
+          <Donut data={statusCounts} height={expandedChart === "donut" ? 320 : 210} />
         </ChartCard>
         <ChartCard title="Service Spend (Last 6 months)" onClick={() => setExpandedChart(expandedChart === "line" ? null : "line")}>
-          <LineChart data={monthly} height={expandedChart === "line" ? 320 : 180} />
+          <LineChart data={monthly} height={expandedChart === "line" ? 320 : 210} />
         </ChartCard>
       </div>
 
@@ -733,8 +741,8 @@ function Kpi({ label, value, accent }: { label: string; value: string | number; 
 function ChartCard({ title, children, onClick }: { title: string; children: React.ReactNode; onClick: () => void }) {
   return (
     <div className="rounded-2xl border p-4" style={{ borderColor: T.border, background: T.panel }}>
-      <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-base font-semibold">{title}</h3>
+        <div className="mb-3 flex items-center justify-between gap-3">
+        <div><h3 className="text-base font-semibold">{title}</h3><p className="mt-1 text-xs text-[#8b95a8]">{title === "Fleet Status" ? "Overview of your entire fleet" : "Track your service expenditure over time"}</p></div>
         <button onClick={onClick} className="rounded-lg border px-3 py-1.5 text-[11px] font-medium text-[#aeb8c9] transition hover:border-[#ff6a00]/50 hover:text-white" style={{ borderColor: T.borderSoft }}>{title === "Fleet Status" ? "View all vehicles →" : "View full report ↗"}</button>
       </div>
       {children}
@@ -775,14 +783,13 @@ function Donut({ data, height }: { data: Record<string, number>; height: number 
     ctx.fillText("vehicles", cx, cy + 14);
   }, [data, height]);
   return (
-    <div>
-      <canvas ref={ref} style={{ width: "100%", height }} />
-      <div className="mt-4 flex flex-wrap justify-center gap-4 text-xs">
+    <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center sm:gap-5">
+      <canvas ref={ref} className="w-full shrink-0 sm:w-[55%]" style={{ height }} />
+      <div className="flex w-full flex-1 flex-wrap justify-center gap-3 text-xs sm:flex-col sm:justify-center sm:gap-0">
         {Object.entries(data).map(([k, v]) => (
-          <div key={k} className="flex items-center gap-2">
-            <span className="h-3 w-3 rounded" style={{ background: k === "Active" ? "#22c55e" : k === "In Service" ? "#60a5fa" : "#64748b" }} />
-            <span className="text-[#8b95a8]">{k}</span>
-            <span className="font-semibold">{v}</span>
+          <div key={k} className="flex items-center justify-between gap-3 border-b border-white/[0.06] px-1 py-2.5 last:border-0">
+            <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded" style={{ background: k === "Active" ? "#22c55e" : k === "In Service" ? "#60a5fa" : "#64748b" }} /><span className="text-[#aeb8c9]">{k}</span></span>
+            <span className="font-semibold text-white">{v} <span className="font-normal text-[#718096]">({Math.round((v / (Object.values(data).reduce((a, b) => a + b, 0) || 1)) * 100)}%)</span></span>
           </div>
         ))}
       </div>
