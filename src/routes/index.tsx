@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { useFleetData, type Vehicle, type ServiceRecord, type DriverTrack } from "@/lib/fleet-data";
 import { exportServiceHistoryPdf } from "@/lib/pdf-export";
@@ -7,6 +8,7 @@ import { useLeadsData } from "@/lib/leads-data";
 import { ApexAssistant } from "@/components/apex-assistant";
 import { ChatSimulator } from "@/components/chat-simulator";
 import { LeadThread } from "@/components/lead-thread";
+import { getLeadConversation } from "@/lib/chat.functions";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -150,6 +152,9 @@ const Icon = {
   Info: (p: { className?: string }) => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>),
   Clock: (p: { className?: string }) => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>),
   Car: (p: { className?: string }) => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}><path d="M5 17h14M5 17a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm18 0a2 2 0 1 1-4 0 2 2 0 0 1 4 0z"/><path d="M3 17v-5l2-5h14l2 5v5"/></svg>),
+  Search: (p: { className?: string }) => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>),
+  Menu: (p: { className?: string }) => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}><path d="M4 6h16M4 12h16M4 18h16"/></svg>),
+  Bolt: (p: { className?: string }) => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}><path d="m13 2-9 12h7l-1 8 9-12h-7z"/></svg>),
   X: (p: { className?: string }) => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}><path d="M18 6 6 18M6 6l12 12"/></svg>),
   Alert: (p: { className?: string }) => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01"/></svg>),
   Download: (p: { className?: string }) => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>),
@@ -306,6 +311,7 @@ export function FleetShell({ view }: { view: View }) {
   const [account, setAccount] = useState<{ email: string } | null>(null);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const data = useFleetData();
 
@@ -338,12 +344,12 @@ export function FleetShell({ view }: { view: View }) {
   if (!authed) return null;
 
   return (
-    <div className="vch-app relative min-h-screen text-[#eef2f8]" style={{ background: T.bg }}>
+    <div className="vch-app relative min-h-screen overflow-x-hidden text-[#eef2f8]" style={{ background: T.bg }}>
       <div className="vch-glow" />
-      <Sidebar view={view} setView={go} onSignOut={signOut} account={account} />
-      <div className="relative z-10 ml-64">
-        <Topbar />
-        <main className="p-6 md:p-8">
+      <Sidebar view={view} setView={(next) => { setMobileNavOpen(false); go(next); }} onSignOut={signOut} account={account} mobileOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
+      <div className="relative z-10 ml-0 lg:ml-64">
+        <Topbar vehicles={data.vehicles} drivers={data.drivers} services={data.services} goto={go} onMenu={() => setMobileNavOpen(true)} />
+        <main className="p-4 sm:p-6 md:p-8">
 
           {data.loading ? (
             <div className="rounded-xl border p-12 text-center text-sm" style={{ borderColor: T.border, background: T.panel, color: T.muted }}>
@@ -430,11 +436,13 @@ export function FleetShell({ view }: { view: View }) {
 
 
 /* ---------------- Sidebar / Topbar ---------------- */
-function Sidebar({ view, setView, onSignOut, account }: {
+function Sidebar({ view, setView, onSignOut, account, mobileOpen, onClose }: {
   view: View;
   setView: (v: View) => void;
   onSignOut: () => void;
   account: { email: string } | null;
+  mobileOpen: boolean;
+  onClose: () => void;
 }) {
   const items: { id: View; label: string; Icon: (p: { className?: string }) => React.ReactElement }[] = [
     { id: "dashboard", label: "Dashboard", Icon: Icon.Dashboard },
@@ -450,7 +458,9 @@ function Sidebar({ view, setView, onSignOut, account }: {
   const initial = (email.trim()[0] ?? "V").toUpperCase();
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 flex w-64 flex-col border-r" style={{ borderColor: T.border, background: T.panel }}>
+    <>
+      {mobileOpen && <button aria-label="Close navigation" onClick={onClose} className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden" />}
+      <aside className={`fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col border-r transition-transform duration-200 lg:z-30 lg:w-64 lg:translate-x-0 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`} style={{ borderColor: T.border, background: "rgba(12,16,27,0.96)", backdropFilter: "blur(24px)" }}>
       <div className="flex items-center gap-3 px-5 py-4">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-[#ff6a00] shadow-sm" style={{ background: "linear-gradient(135deg,#0b0d12,#1e222b)" }}>
           <Icon.Car className="h-5 w-5" />
@@ -507,19 +517,47 @@ function Sidebar({ view, setView, onSignOut, account }: {
           </a>
         </p>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }
 
 
-function Topbar() {
+function Topbar({ vehicles, drivers, services, goto, onMenu }: { vehicles: Vehicle[]; drivers: DriverTrack[]; services: ServiceRecord[]; goto: (v: View) => void; onMenu: () => void }) {
   return (
-    <header className="sticky top-0 z-20 flex h-14 items-center border-b px-6 md:px-8" style={{ borderColor: T.border, background: T.panel }}>
-      <span className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold text-[#ff6a00]" style={{ background: T.orangeSoft }}>
-        <span className="h-1.5 w-1.5 rounded-full bg-[#ff6a00]" />
-        VCH Fleet
+    <header className="sticky top-0 z-20 flex min-h-14 items-center gap-3 border-b px-4 py-2 sm:px-6 md:px-8" style={{ borderColor: T.border, background: "rgba(8,11,19,0.78)", backdropFilter: "blur(20px)" }}>
+      <button onClick={onMenu} className="rounded-xl border p-2 text-[#c5cbd6] hover:bg-white/10 lg:hidden" style={{ borderColor: T.border }} aria-label="Open navigation"><Icon.Menu className="h-5 w-5" /></button>
+      <span className="hidden shrink-0 items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold text-[#ff6a00] sm:inline-flex" style={{ background: T.orangeSoft }}>
+        <span className="h-1.5 w-1.5 rounded-full bg-[#ff6a00]" /> VCH Fleet
       </span>
+      <GlobalSearch vehicles={vehicles} drivers={drivers} services={services} goto={goto} />
     </header>
+  );
+}
+
+function GlobalSearch({ vehicles, drivers, services, goto }: { vehicles: Vehicle[]; drivers: DriverTrack[]; services: ServiceRecord[]; goto: (v: View) => void }) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const results = q ? [
+    ...vehicles.filter((v) => `${v.registration} ${v.make} ${v.model}`.toLowerCase().includes(q)).slice(0, 5).map((v) => ({ label: `${v.make} ${v.model}`, meta: v.registration, view: "vehicles" as View })),
+    ...drivers.filter((d) => `${d.driver_name} ${d.phone} ${d.registration}`.toLowerCase().includes(q)).slice(0, 5).map((d) => ({ label: d.driver_name, meta: `${d.phone || "No phone"} · ${d.registration}`, view: "drivers" as View })),
+    ...services.filter((s) => `${s.registration} ${s.service_type} ${s.description}`.toLowerCase().includes(q)).slice(0, 5).map((s) => ({ label: s.service_type, meta: `${s.registration} · ${s.description || "Service record"}`, view: "services" as View })),
+    ...(q.includes("lead") || q.includes("whatsapp") ? [{ label: "WhatsApp Leads", meta: "Open customer conversations", view: "leads" as View }] : []),
+    ...(q.includes("accident") || q.includes("crash") ? [{ label: "Accident Cases", meta: "Open accident reports", view: "accidents" as View }] : []),
+  ].slice(0, 8) : [];
+  return (
+    <div className="relative min-w-0 flex-1">
+      <div className="flex items-center gap-2 rounded-xl border px-3 py-2" style={{ borderColor: T.border, background: T.panel }}>
+        <Icon.Search className="h-4 w-4 shrink-0 text-[#8b95a8]" />
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search anything…" className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-[#6b7488]" aria-label="Search CRM" />
+        <kbd className="hidden rounded border px-1.5 py-0.5 text-[10px] text-[#8b95a8] sm:block" style={{ borderColor: T.borderSoft }}>⌘ K</kbd>
+      </div>
+      {results.length > 0 && (
+        <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-2xl border p-1 shadow-2xl" style={{ borderColor: T.border, background: "rgba(12,16,27,0.96)", backdropFilter: "blur(20px)" }}>
+          {results.map((r, i) => <button key={`${r.label}-${i}`} onClick={() => { goto(r.view); setQuery(""); }} className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left hover:bg-white/[0.08]"><span className="truncate text-sm text-white">{r.label}</span><span className="ml-3 truncate text-xs text-[#8b95a8]">{r.meta}</span></button>)}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -633,7 +671,7 @@ function Dashboard({ vehicles, services, drivers, goto }: { vehicles: Vehicle[];
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
         <Kpi label="Total Vehicles" value={total} accent="#e7eaf0" />
         <Kpi label="In Service" value={inService} accent="#60a5fa" />
         <Kpi label="Overdue Checks" value={overdue} accent="#f87171" />
@@ -844,14 +882,17 @@ function VehiclesList({
           {filtered.map((v) => (
             <div
               key={v.id}
-              className="group flex flex-col rounded-xl border p-4 transition-all hover:border-[#ff6a00]/60 hover:shadow-lg hover:shadow-orange-500/10"
+              className="group relative flex flex-col overflow-hidden rounded-xl border p-4 transition-all hover:border-[#ff6a00]/60 hover:shadow-lg hover:shadow-orange-500/10"
               style={{ borderColor: T.border, background: T.panel }}
-            >
-              <div className="mb-3 flex items-start justify-between gap-2">
+              >
+              <div className="pointer-events-none absolute right-3 top-14 opacity-[0.07] transition-opacity group-hover:opacity-[0.13]">
+                {v.fuel_type === "Electric" ? <Icon.Bolt className="h-28 w-28 text-sky-300" /> : <Icon.Car className={`h-28 w-28 ${v.fuel_type === "Hybrid" ? "text-amber-300" : "text-slate-200"}`} />}
+              </div>
+              <div className="relative z-10 mb-3 flex items-start justify-between gap-2">
                 <UKPlate reg={v.registration} size="sm" />
                 <StatusBadge status={v.status} />
               </div>
-              <button onClick={() => onOpen(v)} className="block text-left">
+              <button onClick={() => onOpen(v)} className="relative z-10 block text-left">
                 <div className="line-clamp-2 text-sm font-bold uppercase leading-tight">{v.make} {v.model}</div>
               </button>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#8b95a8]">
@@ -1327,6 +1368,7 @@ function DriversView({ vehicles, drivers, data, toast }: { vehicles: Vehicle[]; 
   const [phone, setPhone] = useState("");
   const [vehicleId, setVehicleId] = useState("");
   const [saving, setSaving] = useState(false);
+  const [previewDriver, setPreviewDriver] = useState<DriverTrack | null>(null);
   const selected = vehicles.find((vehicle) => vehicle.id === vehicleId);
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -1363,12 +1405,49 @@ function DriversView({ vehicles, drivers, data, toast }: { vehicles: Vehicle[]; 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {drivers.map((driver) => {
           const vehicle = vehicles.find((item) => item.id === driver.vehicle_id);
-          return <div key={driver.id} className="rounded-xl border p-5" style={{ borderColor: T.border, background: T.panel }}>
+          return <button type="button" key={driver.id} onClick={() => setPreviewDriver(driver)} className="rounded-xl border p-5 text-left transition hover:-translate-y-0.5 hover:border-[#ff6a00]/60 hover:shadow-lg hover:shadow-orange-500/10" style={{ borderColor: T.border, background: T.panel }}>
             <div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold">{driver.driver_name}</h3><p className="mt-1 text-sm text-[#8b95a8]">{driver.phone || "No phone saved"}</p></div><span className="rounded-full border border-sky-400/30 bg-sky-400/10 px-2 py-1 text-[11px] text-sky-200">Active</span></div>
             <div className="mt-4 flex items-center gap-3 border-t pt-3" style={{ borderColor: T.borderSoft }}><UKPlate reg={vehicle?.registration ?? driver.registration} size="sm" /><span className="text-sm text-[#c5ccda]">{vehicle ? `${vehicle.make} ${vehicle.model}` : "Vehicle not found"}</span></div>
-          </div>;
+          </button>;
         })}
         {drivers.length === 0 && <div className="rounded-xl border border-dashed p-10 text-center text-sm text-[#8b95a8] md:col-span-2 xl:col-span-3" style={{ borderColor: T.border }}>No drivers saved yet.</div>}
+      </div>
+      {previewDriver && <DriverPreviewModal driver={previewDriver} vehicle={vehicles.find((item) => item.id === previewDriver.vehicle_id)} onClose={() => setPreviewDriver(null)} />}
+    </div>
+  );
+}
+
+function phoneKey(value: string | null | undefined): string {
+  const digits = (value ?? "").replace(/@c\.us|@s\.whatsapp\.net|@lid/gi, "").replace(/\D/g, "");
+  if (!digits) return "";
+  return digits.startsWith("0") ? `44${digits.slice(1)}` : digits;
+}
+
+function DriverPreviewModal({ driver, vehicle, onClose }: { driver: DriverTrack; vehicle?: Vehicle; onClose: () => void }) {
+  const { leads, loading: leadsLoading } = useLeadsData();
+  const loadConversation = useServerFn(getLeadConversation);
+  const [messages, setMessages] = useState<Array<{ id: string; sender: string; content: string; created_at: string; media_url: string | null }>>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const lead = leads.find((item) => phoneKey(item.phone) === phoneKey(driver.phone));
+  useEffect(() => {
+    let cancelled = false;
+    if (!lead) { setMessages([]); return; }
+    setHistoryLoading(true);
+    loadConversation({ data: { leadId: lead.id } }).then((result) => { if (!cancelled) setMessages(result.messages as typeof messages); }).catch(() => { if (!cancelled) setMessages([]); }).finally(() => { if (!cancelled) setHistoryLoading(false); });
+    return () => { cancelled = true; };
+  }, [lead?.id, loadConversation]);
+  return (
+    <div className="fixed inset-0 z-[96] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-md" onClick={onClose}>
+      <div role="dialog" aria-modal="true" className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-[26px] border border-white/15 bg-[#0d1320]/90 shadow-2xl backdrop-blur-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start gap-4 border-b border-white/10 bg-white/[0.04] p-5">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#ff6a00]/15 text-[#ff8a3d]"><Icon.Chat className="h-6 w-6" /></div>
+          <div className="min-w-0 flex-1"><h2 className="text-lg font-bold text-white">{driver.driver_name}</h2><p className="text-sm text-[#aeb8c9]">{driver.phone || "No phone saved"}</p><p className="mt-1 text-xs text-[#7f8aa0]">{vehicle ? `${vehicle.make} ${vehicle.model} · ${vehicle.registration}` : driver.registration}</p></div>
+          <button onClick={onClose} aria-label="Close driver preview" className="rounded-full p-2 text-[#8b95a8] hover:bg-white/10 hover:text-white"><Icon.X className="h-5 w-5" /></button>
+        </div>
+        <div className="flex-1 space-y-3 overflow-y-auto p-5">
+          {leadsLoading || historyLoading ? <p className="text-sm text-[#8b95a8]">Loading WhatsApp history…</p> : !lead ? <div className="rounded-2xl border border-dashed p-6 text-center text-sm text-[#8b95a8]" style={{ borderColor: T.border }}>No previous WhatsApp conversation found for this number.</div> : messages.length === 0 ? <p className="text-sm text-[#8b95a8]">This customer has a lead, but no messages have been saved yet.</p> : messages.map((message) => <div key={message.id} className={`max-w-[88%] rounded-2xl border px-4 py-3 ${message.sender === "customer" ? "border-white/10 bg-white/[0.05]" : "ml-auto border-[#ff6a00]/25 bg-[#ff6a00]/10"}`}><div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#8b95a8]">{message.sender === "customer" ? "Customer" : message.sender === "human" ? "You" : "AI Agent"} · {new Date(message.created_at).toLocaleString("en-GB")}</div><div className="whitespace-pre-wrap text-sm leading-relaxed text-[#edf2f8]">{message.content}</div>{message.media_url && <img src={message.media_url} alt="WhatsApp attachment" className="mt-2 max-h-48 rounded-xl" />}</div>)}
+        </div>
+        <div className="border-t border-white/10 bg-white/[0.04] p-4 text-xs text-[#8b95a8]">{lead ? "WhatsApp conversation history is linked to this driver." : "No WhatsApp history is linked to this number yet."}</div>
       </div>
     </div>
   );

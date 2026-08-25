@@ -69,10 +69,10 @@ export function ApexAssistant(_props: { vehicles?: unknown; services?: unknown; 
 
       {/* Glass side panel */}
       <div
-        className={`fixed inset-y-0 right-0 z-[90] flex w-full max-w-md flex-col border-l border-white/10 bg-[#0b0d12]/80 backdrop-blur-2xl transition-transform duration-300 ${open ? "translate-x-0" : "translate-x-full"}`}
+        className={`fixed bottom-20 right-3 z-[90] flex h-[min(640px,72vh)] w-[calc(100vw-1.5rem)] max-w-md flex-col overflow-hidden rounded-[28px] border border-white/15 bg-[#0b0d12]/88 shadow-[0_24px_90px_rgba(0,0,0,0.55)] backdrop-blur-2xl transition-all duration-200 sm:right-6 sm:w-[min(420px,calc(100vw-3rem))] ${open ? "translate-y-0 scale-100 opacity-100" : "pointer-events-none translate-y-4 scale-[0.98] opacity-0"}`}
         aria-hidden={!open}
       >
-        <div className="flex items-center gap-3 border-b border-white/10 px-5 py-4">
+        <div className="flex items-center gap-3 border-b border-white/10 bg-white/[0.04] px-5 py-4">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#ff6a00] to-[#ff9d4d] text-white">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
               <path d="M12 3l1.8 4.9L19 9.7l-4.4 3 .5 5.3-3.1-2.5-3.1 2.5.5-5.3-4.4-3 5.2-1.8z" />
