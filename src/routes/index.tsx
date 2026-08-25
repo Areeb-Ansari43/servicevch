@@ -620,9 +620,11 @@ function Dashboard({ vehicles, services, drivers, goto }: { vehicles: Vehicle[];
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
-        <ChatSimulator />
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b pb-5" style={{ borderColor: T.borderSoft }}>
+        <div><h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Dashboard</h1><p className="mt-1 text-sm text-[#8b95a8]">Welcome back, Fleet Admin 👋</p></div>
+        <div className="flex items-center gap-2 rounded-xl border px-3 py-2 text-xs text-[#c5cbd6]" style={{ borderColor: T.border, background: T.panel }}><Icon.Calendar className="h-4 w-4 text-[#ff6a00]" /> {new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</div>
       </div>
+      <div className="flex justify-end"><ChatSimulator /></div>
       {eomReminders.length > 0 && (
         <div className="rounded-xl border p-5" style={{ borderColor: "rgba(255,106,0,0.4)", background: T.orangeSoft }}>
           <div className="mb-3 flex items-center gap-2">
@@ -696,29 +698,34 @@ function Dashboard({ vehicles, services, drivers, goto }: { vehicles: Vehicle[];
             {services.slice(0, 5).map((s) => {
               const st = serviceStyle(s.service_type);
               return (
-                <div key={s.id} className="flex items-center gap-3 rounded-lg border p-3" style={{ borderColor: T.border }}>
-                  <span className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium ${st.cls}`}>
-                    <st.I className="h-3.5 w-3.5" /> {s.service_type}
-                  </span>
-                  <UKPlate reg={s.registration} size="sm" />
-                  <div className="flex-1 truncate text-sm text-[#8b95a8]">{s.description || "No notes recorded"}</div>
-                  <div className="text-sm font-semibold">£{s.cost.toFixed(2)}</div>
-                  <div className="text-xs text-[#8b95a8]">{s.service_date}</div>
-                </div>
+                  <div key={s.id} className="flex min-w-0 flex-wrap items-center gap-3 rounded-xl border px-3 py-3 transition hover:border-[#ff6a00]/40" style={{ borderColor: T.border, background: "rgba(255,255,255,0.018)" }}>
+                    <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-medium ${st.cls}`}><st.I className="h-3.5 w-3.5" /> {s.service_type}</span>
+                    <UKPlate reg={s.registration} size="sm" />
+                    <div className="min-w-[130px] flex-1 truncate text-sm text-[#aeb8c9]">{s.description || "No notes recorded"}</div>
+                    <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-[10px] font-semibold text-emerald-300">Completed</span>
+                    <div className="text-sm font-semibold text-white">£{s.cost.toFixed(2)}</div><div className="text-xs text-[#8b95a8]">{s.service_date}</div>
+                  </div>
               );
             })}
           </div>
         )}
+      </div>
+      <div className="grid grid-cols-1 gap-3 rounded-2xl border p-3 sm:grid-cols-3" style={{ borderColor: T.border, background: "rgba(17,24,39,0.72)" }}>
+        <button onClick={() => goto("services")} className="flex items-center justify-between rounded-xl px-3 py-2 text-left hover:bg-white/[0.04]"><span className="flex items-center gap-2 text-sm text-[#c5cbd6]"><Icon.Calendar className="h-4 w-4 text-[#ff8a3d]" /> Next Service Due</span><span className="font-semibold text-white">{vehicles.filter((v) => v.next_service_date && v.next_service_date <= new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)).length} Vehicles</span></button>
+        <button onClick={() => goto("vehicles")} className="flex items-center justify-between rounded-xl px-3 py-2 text-left hover:bg-white/[0.04]"><span className="flex items-center gap-2 text-sm text-[#c5cbd6]"><Icon.Alert className="h-4 w-4 text-amber-300" /> MOT Due Soon</span><span className="font-semibold text-white">{vehicles.filter((v) => v.next_mot_date && v.next_mot_date <= new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)).length} Vehicles</span></button>
+        <button onClick={() => goto("vehicles")} className="flex items-center justify-between rounded-xl px-3 py-2 text-left hover:bg-white/[0.04]"><span className="flex items-center gap-2 text-sm text-[#c5cbd6]"><Icon.Alert className="h-4 w-4 text-emerald-300" /> Insurance Expiring</span><span className="font-semibold text-white">{vehicles.filter((v) => v.insurance_expiry && v.insurance_expiry <= new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)).length} Vehicles</span></button>
       </div>
     </div>
   );
 }
 
 function Kpi({ label, value, accent }: { label: string; value: string | number; accent: string }) {
+  const KpiIcon = label === "In Service" ? Icon.Bolt : label === "Overdue Checks" ? Icon.Alert : label === "Service Spend" ? Icon.Wrench : Icon.Car;
   return (
-    <div className="rounded-xl border p-5" style={{ borderColor: T.border, background: T.panel }}>
-      <div className="text-xs uppercase tracking-wider text-[#8b95a8]">{label}</div>
-      <div className="mt-2 text-3xl font-bold" style={{ color: accent }}>{value}</div>
+    <div className="group relative overflow-hidden rounded-2xl border p-4 shadow-[0_12px_35px_rgba(0,0,0,0.16)] transition hover:-translate-y-0.5" style={{ borderColor: T.border, background: "linear-gradient(145deg, rgba(21,28,43,0.96), rgba(13,18,30,0.96))" }}>
+      <div className="flex items-start justify-between gap-2"><div className="flex h-10 w-10 items-center justify-center rounded-xl border" style={{ borderColor: `${accent}45`, background: `${accent}18`, color: accent }}><KpiIcon className="h-5 w-5" /></div><span className="text-[10px] uppercase tracking-[0.14em] text-[#718096]">Live</span></div>
+      <div className="relative z-10 mt-4 text-[10px] uppercase tracking-[0.14em] text-[#8b95a8]">{label}</div><div className="relative z-10 mt-1 text-3xl font-bold" style={{ color: accent }}>{value}</div>
+      <KpiIcon className="pointer-events-none absolute -bottom-3 -right-2 h-24 w-24 opacity-[0.06]" />
     </div>
   );
 }
@@ -728,7 +735,7 @@ function ChartCard({ title, children, onClick }: { title: string; children: Reac
     <div className="rounded-xl border p-6" style={{ borderColor: T.border, background: T.panel }}>
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-base font-semibold">{title}</h3>
-        <button onClick={onClick} className="text-xs text-[#ff6a00] hover:text-[#ff8a3d]">Toggle size</button>
+        <button onClick={onClick} className="rounded-lg border px-3 py-1.5 text-[11px] font-medium text-[#aeb8c9] transition hover:border-[#ff6a00]/50 hover:text-white" style={{ borderColor: T.borderSoft }}>{title === "Fleet Status" ? "View all vehicles →" : "View full report ↗"}</button>
       </div>
       {children}
     </div>
