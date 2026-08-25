@@ -619,8 +619,8 @@ function Dashboard({ vehicles, services, drivers, goto }: { vehicles: Vehicle[];
   const [expandedChart, setExpandedChart] = useState<null | "donut" | "line">(null);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4 border-b pb-5" style={{ borderColor: T.borderSoft }}>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b pb-3" style={{ borderColor: T.borderSoft }}>
         <div><h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Dashboard</h1><p className="mt-1 text-sm text-[#8b95a8]">Welcome back, Fleet Admin 👋</p></div>
         <div className="flex items-center gap-2 rounded-xl border px-3 py-2 text-xs text-[#c5cbd6]" style={{ borderColor: T.border, background: T.panel }}><Icon.Calendar className="h-4 w-4 text-[#ff6a00]" /> {new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</div>
       </div>
@@ -680,17 +680,17 @@ function Dashboard({ vehicles, services, drivers, goto }: { vehicles: Vehicle[];
         <Kpi label="Service Spend" value={`£${grossSpend.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} accent="#ff6a00" />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <ChartCard title="Fleet Status" onClick={() => setExpandedChart(expandedChart === "donut" ? null : "donut")}>
-          <Donut data={statusCounts} height={expandedChart === "donut" ? 450 : 240} />
+          <Donut data={statusCounts} height={expandedChart === "donut" ? 320 : 180} />
         </ChartCard>
         <ChartCard title="Service Spend (Last 6 months)" onClick={() => setExpandedChart(expandedChart === "line" ? null : "line")}>
-          <LineChart data={monthly} height={expandedChart === "line" ? 450 : 240} />
+          <LineChart data={monthly} height={expandedChart === "line" ? 320 : 180} />
         </ChartCard>
       </div>
 
-      <div className="rounded-xl border p-6" style={{ borderColor: T.border, background: T.panel }}>
-        <h3 className="mb-4 text-base font-semibold">Recent Service Records</h3>
+      <div className="rounded-2xl border p-4" style={{ borderColor: T.border, background: T.panel }}>
+        <div className="mb-2 flex items-center justify-between"><div><h3 className="text-base font-semibold">Recent Service Records</h3><p className="text-xs text-[#8b95a8]">Latest service activities across your fleet</p></div><button onClick={() => goto("services")} className="rounded-lg border px-3 py-1.5 text-[11px] text-[#aeb8c9] hover:text-white" style={{ borderColor: T.borderSoft }}>View all records →</button></div>
         {services.length === 0 ? (
           <div className="py-8 text-center text-sm text-[#8b95a8]">No service records yet.</div>
         ) : (
@@ -732,7 +732,7 @@ function Kpi({ label, value, accent }: { label: string; value: string | number; 
 
 function ChartCard({ title, children, onClick }: { title: string; children: React.ReactNode; onClick: () => void }) {
   return (
-    <div className="rounded-xl border p-6" style={{ borderColor: T.border, background: T.panel }}>
+    <div className="rounded-2xl border p-4" style={{ borderColor: T.border, background: T.panel }}>
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-base font-semibold">{title}</h3>
         <button onClick={onClick} className="rounded-lg border px-3 py-1.5 text-[11px] font-medium text-[#aeb8c9] transition hover:border-[#ff6a00]/50 hover:text-white" style={{ borderColor: T.borderSoft }}>{title === "Fleet Status" ? "View all vehicles →" : "View full report ↗"}</button>
