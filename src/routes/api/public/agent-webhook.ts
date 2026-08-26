@@ -6,7 +6,7 @@ import { sendWhatsAppButtons, sendWhatsAppImage, sendWhatsAppText } from "@/lib/
 
 const CRM_BASE = "https://servicevch.pages.dev";
 const VCH_WEBSITE = "https://virtualcarhire.pages.dev/our-fleet";
-const WELCOME_IMAGE_URL = "https://servicevch.pages.dev/whatsapp/virtual-car-hire-welcome.webp";
+const WELCOME_IMAGE_URL = "https://servicevch.pages.dev/whatsapp/virtual-car-hire-welcome.webp?v=20260826-3";
 const AUTO_SURGEON_ADDRESS = "The Auto Surgeon, Unit 3 Squirrels Trading Estate, Viveash Close, Hayes UB3 4RZ";
 const AUTO_SURGEON_MAP = "https://www.google.com/maps/search/?api=1&query=The+Auto+Surgeon+Unit+3+Squirrels+Trading+Estate+Viveash+Close+Hayes+UB3+4RZ";
 const WELCOME_MENU =
@@ -441,11 +441,19 @@ function formatFleet(fleet: FleetVehicle[]): string {
 }
 
 async function sendWelcomeMenu(phone: unknown) {
-  const image = await sendWhatsAppImage({
+  let image = await sendWhatsAppImage({
     phone,
     url: WELCOME_IMAGE_URL,
     caption: "👋 Hello, and welcome to Virtual Car Hire\n🚘 London's number one PCO car hire company with 4.8 stars across Google and Trustpilot.",
   });
+  if (!image.sent) {
+    console.warn("[agent-webhook] welcome image failed; retrying with cache-busted URL", { reason: image.reason });
+    image = await sendWhatsAppImage({
+      phone,
+      url: `${WELCOME_IMAGE_URL}&retry=1`,
+      caption: "👋 Hello, and welcome to Virtual Car Hire\n🚘 London's number one PCO car hire company with 4.8 stars across Google and Trustpilot.",
+    });
+  }
   const buttons = await sendWhatsAppButtons({
     phone,
     body: "How can we assist you today? Please tap one of the options below to get started:",
