@@ -80,11 +80,20 @@ type AiResult = {
   asks_closure: boolean;
 };
 
+type BreakdownVerification = {
+  status: "verified" | "unclear" | "rejected" | "received_pending_review" | "error";
+  confidence?: number;
+  reason: string;
+  checkedAt: string;
+};
+
 type BreakdownData = {
   garageInstructionsSent?: boolean;
   recoveryGuidanceSent?: boolean;
   keyPhotoUrl?: string;
   keyVideoUrl?: string;
+  keyPhotoVerification?: BreakdownVerification;
+  keyVideoVerification?: BreakdownVerification;
   keyMediaChecked?: boolean;
   closed?: boolean;
 };
@@ -569,6 +578,45 @@ async function generateReply(
   }
 }
 
+async function verifyBreakdownPhoto(mediaUrl: string, mimeType = "image/jpeg"): Promise<BreakdownVerification> {
+  const checkedAt = new Date().toISOString();
+  const apiKey = (getRuntimeEnv("GEMINI_API_KEY") ?? getRuntimeEnv("GOOGLE_API_KEY") ?? "").trim();
+  if (!apiKey) return { status: "error", reason: "Photo received but vision verification is not configured.", checkedAt };
+  try {
+    const mediaResponse = await fetch(mediaUrl);
+    if (!mediaResponse.ok) throw new Error(`media_http_${mediaResponse.status}`);
+    const contentType = mediaResponse.headers.get("content-type")?.split(";")[0] || mimeType;
+    if (!contentType.startsWith("image/")) return { status: "unclear", reason: "The uploaded file is not an image. Please send a clear photo of the key in the letter box.", checkedAt };
+    const bytes = new Uint8Array(await mediaResponse.arrayBuffer());
+    if (bytes.byteLength > 8 * 1024 * 1024) return { status: "unclear", reason: "The photo is too large to verify reliably. Please send a smaller clear photo.", checkedAt };
+    let binary = "";
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+    const encoded = btoa(binary);
+    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [
+          { text: "Inspect this breakdown key photo. Return JSON only with status exactly verified, unclear, or rejected; confidence from 0 to 1; and a short reason. Mark verified only when a vehicle key is clearly visible inside or immediately at a letter box. Do not identify or infer any person. If the key, letter box, or placement is not clear, use unclear." },
+          { inline_data: { mime_type: contentType, data: encoded } },
+        ] }],
+        generationConfig: { responseMimeType: "application/json", temperature: 0 },
+      }),
+    });
+    const responseText = await response.text();
+    if (!response.ok) throw new Error(`vision_http_${response.status}`);
+    const payload = JSON.parse(responseText) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+    const raw = payload.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim() ?? "";
+    const parsed = JSON.parse(raw) as { status?: string; confidence?: number; reason?: string };
+    const status = parsed.status === "verified" || parsed.status === "rejected" ? parsed.status : "unclear";
+    return { status, confidence: Math.max(0, Math.min(1, Number(parsed.confidence) || 0)), reason: parsed.reason?.slice(0, 300) || "The photo could not be verified clearly.", checkedAt };
+  } catch (error) {
+    console.error("[agent-webhook] breakdown photo verification failed", { error: error instanceof Error ? error.message : String(error) });
+    return { status: "error", reason: "Photo received but verification is temporarily unavailable. Please send a clear photo showing the key in the letter box.", checkedAt };
+  }
+}
+
 async function persistMetaMedia(params: {
   db: { from: (table: string) => any; storage: any };
   leadId: string;
@@ -1022,9 +1070,22 @@ export async function handleAgentWebhookRequest(request: Request) {
   if (!option && leadIntent === "emergency_breakdown") {
     const next: BreakdownData = { ...breakdownData };
     const normalizedMediaType = (mediaType ?? "").toLowerCase();
-    if (mediaUrl && normalizedMediaType === "image" && !next.keyPhotoUrl) next.keyPhotoUrl = mediaUrl;
-    if (mediaUrl && normalizedMediaType === "video" && !next.keyVideoUrl) next.keyVideoUrl = mediaUrl;
-    const mediaComplete = Boolean(next.keyPhotoUrl && next.keyVideoUrl);
+    let photoVerification = next.keyPhotoVerification;
+    if (mediaUrl && normalizedMediaType === "image") {
+      photoVerification = await verifyBreakdownPhoto(mediaUrl, mediaMimeType ?? "image/jpeg");
+      next.keyPhotoUrl = next.keyPhotoUrl ?? mediaUrl;
+      next.keyPhotoVerification = photoVerification;
+    }
+    if (mediaUrl && normalizedMediaType === "video") {
+      next.keyVideoUrl = next.keyVideoUrl ?? mediaUrl;
+      next.keyVideoVerification = next.keyVideoVerification ?? {
+        status: "received_pending_review",
+        reason: "Video received and retained for review.",
+        checkedAt: new Date().toISOString(),
+      };
+    }
+    const photoVerified = next.keyPhotoVerification?.status === "verified";
+    const mediaComplete = Boolean(next.keyPhotoUrl && next.keyVideoUrl && photoVerified);
     if (mediaComplete && next.keyMediaChecked && isPositiveClosure(content) && lastAgentMessage.toLowerCase().includes("is that all for today")) {
       const summary = `Emergency breakdown case\n\nGarage: ${AUTO_SURGEON_ADDRESS}\nMap: ${AUTO_SURGEON_MAP}\nKey photo: Received\nKey video: Received`;
       const { error: caseError } = await db.from("accident_cases").insert({
@@ -1051,9 +1112,11 @@ export async function handleAgentWebhookRequest(request: Request) {
       return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, telegram_alert: alert, breakdown_case_saved: !caseError });
     }
     next.keyMediaChecked = mediaComplete;
-    const reply = mediaComplete
-      ? "✅ I have received a clear photo and video of the key in the letter box. Please check that everything is correct. Is that all for today? Reply Yes or No."
-      : `🛠️ Emergency Breakdown\n\nI still need ${!next.keyPhotoUrl ? "one clear photo" : "one clear video"} of the key after it has been placed in the letter box. Please send the missing file here.`;
+    const reply = mediaUrl && normalizedMediaType === "image" && photoVerification && photoVerification.status !== "verified"
+      ? `📷 Photo received. ${photoVerification.reason}\n\nPlease send a clear photo showing the key inside the letter box. I will check it again before continuing.`
+      : mediaComplete
+        ? "✅ The key photo has been checked and the key video has been received. Please check that everything is correct. Is that all for today? Reply Yes or No."
+        : `🛠️ Emergency Breakdown\n\nI still need ${!next.keyPhotoUrl ? "one clear photo" : "one clear video"} of the key after it has been placed in the letter box. Please send the missing file here.`;
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
     if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
     await db.from("whatsapp_leads").update({ breakdown_data: next, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
