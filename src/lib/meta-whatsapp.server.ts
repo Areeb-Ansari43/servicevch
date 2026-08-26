@@ -89,6 +89,19 @@ export function sendWhatsAppButtons(params: { phone: unknown; body: string; butt
   });
 }
 
+export function sendWhatsAppImageButtons(params: { phone: unknown; imageUrl: string; body: string; buttons: Array<{ id: string; title: string }> }) {
+  const to = normalizeMetaPhone(params.phone);
+  if (!to) return Promise.resolve<MetaSendResult>({ sent: false, reason: "customer_phone_missing" });
+  return sendPayload({
+    ...base(to), type: "interactive", interactive: {
+      type: "button",
+      header: { type: "image", image: { link: params.imageUrl } },
+      body: { text: params.body },
+      action: { buttons: params.buttons.slice(0, 3).map((button) => ({ type: "reply", reply: button })) },
+    },
+  });
+}
+
 export function sendWhatsAppList(params: { phone: unknown; body: string; button: string; sections: Array<{ title: string; rows: Array<{ id: string; title: string; description?: string }> }> }) {
   const to = normalizeMetaPhone(params.phone);
   if (!to) return Promise.resolve<MetaSendResult>({ sent: false, reason: "customer_phone_missing" });

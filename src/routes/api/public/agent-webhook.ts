@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
 import { getRuntimeEnv } from "@/integrations/supabase/config";
-import { sendWhatsAppButtons, sendWhatsAppImage, sendWhatsAppText } from "@/lib/meta-whatsapp.server";
+import { sendWhatsAppText, sendWhatsAppImageButtons } from "@/lib/meta-whatsapp.server";
 
 const CRM_BASE = "https://servicevch.pages.dev";
 const VCH_WEBSITE = "https://virtualcarhire.pages.dev/our-fleet";
@@ -441,37 +441,22 @@ function formatFleet(fleet: FleetVehicle[]): string {
 }
 
 async function sendWelcomeMenu(phone: unknown) {
-  let image = await sendWhatsAppImage({
-    phone,
-    url: WELCOME_IMAGE_URL,
-    caption: "👋 Hello, and welcome to Virtual Car Hire\n🚘 London's number one PCO car hire company with 4.8 stars across Google and Trustpilot.",
-  });
-  if (!image.sent) {
-    console.warn("[agent-webhook] welcome image failed; retrying with cache-busted URL", { reason: image.reason });
-    image = await sendWhatsAppImage({
-      phone,
-      url: `${WELCOME_IMAGE_URL}&retry=1`,
-      caption: "👋 Hello, and welcome to Virtual Car Hire\n🚘 London's number one PCO car hire company with 4.8 stars across Google and Trustpilot.",
-    });
-  }
-  const buttons = await sendWhatsAppButtons({
-    phone,
-    body: "How can we assist you today? Please tap one of the options below to get started:",
-    buttons: [
-      { id: "book_car", title: "Car enquiry" },
-      { id: "emergency_breakdown", title: "Emergency Breakdown" },
-      { id: "report_accident", title: "Report Accident" },
-    ],
-  });
-  if (buttons.sent) return buttons;
-  console.warn("[agent-webhook] welcome buttons unavailable; falling back to three-option text menu", { reason: buttons.reason, imageSent: image.sent });
+  const body =
+    "👋 Hello, and welcome to Virtual Car Hire\n" +
+    "🚘 London's number one PCO car hire company with 4.8 stars across Google and Trustpilot.\n\n" +
+    "How can we assist you today? Please tap one of the options below to get started:";
+  const buttons = [
+    { id: "book_car", title: "Car enquiry" },
+    { id: "emergency_breakdown", title: "Emergency Breakdown" },
+    { id: "report_accident", title: "Report Accident" },
+  ];
+  const interactive = await sendWhatsAppImageButtons({ phone, imageUrl: WELCOME_IMAGE_URL, body, buttons });
+  if (interactive.sent) return interactive;
+  console.warn("[agent-webhook] welcome interactive image failed; falling back to text menu", { reason: interactive.reason });
   const fallback = await sendWhatsAppText({ phone, text: WELCOME_MENU });
   if (fallback.sent) return fallback;
-  const imageReason = image.sent ? "sent" : image.reason;
-  const buttonsReason = buttons.sent ? "sent" : buttons.reason;
-  const fallbackReason = fallback.sent ? "sent" : fallback.reason;
-  console.error("[agent-webhook] welcome delivery failed", { image: imageReason, buttons: buttonsReason, fallback: fallbackReason });
-  return { sent: false, reason: `welcome_delivery_failed: image=${imageReason}; buttons=${buttonsReason}; fallback=${fallbackReason}` };
+  console.error("[agent-webhook] welcome delivery failed", { interactive: interactive.reason, fallback: fallback.reason });
+  return { sent: false, reason: `welcome_delivery_failed: interactive=${interactive.reason}; fallback=${fallback.reason}` };
 }
 
 async function generateReply(
