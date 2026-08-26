@@ -26,7 +26,20 @@ function endpoint(phoneNumberId: string) {
 
 async function sendPayload(payload: unknown): Promise<MetaSendResult> {
   const { accessToken, phoneNumberId } = config();
-  if (!accessToken || !phoneNumberId) return { sent: false, reason: "meta_not_configured" };
+  if (!accessToken || !phoneNumberId) {
+    console.error("[meta-whatsapp] send blocked: production Meta credentials are missing", {
+      hasAccessToken: Boolean(accessToken),
+      accessTokenLength: accessToken?.length ?? 0,
+      hasPhoneNumberId: Boolean(phoneNumberId),
+      phoneNumberIdLength: phoneNumberId?.length ?? 0,
+    });
+    return { sent: false, reason: "meta_not_configured" };
+  }
+  console.info("[meta-whatsapp] send attempt", {
+    phoneNumberIdSuffix: phoneNumberId.slice(-4),
+    accessTokenLength: accessToken.length,
+    accessTokenSuffix: accessToken.slice(-4),
+  });
   try {
     const response = await fetch(endpoint(phoneNumberId), {
       method: "POST",

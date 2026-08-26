@@ -370,7 +370,9 @@ async function sendWelcomeMenu(phone: unknown) {
   if (buttons.sent) return buttons;
   console.warn("[agent-webhook] welcome buttons unavailable; falling back to text menu", { reason: buttons.reason, imageSent: image.sent });
   const fallback = await sendWhatsAppText({ phone, text: WELCOME_MENU });
-  return fallback.sent ? fallback : image.sent ? image : fallback;
+  if (fallback.sent) return fallback;
+  console.error("[agent-webhook] welcome delivery failed: neither buttons nor text fallback was accepted", { buttons: buttons.reason, fallback: fallback.reason, imageSent: image.sent });
+  return { sent: false, reason: `welcome_delivery_failed: buttons=${buttons.reason}; fallback=${fallback.reason}` };
 }
 
 async function generateReply(
