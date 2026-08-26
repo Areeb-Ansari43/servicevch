@@ -293,7 +293,7 @@ function parseCarEligibility(text: string): CarEligibility {
   }
   if (/\b(?:no|not|don't|do not)\s+(?:have\s+)?(?:a\s+)?(?:full\s+)?(?:uk\s+)?licen[cs]e\b|\b(?:no|not)\s+licen[cs]e\b/i.test(lower)) {
     result.ukLicence = false;
-  } else if (/\b(?:full\s+)?uk\s+licen[cs]e\b|\bfull\s+licen[cs]e\b|\b(?:yes|yeah|yep)\b/i.test(lower)) {
+  } else if (/\b(?:full\s+)?uk\s+(?:driving\s+)?licen[cs]e\b|\bfull\s+(?:uk\s+)?(?:driving\s+)?licen[cs]e\b|\b(?:yes|yeah|yep)\b/i.test(lower)) {
     result.ukLicence = true;
   }
   if (/\bno\s+(?:penalty\s+)?points?\b/i.test(lower)) result.points = 0;
@@ -928,7 +928,7 @@ export async function handleAgentWebhookRequest(request: Request) {
   const option = rawOption ??
     (!leadIntent && isBreakdownRequest(content) ? 2 : !leadIntent && isAccidentRequest(content) ? 3 : !leadIntent && isCarRequest(content) ? 1 : null);
 
-  if (!option && leadIntent === "book_car" && !carEligibility.completed) {
+  if (!option && !carEligibility.completed && (leadIntent === "book_car" || /are you aged between 25 and 65|full uk driving licence|penalty points/i.test(lastAgentMessage))) {
     const incomingEligibility = parseCarEligibility(content);
     const nextEligibility: CarEligibility = { ...carEligibility, ...incomingEligibility };
     const missing = eligibilityMissing(nextEligibility);
