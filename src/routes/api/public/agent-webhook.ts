@@ -284,25 +284,32 @@ function isTermsResponse(text: string): boolean {
 }
 
 function parseCarEligibility(text: string): CarEligibility {
-  const lower = text.toLowerCase();
+  const lower = text.toLowerCase().replace(/[’]/g, "'");
   const result: CarEligibility = {};
-  const labelledAge = lower.match(/(?:age|aged)\s*(?:is|:)?\s*(\d{2})/i);
+
+  // Accept natural answers such as “I am 40”, “40 years old”, “age: 40”,
+  // or the compact “40, full UK, 0 points”.
+  const labelledAge = lower.match(/(?:\b(?:age|aged)\b|\b(?:i\s*am|i'm|im)\b)\s*(?:is|:)?\s*(\d{2})/i);
   const anyAge = lower.match(/\b(\d{2})\s*(?:years?\s*old)?\b/);
   const age = Number(labelledAge?.[1] ?? anyAge?.[1]);
   if (Number.isFinite(age) && age >= 18 && age <= 99) {
     result.age = age;
     result.ageEligible = age >= 25 && age <= 65;
   }
-  if (/\b(?:no|not|don't|do not)\s+(?:have\s+)?(?:a\s+)?(?:full\s+)?(?:uk\s+)?licen[cs]e\b|\b(?:no|not)\s+licen[cs]e\b/i.test(lower)) {
-    result.ukLicence = false;
-  } else if (/\b(?:full\s+)?uk\s+(?:(?:driving|drivers?)\s+)?licen[cs]e\b|\bfull\s+(?:uk\s+)?(?:driving|drivers?)?\s*licen[cs]e\b|\bfull\s+uk\b|\b(?:yes|yeah|yep)\b/i.test(lower)) {
-    result.ukLicence = true;
-  }
-  if (/\bno\s+(?:penalty\s+)?points?\b/i.test(lower)) result.points = 0;
-  else {
-    const pointsMatch = lower.match(/(?:points?|penalty\s+points?)\s*(?:are|is|:)?\s*(\d{1,2})|\b(\d{1,2})\s*(?:penalty\s+)?points?\b/i);
+
+  const licenceNegative = /\b(?:no|not|don't|do not|never|can't|cannot)\b[^.\n]{0,35}\b(?:have|hold|possess|get)\b[^.\n]{0,20}\b(?:uk\s+)?(?:driving\s+)?licen[cs]e\b|\b(?:learner|provisional|no)\s+(?:uk\s+)?licen[cs]e\b/i.test(lower);
+  const licenceMentioned = /\b(?:uk\s+)?(?:full\s+)?(?:driving|drivers?)?\s*licen[cs]e\b|\bfull\s+uk\b/i.test(lower);
+  const positiveLicence = /\b(?:full|valid|clean)\b[^.\n]{0,25}\b(?:uk\b|driving|drivers?|licen[cs]e)|\b(?:yes|yeah|yep|i\s+(?:do|have|hold|possess))\b/i.test(lower);
+  if (licenceNegative) result.ukLicence = false;
+  else if (licenceMentioned && positiveLicence || /\bfull\s+uk\b/i.test(lower) || (/\b(?:yes|yeah|yep)\b/i.test(lower) && !licenceNegative)) result.ukLicence = true;
+
+  if (/\b(?:no|zero|none)\s+(?:penalty\s+)?points?\b/i.test(lower)) {
+    result.points = 0;
+  } else {
+    const pointsMatch = lower.match(/(?:points?|penalty\s+points?)\s*(?:are|is|:|=)?\s*(\d{1,2})|\b(\d{1,2})\s*(?:penalty\s+)?points?\b/i);
     if (pointsMatch) result.points = Number(pointsMatch[1] ?? pointsMatch[2]);
   }
+
   result.completed = result.ageEligible !== undefined && result.ukLicence !== undefined && result.points !== undefined;
   return result;
 }
