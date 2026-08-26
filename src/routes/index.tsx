@@ -582,6 +582,7 @@ function Dashboard({ vehicles, services, drivers, goto }: { vehicles: Vehicle[];
   const statusCounts = {
     Active: vehicles.filter((v) => v.status === "Active").length,
     "In Service": inService,
+    Rented: vehicles.filter((v) => v.status === "Rented").length,
     "Off Road": vehicles.filter((v) => v.status === "Off Road").length,
   };
 
@@ -762,7 +763,7 @@ function Donut({ data, height }: { data: Record<string, number>; height: number 
     const total = Object.values(data).reduce((a, b) => a + b, 0) || 1;
     const cx = c.clientWidth / 2, cy = height / 2;
     const r = Math.min(cx, cy) - 20, ir = r * 0.6;
-    const colors: Record<string, string> = { Active: "#22c55e", "In Service": "#60a5fa", "Off Road": "#64748b" };
+    const colors: Record<string, string> = { Active: "#22c55e", "In Service": "#60a5fa", Rented: "#ff8a3d", "Off Road": "#64748b" };
     let a0 = -Math.PI / 2;
     Object.entries(data).forEach(([k, v]) => {
       const a1 = a0 + (v / total) * Math.PI * 2;
@@ -788,7 +789,7 @@ function Donut({ data, height }: { data: Record<string, number>; height: number 
       <div className="flex w-full flex-1 flex-wrap justify-center gap-3 text-xs sm:flex-col sm:justify-center sm:gap-0">
         {Object.entries(data).map(([k, v]) => (
           <div key={k} className="flex items-center justify-between gap-3 border-b border-white/[0.06] px-1 py-2.5 last:border-0">
-            <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded" style={{ background: k === "Active" ? "#22c55e" : k === "In Service" ? "#60a5fa" : "#64748b" }} /><span className="text-[#aeb8c9]">{k}</span></span>
+            <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded" style={{ background: k === "Active" ? "#22c55e" : k === "In Service" ? "#60a5fa" : k === "Rented" ? "#ff8a3d" : "#64748b" }} /><span className="text-[#aeb8c9]">{k}</span></span>
             <span className="font-semibold text-white">{v} <span className="font-normal text-[#718096]">({Math.round((v / (Object.values(data).reduce((a, b) => a + b, 0) || 1)) * 100)}%)</span></span>
           </div>
         ))}
@@ -900,7 +901,7 @@ function VehiclesList({
         <DarkSelect
           value={statusFilter}
           onChange={setStatusFilter}
-          options={[{ value: "all", label: "All Statuses" }, { value: "Active", label: "Available" }, { value: "In Service", label: "In Service" }, { value: "Off Road", label: "Off Road" }]}
+          options={[{ value: "all", label: "All Statuses" }, { value: "Active", label: "Available" }, { value: "In Service", label: "In Service" }, { value: "Rented", label: "Rented" }, { value: "Off Road", label: "Off Road" }]}
           className="min-w-[170px] rounded-lg border px-3 py-2.5 text-sm text-white focus:border-[#ff6a00] focus:outline-none focus:ring-2 focus:ring-[#ff6a00]/30"
         />
       </div>
@@ -975,6 +976,7 @@ function StatusBadge({ status }: { status: Vehicle["status"] }) {
   const map = {
     Active: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
     "In Service": "border-blue-500/30 bg-blue-500/10 text-blue-300",
+    Rented: "border-orange-500/30 bg-orange-500/10 text-orange-300",
     "Off Road": "border-slate-500/30 bg-slate-500/10 text-slate-300",
   } as const;
   return <span className={`rounded-md border px-2 py-0.5 text-xs font-medium ${map[status]}`}>{status}</span>;
@@ -1052,7 +1054,7 @@ function AddVehicle({
       <Grid2>
         <Field label="Current Mileage"><input type="number" inputMode="numeric" value={mileageStr} onChange={(e) => setMileageStr(e.target.value.replace(/^0+(?=\d)/, ""))} placeholder="0" className={inputCls} /></Field>
         <Field label="Status">
-          <DarkSelect value={v.status} onChange={(value) => setV({ ...v, status: value as Vehicle["status"] })} options={["Active", "In Service", "Off Road"].map((value) => ({ value, label: value }))} />
+          <DarkSelect value={v.status} onChange={(value) => setV({ ...v, status: value as Vehicle["status"] })} options={["Active", "In Service", "Rented", "Off Road"].map((value) => ({ value, label: value }))} />
         </Field>
       </Grid2>
 
@@ -1120,7 +1122,7 @@ export function EditVehicleModal({ vehicle, onClose, onSave }: { vehicle: Vehicl
           <Grid2>
             <Field label="Current Mileage"><input type="number" value={v.current_mileage} onChange={(e) => setV({ ...v, current_mileage: +e.target.value })} className={inputCls} /></Field>
             <Field label="Status">
-              <DarkSelect value={v.status} onChange={(value) => setV({ ...v, status: value as Vehicle["status"] })} options={["Active", "In Service", "Off Road"].map((value) => ({ value, label: value }))} />
+              <DarkSelect value={v.status} onChange={(value) => setV({ ...v, status: value as Vehicle["status"] })} options={["Active", "In Service", "Rented", "Off Road"].map((value) => ({ value, label: value }))} />
             </Field>
           </Grid2>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">

@@ -10,7 +10,7 @@ export type Vehicle = {
   year: number;
   fuel_type: "Petrol" | "Diesel" | "Hybrid" | "Electric";
   current_mileage: number;
-  status: "Active" | "In Service" | "Off Road";
+  status: "Active" | "In Service" | "Rented" | "Off Road";
   next_service_date: string;
   next_mot_date: string;
   insurance_expiry: string;
@@ -55,9 +55,9 @@ export type DriverTrack = {
 };
 
 const statusToDb = (s: Vehicle["status"]): string =>
-  s === "Active" ? "available" : s === "In Service" ? "in_service" : "off_road";
+  s === "Active" ? "available" : s === "In Service" ? "in_service" : s === "Rented" ? "rented" : "off_road";
 const statusFromDb = (s: string): Vehicle["status"] =>
-  s === "in_service" ? "In Service" : s === "off_road" ? "Off Road" : "Active";
+  s === "in_service" ? "In Service" : s === "rented" ? "Rented" : s === "off_road" ? "Off Road" : "Active";
 
 const vFromRow = (r: any): Vehicle => ({
   id: r.id,
@@ -262,6 +262,10 @@ export function useFleetData() {
       ({ error } = await (supabase.from("driver_tracks") as any).insert(legacyPayload));
     }
     if (error) throw new Error(error.message);
+    if (d.vehicle_id) {
+      const { error: vehicleError } = await supabase.from("vehicles").update({ status: "rented" }).eq("id", d.vehicle_id);
+      if (vehicleError) throw new Error(vehicleError.message);
+    }
     await refresh();
   }, [refresh]);
 
@@ -307,7 +311,11 @@ export function useFleetData() {
   }, [refresh]);
 
   const removeDriver = useCallback(async (id: string) => {
+    const { data: track } = await supabase.from("driver_tracks").select("vehicle_id").eq("id", id).maybeSingle();
     await supabase.from("driver_tracks").update({ active: false }).eq("id", id);
+    if (track?.vehicle_id) {
+      await supabase.from("vehicles").update({ status: "available" }).eq("id", track.vehicle_id).eq("status", "rented");
+    }
     await refresh();
   }, [refresh]);
 
