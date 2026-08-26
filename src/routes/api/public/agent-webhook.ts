@@ -857,7 +857,9 @@ export async function handleAgentWebhookRequest(request: Request) {
     return json({ ok: true, lead_id: leadId, reply, needs_human: true, ai_paused: true, telegram_alert: alert, outbound });
   }
 
-  if (closed) {
+  // A fresh menu tap is an explicit new session. Reopen the lead and let the
+  // option branch send the next prompt instead of silently returning closed.
+  if (closed && !rawOption) {
     console.info("[agent-webhook] conversation closed; no AI reply", { leadId });
     return json({ ok: true, lead_id: leadId, closed: true, reply: null, needs_human: false });
   }
