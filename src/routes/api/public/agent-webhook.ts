@@ -37,7 +37,7 @@ const WEBSITE_CATALOG = [
 const STANDARD_TERMS =
   "Minimum 6-week contract; 5,000 miles per month for all vehicles except Mercedes EQE and EQS, which have 4,000 miles per month; insurance and servicing included.";
 const CAR_ELIGIBILITY_PROMPT =
-  "Before we look at available vehicles, please confirm three things:\n\n1. Are you aged between 25 and 65 years old?\n2. Do you possess a full UK driving licence?\n3. Do you have any penalty points? If you have fewer than 6 points, renting with us may be difficult.\n\nPlease reply with your age, whether you hold a full UK licence, and how many points you have.";
+  "Before we look at available vehicles, please confirm three things:\n\n1. Are you aged between 25 and 65 years old?\n2. Do you possess a valid PCO badge?\n3. Do you have any penalty points? If you have fewer than 6 points, renting with us may be difficult.\n\nPlease reply with your age, whether you have a valid PCO badge, and how many points you have.";
 const HANDOFF_24H =
   "Our team will get back to you within 24 hours. Please do not contact this number — we will contact you first.";
 
@@ -60,7 +60,9 @@ type FleetVehicle = {
 type CarEligibility = {
   age?: number | null;
   ageEligible?: boolean;
-  ukLicence?: boolean;
+  pcoBadge?: boolean;
+  pcoBadgeUrl?: string;
+  pcoBadgeVerification?: BreakdownVerification;
   points?: number | null;
   completed?: boolean;
   selectedVehicle?: {
@@ -306,11 +308,11 @@ function parseCarEligibility(text: string): CarEligibility {
     result.ageEligible = age >= 25 && age <= 65;
   }
 
-  const licenceNegative = /\b(?:no|not|don't|do not|never|can't|cannot)\b[^.\n]{0,35}\b(?:have|hold|possess|get)\b[^.\n]{0,20}\b(?:uk\s+)?(?:driving\s+)?licen[cs]e\b|\b(?:learner|provisional|no)\s+(?:uk\s+)?licen[cs]e\b/i.test(lower);
-  const licenceMentioned = /\b(?:uk\s+)?(?:full\s+)?(?:driving|drivers?)?\s*licen[cs]e\b|\bfull\s+uk\b/i.test(lower);
-  const positiveLicence = /\b(?:full|valid|clean)\b[^.\n]{0,25}\b(?:uk\b|driving|drivers?|licen[cs]e)|\b(?:yes|yeah|yep|i\s+(?:do|have|hold|possess))\b/i.test(lower);
-  if (licenceNegative) result.ukLicence = false;
-  else if ((licenceMentioned && !licenceNegative) || positiveLicence || (/\b(?:yes|yeah|yep)\b/i.test(lower) && !licenceNegative)) result.ukLicence = true;
+  const badgeNegative = /\b(?:no|not|don't|do not|never|can't|cannot|without)\b[^.\n]{0,35}\b(?:have|hold|possess|get|pc[o0])\b[^.\n]{0,20}\b(?:pc[o0]\s*)?(?:badge|licen[cs]e|card|permit)\b|\bno\s+(?:valid\s+)?pc[o0]\s+badge\b/i.test(lower);
+  const badgeMentioned = /\b(?:valid\s+)?pc[o0]\s+(?:badge|licen[cs]e|card|permit)\b|\bpc[o0]\s+approved\b|\bpc[o0]\b/i.test(lower);
+  const positiveBadge = /\b(?:valid|current|active|approved|full)\b[^.\n]{0,25}\b(?:pc[o0]|badge|permit|card)\b|\b(?:yes|yeah|yep|i\s+(?:do|have|hold|possess))\b[^.\n]{0,20}\b(?:it|one|badge|pc[o0])\b/i.test(lower);
+  if (badgeNegative) result.pcoBadge = false;
+  else if ((badgeMentioned && !badgeNegative) || positiveBadge || (/\b(?:yes|yeah|yep)\b/i.test(lower) && !badgeNegative)) result.pcoBadge = true;
 
   if (/\b(?:no|zero|none)\s+(?:penalty\s+)?points?\b/i.test(lower)) {
     result.points = 0;
@@ -319,7 +321,7 @@ function parseCarEligibility(text: string): CarEligibility {
     if (pointsMatch) result.points = Number(pointsMatch[1] ?? pointsMatch[2]);
   }
 
-  result.completed = result.ageEligible !== undefined && result.ukLicence !== undefined && result.points !== undefined;
+  result.completed = result.ageEligible !== undefined && result.pcoBadge !== undefined && result.points !== undefined;
   return result;
 }
 
@@ -327,8 +329,9 @@ function eligibilityMissing(data: CarEligibility): string[] {
   const missing: string[] = [];
   if (data.age === undefined || data.age === null) missing.push("your age");
   else if (!data.ageEligible) missing.push("confirmation that your age is between 25 and 65");
-  if (data.ukLicence === undefined) missing.push("whether you have a full UK driving licence");
-  else if (!data.ukLicence) missing.push("a full UK driving licence");
+  if (data.pcoBadge === undefined) missing.push("whether you have a valid PCO badge");
+  else if (!data.pcoBadge) missing.push("a valid PCO badge");
+  else if (data.pcoBadgeVerification?.status !== "verified") missing.push("a clear photo of your valid PCO badge");
   if (data.points === undefined || data.points === null) missing.push("the number of penalty points you have");
   return missing;
 }
@@ -578,7 +581,7 @@ async function generateReply(
   }
 }
 
-async function verifyBreakdownPhoto(mediaUrl: string, mimeType = "image/jpeg"): Promise<BreakdownVerification> {
+async function verifyImageEvidence(mediaUrl: string, mimeType = "image/jpeg", evidencePrompt = "Inspect this breakdown key photo. Return JSON only with status exactly verified, unclear, or rejected; confidence from 0 to 1; and a short reason. Mark verified only when a vehicle key is clearly visible inside or immediately at a letter box. Do not identify or infer any person. If the key, letter box, or placement is not clear, use unclear."): Promise<BreakdownVerification> {
   const checkedAt = new Date().toISOString();
   const apiKey = (getRuntimeEnv("GEMINI_API_KEY") ?? getRuntimeEnv("GOOGLE_API_KEY") ?? "").trim();
   if (!apiKey) return { status: "error", reason: "Photo received but vision verification is not configured.", checkedAt };
@@ -598,7 +601,7 @@ async function verifyBreakdownPhoto(mediaUrl: string, mimeType = "image/jpeg"): 
       headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [
-          { text: "Inspect this breakdown key photo. Return JSON only with status exactly verified, unclear, or rejected; confidence from 0 to 1; and a short reason. Mark verified only when a vehicle key is clearly visible inside or immediately at a letter box. Do not identify or infer any person. If the key, letter box, or placement is not clear, use unclear." },
+          { text: evidencePrompt },
           { inline_data: { mime_type: contentType, data: encoded } },
         ] }],
         generationConfig: { responseMimeType: "application/json", temperature: 0 },
@@ -981,14 +984,31 @@ export async function handleAgentWebhookRequest(request: Request) {
   const option = rawOption ??
     (!leadIntent && isBreakdownRequest(content) ? 2 : !leadIntent && isAccidentRequest(content) ? 3 : !leadIntent && isCarRequest(content) ? 1 : null);
 
-  if (!option && (leadIntent === "book_car" || /are you aged between 25 and 65|full uk driving licence|penalty points/i.test(lastAgentMessage))) {
+  if (!option && (leadIntent === "book_car" || /are you aged between 25 and 65|valid pco badge|pc[o0] badge|penalty points/i.test(lastAgentMessage))) {
     const incomingEligibility = parseCarEligibility(content);
     const nextEligibility: CarEligibility = { ...carEligibility, ...incomingEligibility };
+    if (mediaUrl && (mediaType ?? "").toLowerCase() === "image") {
+      const badgeVerification = await verifyImageEvidence(
+        mediaUrl,
+        mediaMimeType ?? "image/jpeg",
+        "Inspect this image for a PCO badge or private-hire driver badge. Return JSON only with status exactly verified, unclear, or rejected; confidence from 0 to 1; and a short reason. Mark verified only when a badge is clearly visible and appears to be an official PCO/private-hire badge. Do not identify or infer the person. If the badge is not visible, unreadable, or unclear, use unclear.",
+      );
+      nextEligibility.pcoBadgeUrl = mediaUrl;
+      nextEligibility.pcoBadgeVerification = badgeVerification;
+      if (badgeVerification.status === "verified") nextEligibility.pcoBadge = true;
+      if (badgeVerification.status !== "verified") {
+        const reply = `📷 PCO badge photo received. ${badgeVerification.reason}\n\nPlease send a clear photo of the full valid PCO badge. I will verify it again before showing the available cars.`;
+        const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
+        if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
+        await db.from("whatsapp_leads").update({ car_enquiry_data: nextEligibility, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+        return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, eligibility: nextEligibility, needs_human: !outbound.sent });
+      }
+    }
     const missing = eligibilityMissing(nextEligibility);
     if (missing.length || !nextEligibility.completed) {
-      const reply = !nextEligibility.ageEligible && nextEligibility.age !== undefined
+        const reply = !nextEligibility.ageEligible && nextEligibility.age !== undefined
         ? `Thank you. Our standard rental age range is 25 to 65, so we may not be able to proceed with this enquiry.\n\n${HANDOFF_24H}`
-        : `Thanks. I still need ${missing.join(", ")}. Please send the answers together, for example: age 30, full UK licence, 3 points.`;
+        : `Thanks. I still need ${missing.join(", ")}. Please reply naturally—for example: age 30, valid PCO badge, 3 points.`;
       const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
       if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
       await db.from("whatsapp_leads").update({ car_enquiry_data: nextEligibility, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
@@ -1072,7 +1092,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     const normalizedMediaType = (mediaType ?? "").toLowerCase();
     let photoVerification = next.keyPhotoVerification;
     if (mediaUrl && normalizedMediaType === "image") {
-      photoVerification = await verifyBreakdownPhoto(mediaUrl, mediaMimeType ?? "image/jpeg");
+      photoVerification = await verifyImageEvidence(mediaUrl, mediaMimeType ?? "image/jpeg");
       next.keyPhotoUrl = next.keyPhotoUrl ?? mediaUrl;
       next.keyPhotoVerification = photoVerification;
     }
