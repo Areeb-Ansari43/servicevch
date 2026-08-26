@@ -2,6 +2,7 @@
 -- Apply after the existing WhatsApp/accident migrations.
 
 alter table public.whatsapp_leads
+  add column if not exists intent text not null default 'general',
   add column if not exists breakdown_data jsonb not null default '{}'::jsonb;
 
 alter table public.accident_cases
