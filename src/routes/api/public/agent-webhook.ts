@@ -173,7 +173,9 @@ function isAbusiveMessage(text: string): boolean {
 }
 
 function isMenuReset(text: string): boolean {
-  return /^(?:menu|main menu|restart|start again|start over|reset|hello|hi)[.!\s]*$/i.test(text.trim());
+  const normalized = text.trim().replace(/^[\s,!.:;-]+|[\s,!.:;-]+$/g, "");
+  return /^(?:menu|main menu|restart|start again|start over|reset|hello|hi|hey|hiya|howdy|greetings|welcome|good morning|good afternoon|good evening|good day|morning|afternoon|evening)(?:[\s,!.:;-].*)?$/i.test(normalized)
+    || /\b(?:hello|hi|hey|hiya|howdy|greetings|welcome|good morning|good afternoon|good evening|good day)\b/i.test(normalized);
 }
 
 function isCarRequest(text: string): boolean {
