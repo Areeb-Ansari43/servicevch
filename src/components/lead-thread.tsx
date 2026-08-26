@@ -8,6 +8,8 @@ export type ThreadMessage = {
   sender: string;
   content: string;
   media_url: string | null;
+  media_type?: string | null;
+  media_mime_type?: string | null;
   handoff: boolean;
   created_at: string;
 };
@@ -146,7 +148,21 @@ export function LeadThread({
                     {m.handoff ? " · handoff" : ""}
                   </div>
                   <div className="whitespace-pre-wrap text-sm leading-relaxed">{m.content}</div>
-                  {m.media_url && <img src={m.media_url} alt="Attachment" className="mt-2 max-h-48 rounded-lg" loading="lazy" />}
+                  {m.media_url && (
+                    <div className="mt-2">
+                      {(m.media_type ?? "").toLowerCase() === "video" ? (
+                        <video src={m.media_url} controls className="max-h-48 max-w-full rounded-lg" preload="metadata" />
+                      ) : (m.media_type ?? "").toLowerCase() === "audio" ? (
+                        <audio src={m.media_url} controls className="max-w-full" preload="metadata" />
+                      ) : (m.media_type ?? "").toLowerCase() === "image" || (m.media_mime_type ?? "").startsWith("image/") ? (
+                        <img src={m.media_url} alt="WhatsApp attachment" className="max-h-48 max-w-full rounded-lg object-contain" loading="lazy" />
+                      ) : (
+                        <a href={m.media_url} target="_blank" rel="noreferrer" className="inline-flex rounded-full border border-white/15 px-3 py-1.5 text-xs text-[#ffd9bd] hover:border-[#ff6a00]/50 hover:text-white">
+                          Open WhatsApp attachment
+                        </a>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })

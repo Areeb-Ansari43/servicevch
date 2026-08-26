@@ -75,6 +75,10 @@ const bodySchema = z.object({
     name: z.string().trim().max(120).optional(),
   content: z.string().trim().min(1).max(5000),
   media_url: z.string().trim().url().max(2000).optional(),
+  media_meta_id: z.string().trim().max(300).optional(),
+  media_type: z.string().trim().max(40).optional(),
+  media_mime_type: z.string().trim().max(160).optional(),
+  meta_message_id: z.string().trim().max(300).optional(),
   session_id: z.string().trim().min(8).max(160).optional(),
 });
 
@@ -343,8 +347,8 @@ async function sendWelcomeMenu(phone: unknown) {
     phone,
     body: "How can we assist you today? Please choose an option:",
     buttons: [
-      { id: "book_car", title: "🚗 Enquire about car" },
-      { id: "report_accident", title: "⚠️ Report accident" },
+      { id: "book_car", title: "Car enquiry" },
+      { id: "report_accident", title: "Emergency breakdown" },
     ],
   });
   if (buttons.sent) return buttons;
@@ -489,6 +493,51 @@ async function generateReply(
   }
 }
 
+async function persistMetaMedia(params: {
+  db: { from: (table: string) => any; storage: any };
+  leadId: string;
+  messageId: string | null;
+  userId: string;
+  metaMediaId?: string;
+  mediaType?: string;
+  mimeType?: string;
+  caption?: string;
+}) {
+  if (!params.metaMediaId) return { mediaUrl: params.caption ? null : null, storagePath: null };
+  const accessToken = getRuntimeEnv("META_ACCESS_TOKEN")?.trim();
+  if (!accessToken) throw new Error("META_ACCESS_TOKEN is not configured for media download");
+  const mediaInfoResponse = await fetch(`https://graph.facebook.com/v26.0/${encodeURIComponent(params.metaMediaId)}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const mediaInfoText = await mediaInfoResponse.text();
+  if (!mediaInfoResponse.ok) throw new Error(`Meta media metadata failed (${mediaInfoResponse.status}): ${mediaInfoText.slice(0, 300)}`);
+  const mediaInfo = JSON.parse(mediaInfoText) as { url?: string; mime_type?: string };
+  if (!mediaInfo.url) throw new Error("Meta media metadata did not include a download URL");
+  const mediaResponse = await fetch(mediaInfo.url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!mediaResponse.ok) throw new Error(`Meta media download failed (${mediaResponse.status})`);
+  const bytes = new Uint8Array(await mediaResponse.arrayBuffer());
+  const extension = (mediaInfo.mime_type ?? params.mimeType ?? "application/octet-stream").split("/")[1]?.split(";")[0] ?? "bin";
+  const storagePath = `${params.userId}/${params.leadId}/${params.metaMediaId}.${extension}`;
+  const bucket = params.db.storage.from("whatsapp-media");
+  const upload = await bucket.upload(storagePath, bytes, { contentType: mediaInfo.mime_type ?? params.mimeType ?? "application/octet-stream", upsert: false });
+  if (upload.error && !/already exists/i.test(upload.error.message)) throw upload.error;
+  const signed = await bucket.createSignedUrl(storagePath, 60 * 60 * 24 * 7);
+  if (signed.error) throw signed.error;
+  const { error: mediaRowError } = await params.db.from("whatsapp_media").upsert({
+    user_id: params.userId,
+    lead_id: params.leadId,
+    message_id: null,
+    meta_media_id: params.metaMediaId,
+    media_type: params.mediaType ?? "media",
+    mime_type: mediaInfo.mime_type ?? params.mimeType ?? null,
+    storage_bucket: "whatsapp-media",
+    storage_path: storagePath,
+    caption: params.caption ?? null,
+  }, { onConflict: "meta_media_id" });
+  if (mediaRowError) throw mediaRowError;
+  return { mediaUrl: signed.data?.signedUrl ?? null, storagePath };
+}
+
 async function sendTelegramAlert(params: {
   name: string;
   phone: string | null;
@@ -558,7 +607,16 @@ export async function handleAgentWebhookRequest(request: Request) {
   const parsed = bodySchema.safeParse(raw);
   if (!parsed.success)
     return json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid payload" }, 400);
-  const { content, media_url: mediaUrl = null, session_id: suppliedSessionId = null } = parsed.data;
+  const {
+    content,
+    media_url: incomingMediaUrl = null,
+    media_meta_id: mediaMetaId = null,
+    media_type: mediaType = null,
+    media_mime_type: mediaMimeType = null,
+    meta_message_id: metaMessageId = null,
+    session_id: suppliedSessionId = null,
+  } = parsed.data;
+  let mediaUrl = incomingMediaUrl;
   const chatId = parsed.data.chat_id ?? null;
   const phone = parsed.data.phone ?? null;
   // WhatsApp may omit `phone` on some events while still providing chat_id.
@@ -661,7 +719,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     const { data: created, error } = await insertWithSessionFallback(db, "whatsapp_leads", {
       user_id: userId,
         contact_name: name,
-        phone,
+        phone: canonicalPhone ?? phone,
       message: content,
       media_url: mediaUrl,
       status: "new",
@@ -680,12 +738,27 @@ export async function handleAgentWebhookRequest(request: Request) {
         last_message_at: new Date().toISOString(),
         inactivity_prompted_at: null,
         inactivity_alerted_at: null,
+        message: content,
         ...(mediaUrl ? { media_url: mediaUrl } : {}),
       } as never)
       .eq("id", leadId);
   }
 
   if (!leadId) return json({ ok: false, error: "Lead could not be created" }, 500);
+
+  if (metaMessageId) {
+    const { data: duplicateMessage } = await (db.from("messages") as any).select("id").eq("meta_message_id", metaMessageId).maybeSingle();
+    if (duplicateMessage) return json({ ok: true, duplicate: true, lead_id: leadId });
+  }
+
+  if (mediaMetaId) {
+    try {
+      const stored = await persistMetaMedia({ db, leadId, messageId: metaMessageId, userId, metaMediaId: mediaMetaId, mediaType: mediaType ?? undefined, mimeType: mediaMimeType ?? undefined, caption: content });
+      mediaUrl = stored.mediaUrl ?? mediaUrl;
+    } catch (error) {
+      console.error("[agent-webhook] Meta media persistence failed", { leadId, metaMediaId: mediaMetaId, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
 
   const { data: oldHistory } = await db
     .from("messages")
@@ -700,6 +773,10 @@ export async function handleAgentWebhookRequest(request: Request) {
     sender: "customer",
     content,
     media_url: mediaUrl,
+    meta_message_id: metaMessageId,
+    media_type: mediaType,
+    media_mime_type: mediaMimeType,
+    media_meta_id: mediaMetaId,
     session_id: sessionId,
   });
   if (inboundError) return json({ ok: false, error: inboundError.message }, 500);

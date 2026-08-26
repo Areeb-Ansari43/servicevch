@@ -61,14 +61,21 @@ function normalizeMetaMessage(message: JsonRecord, value: JsonRecord) {
   else if (message.type === "video") content = String(message.video?.caption ?? "(video)");
   else if (message.type === "document") content = String(message.document?.caption ?? "(document)");
   else content = `(${message.type ?? "media"})`;
-  const mediaId = message.image?.id ?? message.video?.id ?? message.document?.id ?? message.audio?.id;
+  const media = message.image ?? message.video ?? message.document ?? message.audio ?? message.sticker;
+  const mediaId = media?.id;
   return {
     eventName: "messages.received",
     phone: normalizePhone(message.from),
     chat_id: normalizePhone(message.from),
     name: typeof profileName === "string" ? profileName : undefined,
     content: content.trim() || "(media)",
-    ...(mediaId ? { media_url: `https://graph.facebook.com/${encodeURIComponent(mediaId)}` } : {}),
+    ...(mediaId ? {
+      media_url: `https://graph.facebook.com/${encodeURIComponent(mediaId)}`,
+      media_meta_id: String(mediaId),
+      media_type: String(message.type ?? "media"),
+      media_mime_type: typeof media?.mime_type === "string" ? media.mime_type : undefined,
+    } : {}),
+    meta_message_id: typeof message.id === "string" ? message.id : undefined,
     session_id: `meta:${message.from}`,
   };
 }

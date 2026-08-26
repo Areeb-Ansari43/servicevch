@@ -19,6 +19,8 @@ type ConversationMessage = {
   sender: string;
   content: string;
   media_url: string | null;
+  media_type?: string | null;
+  media_mime_type?: string | null;
   handoff: boolean;
   created_at: string;
 };
@@ -58,7 +60,7 @@ export const getLeadConversation = createServerFn({ method: "GET" })
     for (let page = 0; ; page += 1) {
       const { data: batch, error } = await context.supabase
         .from("messages")
-        .select("id, sender, content, media_url, handoff, created_at")
+        .select("id, sender, content, media_url, media_type, media_mime_type, handoff, created_at")
         .eq("lead_id", data.leadId)
         .order("created_at", { ascending: true })
         .range(page * pageSize, page * pageSize + pageSize - 1);
