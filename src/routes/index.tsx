@@ -533,9 +533,9 @@ function Topbar({ vehicles, drivers, services, goto, onMenu }: { vehicles: Vehic
       </span>
       <GlobalSearch vehicles={vehicles} drivers={drivers} services={services} goto={goto} />
       <div className="hidden items-center gap-1.5 text-[#aeb8c9] sm:flex">
-        <button aria-label="Notifications" className="relative rounded-xl p-2 transition hover:bg-white/[0.08]"><span className="absolute right-1.5 top-1 h-1.5 w-1.5 rounded-full bg-[#ff6a00]" /><Icon.Alert className="h-4 w-4" /></button>
-        <button aria-label="Messages" className="relative rounded-xl p-2 transition hover:bg-white/[0.08]"><span className="absolute right-1.5 top-1 h-1.5 w-1.5 rounded-full bg-red-400" /><Icon.Chat className="h-4 w-4" /></button>
-        <button aria-label="Calendar" className="rounded-xl p-2 transition hover:bg-white/[0.08]"><Icon.Calendar className="h-4 w-4" /></button>
+        <button onClick={() => goto("dashboard")} title="View dashboard alerts" aria-label="View dashboard alerts" className="relative rounded-xl p-2 transition hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6a00]/60"><span className="absolute right-1.5 top-1 h-1.5 w-1.5 rounded-full bg-[#ff6a00]" /><Icon.Alert className="h-4 w-4" /></button>
+        <button onClick={() => goto("leads")} title="Open WhatsApp messages" aria-label="Open WhatsApp messages" className="relative rounded-xl p-2 transition hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6a00]/60"><span className="absolute right-1.5 top-1 h-1.5 w-1.5 rounded-full bg-red-400" /><Icon.Chat className="h-4 w-4" /></button>
+        <button onClick={() => goto("services")} title="Open service calendar" aria-label="Open service calendar" className="rounded-xl p-2 transition hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6a00]/60"><Icon.Calendar className="h-4 w-4" /></button>
       </div>
     </header>
   );
@@ -553,9 +553,9 @@ function GlobalSearch({ vehicles, drivers, services, goto }: { vehicles: Vehicle
   ].slice(0, 8) : [];
   return (
     <div className="relative min-w-0 flex-1">
-      <div className="flex items-center gap-2 rounded-xl border px-3 py-2" style={{ borderColor: T.border, background: T.panel }}>
+      <div className="flex items-center gap-2 rounded-xl border px-3 py-2 transition-colors focus-within:border-[#ff6a00]/40" style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.025)" }}>
         <Icon.Search className="h-4 w-4 shrink-0 text-[#8b95a8]" />
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search anything…" className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-[#6b7488]" aria-label="Search CRM" />
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search anything…" className="min-w-0 flex-1 appearance-none bg-transparent text-sm text-white outline-none placeholder:text-[#6b7488] focus:outline-none focus:ring-0" aria-label="Search CRM" />
         <kbd className="hidden rounded border px-1.5 py-0.5 text-[10px] text-[#8b95a8] sm:block" style={{ borderColor: T.borderSoft }}>⌘ K</kbd>
       </div>
       {results.length > 0 && (
