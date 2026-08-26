@@ -6,7 +6,7 @@ import { sendWhatsAppButtons, sendWhatsAppImage, sendWhatsAppText } from "@/lib/
 
 const CRM_BASE = "https://servicevch.pages.dev";
 const VCH_WEBSITE = "https://virtualcarhire.pages.dev/our-fleet";
-const WELCOME_IMAGE_URL = "https://servicevch.pages.dev/whatsapp/virtual-car-hire-welcome.webp?v=20260826-3";
+const WELCOME_IMAGE_URL = "https://servicevch.pages.dev/whatsapp/virtual-car-hire-welcome.jpg?v=20260826-4";
 const AUTO_SURGEON_ADDRESS = "The Auto Surgeon, Unit 3 Squirrels Trading Estate, Viveash Close, Hayes UB3 4RZ";
 const AUTO_SURGEON_MAP = "https://www.google.com/maps/search/?api=1&query=The+Auto+Surgeon+Unit+3+Squirrels+Trading+Estate+Viveash+Close+Hayes+UB3+4RZ";
 const WELCOME_MENU =
@@ -770,6 +770,7 @@ export async function handleAgentWebhookRequest(request: Request) {
       customerType = existing.customer_type ?? customerType;
       accidentData = (existing.accident_data ?? {}) as AccidentData;
       breakdownData = (existing.breakdown_data ?? {}) as BreakdownData;
+      carEligibility = (existing.car_enquiry_data ?? {}) as CarEligibility;
     }
   }
   if (!leadId && sessionId) {
@@ -947,7 +948,7 @@ export async function handleAgentWebhookRequest(request: Request) {
   const option = rawOption ??
     (!leadIntent && isBreakdownRequest(content) ? 2 : !leadIntent && isAccidentRequest(content) ? 3 : !leadIntent && isCarRequest(content) ? 1 : null);
 
-  if (!option && !carEligibility.completed && (leadIntent === "book_car" || /are you aged between 25 and 65|full uk driving licence|penalty points/i.test(lastAgentMessage))) {
+  if (!option && (leadIntent === "book_car" || /are you aged between 25 and 65|full uk driving licence|penalty points/i.test(lastAgentMessage))) {
     const incomingEligibility = parseCarEligibility(content);
     const nextEligibility: CarEligibility = { ...carEligibility, ...incomingEligibility };
     const missing = eligibilityMissing(nextEligibility);
