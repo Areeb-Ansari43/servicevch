@@ -843,11 +843,18 @@ function LineChart({ data, height }: { data: [string, number][]; height: number 
 
 /* ---------------- Vehicles ---------------- */
 function vehicleArtwork(vehicle: Vehicle) {
-  const model = `${vehicle.make} ${vehicle.model}`.toLowerCase();
-  if (!model.includes("mercedes")) return null;
-  if (model.includes("vito")) return "/vehicle-artwork/mercedes-vito-transparent.png";
-  if (model.includes("eqe")) return "/vehicle-artwork/mercedes-eqe-transparent.png";
-  if (/(^|[^0-9])(e\s*300|e\s*220|e300|e220)([^0-9]|$)/.test(model)) return "/vehicle-artwork/mercedes-eclass-transparent.png";
+  const model = `${vehicle.make} ${vehicle.model}`.toLowerCase().replace(/[-_]/g, " ");
+  if (model.includes("mercedes") && model.includes("vito")) return "/vehicle-artwork/mercedes-vito-transparent.png";
+  if (model.includes("mercedes") && model.includes("eqe")) return "/vehicle-artwork/mercedes-eqe-transparent.png";
+  if (model.includes("mercedes") && /(^|[^0-9])(e\s*300|e\s*220|e300|e220)([^0-9]|$)/.test(model)) return "/vehicle-artwork/mercedes-eclass-transparent.png";
+  if (model.includes("ford") && (model.includes("tourneo") || model.includes("custom"))) return "/vehicle-artwork/ford-tourneo-custom-transparent.png";
+  if (model.includes("hyundai") && model.includes("ioniq")) return "/vehicle-artwork/hyundai-ioniq-transparent.png";
+  if (model.includes("jaguar") && model.includes("pace")) return "/vehicle-artwork/jaguar-ipace-transparent.png";
+  if (model.includes("mg") && model.includes("5")) return "/vehicle-artwork/mg5-ev-transparent.png";
+  if (model.includes("tesla") && (model.includes("model 3") || model.includes("model3"))) return "/vehicle-artwork/tesla-model3-transparent.png";
+  if (model.includes("toyota") && model.includes("auris")) return "/vehicle-artwork/toyota-auris-estate-transparent.png";
+  if (model.includes("toyota") && model.includes("corolla")) return "/vehicle-artwork/toyota-corolla-estate-transparent.png";
+  if (model.includes("toyota") && model.includes("prius")) return "/vehicle-artwork/toyota-prius-transparent.png";
   return null;
 }
 
@@ -902,48 +909,43 @@ function VehiclesList({
         <div className="rounded-xl border border-dashed p-10 text-center text-sm text-[#8b95a8]" style={{ borderColor: T.border, background: T.panel }}>No vehicles match.</div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {filtered.map((v) => (
+          {filtered.map((v) => {
+            const artwork = vehicleArtwork(v);
+            return (
             <div
               key={v.id}
-              className="group relative flex flex-col overflow-hidden rounded-xl border p-4 transition-all hover:border-[#ff6a00]/60 hover:shadow-lg hover:shadow-orange-500/10"
+              className="group relative flex min-h-[405px] flex-col overflow-hidden rounded-2xl border p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-[#ff6a00]/60 hover:shadow-xl hover:shadow-orange-500/10 sm:min-h-[430px]"
               style={{ borderColor: T.border, background: T.panel }}
               >
-              {vehicleArtwork(v) ? (
-                <div className="pointer-events-none absolute right-0 top-8 z-0 h-36 w-44 opacity-[0.13] transition-all duration-200 group-hover:opacity-80 group-hover:brightness-[2.1] group-hover:contrast-125 group-hover:drop-shadow-[0_0_16px_rgba(255,255,255,0.55)] sm:h-40 sm:w-48" aria-hidden="true">
-                  <img src={vehicleArtwork(v) as string} alt="" className="h-full w-full object-contain object-right mix-blend-screen" />
+              {artwork ? (
+                <div className="pointer-events-none absolute inset-x-1 bottom-12 top-20 z-0 flex items-end justify-end opacity-40 transition-all duration-200 group-hover:opacity-90 group-hover:brightness-[1.45] group-hover:contrast-125 group-hover:drop-shadow-[0_0_18px_rgba(255,255,255,0.55)]" aria-hidden="true">
+                  <img src={artwork} alt="" className="h-full w-[78%] object-contain object-right mix-blend-screen sm:w-[82%]" />
                 </div>
               ) : (
-                <div className="pointer-events-none absolute right-3 top-14 opacity-[0.07] transition-opacity group-hover:opacity-[0.13]">
-                  {v.fuel_type === "Electric" ? <Icon.Bolt className="h-28 w-28 text-sky-300" /> : <Icon.Car className={`h-28 w-28 ${v.fuel_type === "Hybrid" ? "text-amber-300" : "text-slate-200"}`} />}
+                <div className="pointer-events-none absolute right-4 top-24 z-0 opacity-[0.07] transition-opacity group-hover:opacity-[0.13]">
+                  {v.fuel_type === "Electric" ? <Icon.Bolt className="h-36 w-36 text-sky-300" /> : <Icon.Car className={`h-36 w-36 ${v.fuel_type === "Hybrid" ? "text-amber-300" : "text-slate-200"}`} />}
                 </div>
               )}
               <div className="relative z-10 mb-3 flex items-start justify-between gap-2">
                 <UKPlate reg={v.registration} size="sm" />
                 <StatusBadge status={v.status} />
               </div>
-              <button onClick={() => onOpen(v)} className="relative z-10 block text-left">
-                <div className="line-clamp-2 text-sm font-bold uppercase leading-tight">{v.make} {v.model}</div>
+              <button onClick={() => onOpen(v)} className="relative z-10 block max-w-[82%] text-left">
+                <div className="line-clamp-2 text-lg font-extrabold uppercase leading-[1.08] tracking-tight text-[#f3f5f8] sm:text-xl">{v.make} {v.model}</div>
               </button>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#8b95a8]">
-                <span>{v.year}</span>
-                <span className={`rounded border px-1.5 py-0.5 font-medium ${fuelStyle(v.fuel_type)}`}>{v.fuel_type}</span>
-                <span>{v.current_mileage.toLocaleString()} mi</span>
+              <div className="relative z-10 mt-5 grid max-w-[62%] grid-cols-1 gap-2.5 text-xs text-[#aab3c2] sm:max-w-[48%]">
+                <div className="flex items-center gap-2.5 border-b pb-2.5" style={{ borderColor: T.borderSoft }}><Icon.Calendar className="h-6 w-6 shrink-0 text-[#aeb8c9]" /><span><span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#7d8799]">Year</span><span className="text-lg font-semibold text-[#e8ebf0]">{v.year}</span></span></div>
+                <div className="flex items-center gap-2.5 border-b pb-2.5" style={{ borderColor: T.borderSoft }}><Icon.Bolt className={`h-6 w-6 shrink-0 ${v.fuel_type === "Electric" ? "text-sky-300" : "text-[#ff8a3d]"}`} /><span><span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#7d8799]">Fuel</span><span className={`mt-0.5 inline-block rounded-md border px-2 py-0.5 text-sm font-bold ${fuelStyle(v.fuel_type)}`}>{v.fuel_type}</span></span></div>
+                <div className="flex items-center gap-2.5 border-b pb-2.5" style={{ borderColor: T.borderSoft }}><Icon.Gauge className="h-6 w-6 shrink-0 text-[#aeb8c9]" /><span><span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#7d8799]">Mileage</span><span className="text-lg font-semibold text-[#e8ebf0]">{v.current_mileage.toLocaleString()} mi</span></span></div>
+                <div className="flex items-center gap-2.5"><Icon.Alert className="h-6 w-6 shrink-0 text-[#aeb8c9]" /><span><span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#7d8799]">MOT</span><span className="text-lg font-semibold text-[#e8ebf0]">{v.next_mot_date ? daysUntil(v.next_mot_date) : "—"}</span></span></div>
               </div>
-              {driverByVehicle.get(v.id)?.driver_name && (
-                <div className="mt-3 rounded-lg border border-sky-400/20 bg-sky-400/10 px-2.5 py-2 text-xs text-sky-200">
-                  Driver: <span className="font-semibold">{driverByVehicle.get(v.id)?.driver_name}</span>
-                </div>
-              )}
-              <div className="mt-3 flex flex-wrap gap-1.5 border-t pt-3 text-[10px]" style={{ borderColor: T.borderSoft }}>
-                {v.next_mot_date && <Pill label="MOT" value={daysUntil(v.next_mot_date)} />}
-                {v.next_service_date && <Pill label="Service" value={daysUntil(v.next_service_date)} />}
-                {v.insurance_expiry && <Pill label="PCO" value={daysUntil(v.insurance_expiry)} />}
-              </div>
-              <div className="mt-3 flex items-center justify-between gap-2 border-t pt-3" style={{ borderColor: T.borderSoft }}>
-                <button onClick={() => onOpen(v)} className="rounded-md px-2 py-1 text-xs font-semibold text-[#ff6a00] hover:bg-[#ff6a00]/10">View Details →</button>
+              {driverByVehicle.get(v.id)?.driver_name && <div className="relative z-10 mt-2 max-w-[62%] truncate text-[10px] text-sky-200 sm:max-w-[48%]">Driver: <span className="font-semibold">{driverByVehicle.get(v.id)?.driver_name}</span></div>}
+              <div className="relative z-10 mt-auto pt-4">
+                <button onClick={() => onOpen(v)} className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#ff8a3d]/80 bg-[#15171d]/70 px-3 py-3 text-sm font-bold text-[#ff8a3d] transition hover:bg-[#ff8a3d] hover:text-white"><span className="flex h-7 w-7 items-center justify-center rounded-full border border-current">→</span> View Details <span>→</span></button>
               </div>
             </div>
-          ))}
+          );
+          })}
         </div>
       )}
     </div>
