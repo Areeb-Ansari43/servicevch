@@ -119,7 +119,7 @@ async function insertWithSessionFallback(
   };
   let currentRow = { ...row };
   let result = await runInsert(currentRow);
-  for (const column of ["session_id", "handoff"]) {
+  for (const column of ["session_id", "handoff", "meta_message_id", "media_type", "media_mime_type", "media_meta_id"]) {
     if (!result.error || !(column in currentRow) || !isMissingColumn(result.error, column)) continue;
     const { [column]: _removed, ...compatibleRow } = currentRow;
     currentRow = compatibleRow;
