@@ -133,9 +133,33 @@ export const Route = createFileRoute("/api/webhook")({
           }
           try {
             const response = await handleAgentWebhookRequest(new Request("https://servicevch.pages.dev/api/public/agent-webhook", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(normalized) }));
-            if (!response.ok) console.error("[meta-webhook] agent processing returned non-2xx", { requestId, status: response.status, body: (await response.clone().text()).slice(0, 500) });
+            const responseBody = (await response.text()).slice(0, 2000);
+            let responseSummary: JsonRecord = { raw: responseBody };
+            try { responseSummary = JSON.parse(responseBody) as JsonRecord; } catch { /* retain raw response */ }
+            console.info("[meta-webhook] agent processing result", {
+              requestId,
+              status: response.status,
+              ok: response.ok,
+              leadId: responseSummary.lead_id ?? null,
+              reply: typeof responseSummary.reply === "string" ? responseSummary.reply.slice(0, 160) : null,
+              outbound: responseSummary.outbound ?? null,
+              welcomeMenu: responseSummary.welcome_menu ?? null,
+              needsHuman: responseSummary.needs_human ?? null,
+            });
+            if (!response.ok || responseSummary.outbound?.sent === false) {
+              await logMetaEvent({
+                payload,
+                request,
+                status: "agent_error",
+                error: !response.ok ? `agent_http_${response.status}: ${responseBody}` : `outbound_failed: ${JSON.stringify(responseSummary.outbound ?? {})}`,
+                normalized,
+                requestId,
+              });
+            }
           } catch (error) {
-            console.error("[meta-webhook] agent processing failed", { requestId, error: error instanceof Error ? error.message : String(error) });
+            const message = error instanceof Error ? error.message : String(error);
+            console.error("[meta-webhook] agent processing failed", { requestId, error: message });
+            await logMetaEvent({ payload, request, status: "agent_error", error: message, normalized, requestId });
           }
         }
         await logMetaEvent({ payload, request, status: "processed", normalized: messages.map(({ message, value }) => normalizeMetaMessage(message, value)), requestId });
