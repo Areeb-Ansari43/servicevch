@@ -123,13 +123,17 @@ export const Route = createFileRoute("/api/webhook")({
           return json({ ok: false, error: "Unauthorized" }, 403);
         }
         const messages = extractMessages(payload);
+        console.info("[meta-webhook] inbound delivery", { requestId, messageCount: messages.length, object: payload.object ?? null });
         await logMetaEvent({ payload, request, status: "received", normalized: messages.map(({ message, value }) => normalizeMetaMessage(message, value)), requestId });
         for (const { message, value } of messages) {
           const normalized = normalizeMetaMessage(message, value);
-          if (!normalized.phone) continue;
+          if (!normalized.phone) {
+            console.error("[meta-webhook] message skipped: Meta payload had no usable sender phone", { requestId, messageId: normalized.meta_message_id ?? null, from: message.from ?? null });
+            continue;
+          }
           try {
             const response = await handleAgentWebhookRequest(new Request("https://servicevch.pages.dev/api/public/agent-webhook", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(normalized) }));
-            if (!response.ok) console.error("[meta-webhook] agent processing returned non-2xx", { requestId, status: response.status });
+            if (!response.ok) console.error("[meta-webhook] agent processing returned non-2xx", { requestId, status: response.status, body: (await response.clone().text()).slice(0, 500) });
           } catch (error) {
             console.error("[meta-webhook] agent processing failed", { requestId, error: error instanceof Error ? error.message : String(error) });
           }
