@@ -63,6 +63,14 @@ type CarEligibility = {
   ukLicence?: boolean;
   points?: number | null;
   completed?: boolean;
+  selectedVehicle?: {
+    make: string;
+    model: string;
+    year: number | string | null;
+    weeklyRate: string;
+    mileage: number;
+    contractWeeks: number;
+  };
 };
 
 type AiResult = {
@@ -390,6 +398,13 @@ function mileageAllowance(vehicle: FleetVehicle): number {
 
 function contractWeeks(vehicle: FleetVehicle): number {
   return Number(vehicle.minimum_contract_weeks) || 6;
+}
+
+function formatCarHandoffSummary(data: CarEligibility, answer: string): string {
+  const selected = data.selectedVehicle;
+  return selected
+    ? `Customer wants: ${selected.make} ${selected.model} (${selected.year ?? "year to confirm"}) — ${selected.weeklyRate}; ${selected.mileage.toLocaleString("en-GB")} miles/month; ${selected.contractWeeks}-week minimum. Terms answer: ${answer}.`
+    : `Customer wants a vehicle. Terms answer: ${answer}.`;
 }
 
 function formatVehicleDetails(vehicle: FleetVehicle): string {
@@ -946,10 +961,19 @@ export async function handleAgentWebhookRequest(request: Request) {
     const selected = findSelectedVehicle(content, (fleet ?? []) as FleetVehicle[]);
     if (selected) {
       const reply = formatVehicleDetails(selected);
+      const selectedVehicle = {
+        make: selected.make,
+        model: selected.model,
+        year: selected.year ?? websiteMatch(selected)?.year ?? null,
+        weeklyRate: selected.weekly_price != null ? `£${selected.weekly_price}/week` : websiteMatch(selected)?.price ?? "Price to confirm",
+        mileage: mileageAllowance(selected),
+        contractWeeks: contractWeeks(selected),
+      };
+      const nextEligibility: CarEligibility = { ...carEligibility, selectedVehicle };
       const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
       if (outbound.sent) {
         await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
-        await db.from("whatsapp_leads").update({ ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+        await db.from("whatsapp_leads").update({ car_enquiry_data: nextEligibility, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
       }
       const alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
       return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, needs_human: !outbound.sent, telegram_alert: alert });
@@ -1144,11 +1168,13 @@ export async function handleAgentWebhookRequest(request: Request) {
   }
 
   if (!option && isTermsResponse(content) && lastAgentMessage.toLowerCase().includes("are you fully aware")) {
+    const answer = content.trim();
+    const summary = formatCarHandoffSummary(carEligibility, answer);
     const reply = HANDOFF_24H;
     await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, handoff: true, session_id: sessionId });
-    await db.from("whatsapp_leads").update({ status: "needs_human", customer_type: "needs_human", ai_paused: true, intent: leadIntent ?? "book_car", ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+    await db.from("whatsapp_leads").update({ status: "needs_human", customer_type: "needs_human", ai_paused: true, intent: leadIntent ?? "book_car", ai_summary: summary, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
-    const alert = await sendTelegramAlert({ name: leadName, phone, reason: outbound.sent ? "Customer confirmed vehicle terms" : `WhatsApp Cloud API reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
+    const alert = await sendTelegramAlert({ name: leadName, phone, reason: outbound.sent ? summary : `WhatsApp Cloud API reply failed: ${outbound.reason}`, leadId, history: [{ sender: "ai_agent", content: summary }, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
     return json({ ok: true, lead_id: leadId, reply, needs_human: true, telegram_alert: alert, outbound });
   }
 
