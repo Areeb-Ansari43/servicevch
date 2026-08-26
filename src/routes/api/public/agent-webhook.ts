@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
 import { getRuntimeEnv } from "@/integrations/supabase/config";
-import { sendWhatsAppButtons, sendWhatsAppImage, sendWhatsAppText } from "@/lib/meta-whatsapp.server";
+import { sendWhatsAppImage, sendWhatsAppText } from "@/lib/meta-whatsapp.server";
 
 const CRM_BASE = "https://servicevch.pages.dev";
 const VCH_WEBSITE = "https://virtualcarhire.pages.dev/our-fleet";
@@ -12,10 +12,10 @@ const AUTO_SURGEON_MAP = "https://www.google.com/maps/search/?api=1&query=The+Au
 const WELCOME_MENU =
   "👋 Hello, and welcome to Virtual Car Hire\n" +
   "🚘 London's number one PCO car hire company with 4.8 stars across Google and Trustpilot.\n\n" +
-  "How can we assist you today? Please tap one of the options below to get started:\n" +
-  "🚗 Car enquiry\n" +
-  "🛠️ Emergency Breakdown\n" +
-  "⚠️ Report Accident";
+  "How can we assist you today? Please reply with the number corresponding to your choice:\n" +
+  "🚗 1. Enquire about a car\n" +
+  "⚠️ 2. Report accident\n\n" +
+  "Please reply with 1 or 2 to get started.";
 const WEBSITE_CATALOG = [
   { make: "Mercedes", model: "E300", fuel: "Plug-in-Hybrid", price: "£340/week", year: "2021–24" },
   { make: "Mercedes", model: "Vito", fuel: "Petrol", price: "£380/week", year: "2021–24" },
@@ -268,8 +268,9 @@ function isLikelyFullName(text: string): boolean {
 function parseMenuOption(text: string): 1 | 2 | 3 | null {
   const normalized = text.trim().toLowerCase().replace(/[.!]+$/g, "");
   if (/^(?:option\s*)?\[?1\]?$/.test(normalized) || /^(?:car enquiry|enquire about a car|book a car)$/.test(normalized)) return 1;
-  if (/^(?:option\s*)?\[?2\]?$/.test(normalized) || /^(?:emergency breakdown|breakdown|emergency)$/.test(normalized)) return 2;
-  if (/^(?:option\s*)?\[?3\]?$/.test(normalized) || /^(?:report accident|accident)$/.test(normalized)) return 3;
+  if (/^(?:option\s*)?\[?2\]?$/.test(normalized) || /^(?:report accident|accident)$/.test(normalized)) return 3;
+  if (/^(?:emergency breakdown|breakdown|emergency)$/.test(normalized)) return 2;
+  if (/^(?:option\s*)?\[?3\]?$/.test(normalized)) return 3;
   return null;
 }
 
@@ -432,27 +433,13 @@ function formatFleet(fleet: FleetVehicle[]): string {
 }
 
 async function sendWelcomeMenu(phone: unknown) {
-  const imagePromise = sendWhatsAppImage({
-    phone,
-    url: WELCOME_IMAGE_URL,
-    caption: "👋 Hello, and welcome to Virtual Car Hire\n🚘 London's number one PCO car hire company with 4.8 stars across Google and Trustpilot.\n\nHow can we assist you today? Please tap one of the options below to get started:",
-  });
-  const buttons = await sendWhatsAppButtons({
-    phone,
-    body: "How can we assist you today? Please tap one of the options below to get started:",
-    buttons: [
-      { id: "book_car", title: "Car enquiry" },
-      { id: "emergency_breakdown", title: "Emergency Breakdown" },
-      { id: "report_accident", title: "Report Accident" },
-    ],
-  });
-  const image = await imagePromise;
-  if (buttons.sent) return buttons;
-  console.warn("[agent-webhook] welcome buttons unavailable; falling back to text menu", { reason: buttons.reason, imageSent: image.sent });
+  const image = await sendWhatsAppImage({ phone, url: WELCOME_IMAGE_URL, caption: WELCOME_MENU });
+  if (image.sent) return image;
+  console.warn("[agent-webhook] welcome image unavailable; falling back to exact text menu", { reason: image.reason });
   const fallback = await sendWhatsAppText({ phone, text: WELCOME_MENU });
   if (fallback.sent) return fallback;
-  console.error("[agent-webhook] welcome delivery failed: neither buttons nor text fallback was accepted", { buttons: buttons.reason, fallback: fallback.reason, imageSent: image.sent });
-  return { sent: false, reason: `welcome_delivery_failed: buttons=${buttons.reason}; fallback=${fallback.reason}` };
+  console.error("[agent-webhook] welcome delivery failed", { image: image.reason, fallback: fallback.reason });
+  return { sent: false, reason: `welcome_delivery_failed: image=${image.reason}; fallback=${fallback.reason}` };
 }
 
 async function generateReply(
