@@ -386,15 +386,14 @@ async function generateReply(
   fleet: FleetVehicle[],
 ): Promise<AiResult> {
   const fallback: AiResult = {
-    reply:
-      "I’m sorry, I’m having trouble helping with that right now. I’m connecting you with a member of our team now.",
+    reply: "A team member will help you shortly.",
     needs_human: true,
     reason: "ai_unavailable_or_error",
     asks_closure: false,
   };
   const system =
     "You are the WhatsApp assistant for Virtual Car Hire (VCH), a UK PCO/private-hire car rental company. " +
-    "Reply naturally in UK English. Use concise paragraphs and bullet-style lines when listing cars or contract details. Use £ for prices. " +
+    "Reply naturally in UK English. Keep normal replies short: one to four brief lines and normally under 450 characters. Do not repeat the welcome menu or previous answer. Use concise bullet-style lines only when listing cars or contract details. Use £ for prices. " +
     "Use only the supplied live fleet data: never invent availability, prices, dates, MOT or PCO information. " +
     "Treat only vehicles marked available/active/in stock as available; rented, assigned, in-service and off-road vehicles are unavailable. " +
     "If the customer asks for a car, wants to hire/rent, asks what is available, or uses any natural wording with the same meaning, treat it as a car enquiry and show all currently available vehicles from the supplied fleet, grouped clearly under Electric, Plug-in-Hybrid, Petrol where possible. If the conversation already contains the complete available-fleet list and the customer names a vehicle, respond with that vehicle's complete contract details: contract length, mileage allowance, weekly rate, and inclusions, then ask for Yes or No confirmation. If the requested car is unavailable, explicitly say so and suggest alternatives under exactly these headings: Electric, Plug-in-Hybrid, Petrol. Do not repeat the full fleet list when the customer has selected a vehicle. " +
@@ -482,9 +481,11 @@ async function generateReply(
         const attempt = await callModel(apiVersion, model);
         generation = attempt;
         if (attempt.response.ok) break;
-        if (attempt.response.status !== 404) break;
+        // Try the next discovered model/version during transient Gemini outages.
+        // Only stop early for a definitive request/authentication error.
+        if (![404, 408, 429, 500, 502, 503, 504].includes(attempt.response.status)) break;
       }
-      if (generation?.response.ok || generation?.response.status !== 404) break;
+      if (generation?.response.ok || (generation && ![404, 408, 429, 500, 502, 503, 504].includes(generation.response.status))) break;
     }
     if (!generation) generation = await callModel("v1beta", "gemini-2.5-flash");
     if (!generation.response.ok) {
@@ -572,18 +573,12 @@ async function sendTelegramAlert(params: {
   const token = getRuntimeEnv("TELEGRAM_BOT_TOKEN");
   const chatId = getRuntimeEnv("TELEGRAM_CHAT_ID");
   if (!token || !chatId) return { sent: false, reason: "not_configured" };
-  const transcript = params.history
-    .slice(-20)
-    .map((m) => `${m.sender}: ${m.content}`)
-    .join("\n");
   const text =
-    `${params.closed ? "✅ <b>Conversation closed</b>" : "🚨 <b>Human handoff needed</b>"}\n\n` +
-    `<b>Customer:</b> ${escapeHtml(params.name)}\n` +
+    `${params.closed ? "✅ <b>Conversation ended</b>" : "🚨 <b>Handoff needed</b>"}\n` +
+    `<b>Name:</b> ${escapeHtml(params.name)}\n` +
     (params.phone ? `<b>Phone:</b> ${escapeHtml(params.phone)}\n` : "") +
     `<b>Reason:</b> ${escapeHtml(params.reason)}\n` +
-    (params.mediaUrl ? `<b>Media:</b> ${escapeHtml(params.mediaUrl)}\n` : "") +
-    `\n<b>Complete recent conversation:</b>\n${escapeHtml(transcript).slice(0, 5000)}\n\n` +
-    `<a href="${CRM_BASE}/whatsapp-leads?lead=${encodeURIComponent(params.leadId)}">Open in CRM →</a>`;
+    `<a href="${CRM_BASE}/whatsapp-leads?lead=${encodeURIComponent(params.leadId)}">Open CRM</a>`;
   try {
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: "POST",
@@ -838,7 +833,7 @@ export async function handleAgentWebhookRequest(request: Request) {
   }
 
   if (isAbusiveMessage(content)) {
-    const reply = "I’m unable to continue this automated conversation when abusive language is used. A human team member will review your message and contact you here.";
+    const reply = "Handoff needed. A team member will contact you shortly.";
     await insertWithSessionFallback(db, "messages", {
       user_id: userId,
       lead_id: leadId,

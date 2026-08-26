@@ -41,6 +41,7 @@ export function LeadThread({
   const [loading, setLoading] = useState(true);
   const [reply, setReply] = useState("");
   const [busy, setBusy] = useState(false);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const loadConversation = useServerFn(getLeadConversation);
   const send = useServerFn(sendHumanReply);
@@ -83,8 +84,9 @@ export function LeadThread({
       const res = await send({ data: { leadId, content } });
       setReply("");
       toast(res.outbound.routed ? "Reply sent — AI paused for this lead" : "Reply saved — AI paused (no outbound channel configured)", "success");
+      // Refresh only the open thread. Do not refresh the parent route here:
+      // doing so can close the modal or return the user to the Leads landing page.
       await load();
-      onChanged();
     } catch (err) {
       toast((err as Error).message || "Failed to send reply", "error");
     } finally {
@@ -132,7 +134,7 @@ export function LeadThread({
           <button onClick={onClose} className="rounded-full px-2 py-1 text-xs text-[#8b95a8] hover:bg-white/10 hover:text-white">Close</button>
         </div>
 
-        <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-5 py-5 sm:px-7">
+        <div ref={scrollRef} className="flex-1 space-y-2 overflow-y-auto px-4 py-4 sm:px-6">
           {loading ? (
             <p className="text-xs text-[#8b95a8]">Loading conversation…</p>
           ) : messages.length === 0 ? (
@@ -142,12 +144,12 @@ export function LeadThread({
               const effectiveSender = m.content.trim() === AI_FALLBACK_TEXT ? "ai_agent" : m.sender;
               const style = SENDER_STYLES[effectiveSender] ?? SENDER_STYLES.customer;
               return (
-                <div key={m.id} className={`max-w-[88%] rounded-2xl px-4 py-2.5 ${style.className}`}>
+                <div key={m.id} className={`max-w-[82%] rounded-2xl px-3.5 py-2 ${style.className}`}>
                   <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.16em] opacity-70">
                     {style.label} · {new Date(m.created_at).toLocaleString("en-GB")}
                     {m.handoff ? " · handoff" : ""}
                   </div>
-                  <div className="whitespace-pre-wrap text-sm leading-relaxed">{m.content}</div>
+                  <div className="whitespace-pre-wrap text-[13px] leading-relaxed">{m.content}</div>
                   {m.media_url && (
                     <div className="mt-2">
                       {(m.media_type ?? "").toLowerCase() === "video" ? (
@@ -155,7 +157,9 @@ export function LeadThread({
                       ) : (m.media_type ?? "").toLowerCase() === "audio" ? (
                         <audio src={m.media_url} controls className="max-w-full" preload="metadata" />
                       ) : (m.media_type ?? "").toLowerCase() === "image" || (m.media_mime_type ?? "").startsWith("image/") ? (
-                        <img src={m.media_url} alt="WhatsApp attachment" className="max-h-48 max-w-full rounded-lg object-contain" loading="lazy" />
+                        <button type="button" onClick={() => setPreviewImage(m.media_url)} className="block max-w-full cursor-zoom-in rounded-lg text-left focus:outline-none focus:ring-2 focus:ring-[#ff6a00]/70" aria-label="View image full screen">
+                          <img src={m.media_url} alt="WhatsApp attachment — click to view full screen" className="max-h-40 max-w-full rounded-lg object-contain transition hover:brightness-110" loading="lazy" />
+                        </button>
                       ) : (
                         <a href={m.media_url} target="_blank" rel="noreferrer" className="inline-flex rounded-full border border-white/15 px-3 py-1.5 text-xs text-[#ffd9bd] hover:border-[#ff6a00]/50 hover:text-white">
                           Open WhatsApp attachment
@@ -185,6 +189,12 @@ export function LeadThread({
           </button>
         </form>
       </div>
+      {previewImage && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm" onClick={() => setPreviewImage(null)} role="dialog" aria-modal="true" aria-label="Full-screen WhatsApp image">
+          <button type="button" onClick={() => setPreviewImage(null)} className="absolute right-5 top-5 rounded-full border border-white/20 bg-black/40 px-3 py-2 text-sm text-white hover:bg-white/15" aria-label="Close full-screen image">Close</button>
+          <img src={previewImage} alt="WhatsApp attachment full screen" className="max-h-[92vh] max-w-[96vw] rounded-xl object-contain shadow-2xl" onClick={(e) => e.stopPropagation()} />
+        </div>
+      )}
     </div>
   );
 }
