@@ -301,7 +301,7 @@ function parseCarEligibility(text: string): CarEligibility {
   const licenceMentioned = /\b(?:uk\s+)?(?:full\s+)?(?:driving|drivers?)?\s*licen[cs]e\b|\bfull\s+uk\b/i.test(lower);
   const positiveLicence = /\b(?:full|valid|clean)\b[^.\n]{0,25}\b(?:uk\b|driving|drivers?|licen[cs]e)|\b(?:yes|yeah|yep|i\s+(?:do|have|hold|possess))\b/i.test(lower);
   if (licenceNegative) result.ukLicence = false;
-  else if (licenceMentioned && positiveLicence || /\bfull\s+uk\b/i.test(lower) || (/\b(?:yes|yeah|yep)\b/i.test(lower) && !licenceNegative)) result.ukLicence = true;
+  else if ((licenceMentioned && !licenceNegative) || positiveLicence || (/\b(?:yes|yeah|yep)\b/i.test(lower) && !licenceNegative)) result.ukLicence = true;
 
   if (/\b(?:no|zero|none)\s+(?:penalty\s+)?points?\b/i.test(lower)) {
     result.points = 0;
