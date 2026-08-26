@@ -295,13 +295,13 @@ function parseCarEligibility(text: string): CarEligibility {
   }
   if (/\b(?:no|not|don't|do not)\s+(?:have\s+)?(?:a\s+)?(?:full\s+)?(?:uk\s+)?licen[cs]e\b|\b(?:no|not)\s+licen[cs]e\b/i.test(lower)) {
     result.ukLicence = false;
-  } else if (/\b(?:full\s+)?uk\s+(?:driving\s+)?licen[cs]e\b|\bfull\s+(?:uk\s+)?(?:driving\s+)?licen[cs]e\b|\b(?:yes|yeah|yep)\b/i.test(lower)) {
+  } else if (/\b(?:full\s+)?uk\s+(?:(?:driving|drivers?)\s+)?licen[cs]e\b|\bfull\s+(?:uk\s+)?(?:driving|drivers?)?\s*licen[cs]e\b|\bfull\s+uk\b|\b(?:yes|yeah|yep)\b/i.test(lower)) {
     result.ukLicence = true;
   }
   if (/\bno\s+(?:penalty\s+)?points?\b/i.test(lower)) result.points = 0;
   else {
-    const pointsMatch = lower.match(/(?:points?|penalty\s+points?)\s*(?:are|is|:)?\s*(\d{1,2})/i);
-    if (pointsMatch) result.points = Number(pointsMatch[1]);
+    const pointsMatch = lower.match(/(?:points?|penalty\s+points?)\s*(?:are|is|:)?\s*(\d{1,2})|\b(\d{1,2})\s*(?:penalty\s+)?points?\b/i);
+    if (pointsMatch) result.points = Number(pointsMatch[1] ?? pointsMatch[2]);
   }
   result.completed = result.ageEligible !== undefined && result.ukLicence !== undefined && result.points !== undefined;
   return result;
@@ -984,7 +984,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     }
   }
 
-  if (!option && leadIntent === "report_accident" && lastAgentMessage.toLowerCase().includes("full name") && isLikelyFullName(content)) {
+  if (!option && leadIntent === "report_accident" && /full name|provide your full name/i.test(lastAgentMessage) && isLikelyFullName(content)) {
     const customerName = content.trim();
     const reply = "Accident Support\n\nThank you, " + customerName + ". Please now send the vehicle registration, incident date, location, a short description of what happened, and any photos.";
     await db.from("whatsapp_leads").update({ contact_name: customerName, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
