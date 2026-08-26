@@ -6,13 +6,13 @@ import { sendWhatsAppButtons, sendWhatsAppImage, sendWhatsAppText } from "@/lib/
 
 const CRM_BASE = "https://servicevch.pages.dev";
 const VCH_WEBSITE = "https://virtualcarhire.pages.dev/our-fleet";
-const WELCOME_IMAGE_URL = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663646717561/LWsrZDwfCPweeEQG.webp";
+const WELCOME_IMAGE_URL = "https://servicevch.pages.dev/whatsapp/virtual-car-hire-welcome.webp";
 const AUTO_SURGEON_ADDRESS = "The Auto Surgeon, Unit 3 Squirrels Trading Estate, Viveash Close, Hayes UB3 4RZ";
 const AUTO_SURGEON_MAP = "https://www.google.com/maps/search/?api=1&query=The+Auto+Surgeon+Unit+3+Squirrels+Trading+Estate+Viveash+Close+Hayes+UB3+4RZ";
 const WELCOME_MENU =
   "👋 Hello, and welcome to Virtual Car Hire\n" +
   "🚘 London's number one PCO car hire company with 4.8 stars across Google and Trustpilot.\n\n" +
-  "How can we assist you today? Please choose one of the options below:\n" +
+  "How can we assist you today? Please tap one of the options below to get started:\n" +
   "🚗 Car enquiry\n" +
   "🛠️ Emergency Breakdown\n" +
   "⚠️ Report Accident";
@@ -357,10 +357,14 @@ function formatFleet(fleet: FleetVehicle[]): string {
 }
 
 async function sendWelcomeMenu(phone: unknown) {
-  const image = await sendWhatsAppImage({ phone, url: WELCOME_IMAGE_URL, caption: "👋 Welcome to Virtual Car Hire — London's number one PCO car hire company." });
+  const image = await sendWhatsAppImage({
+    phone,
+    url: WELCOME_IMAGE_URL,
+    caption: "👋 Hello, and welcome to Virtual Car Hire\n🚘 London's number one PCO car hire company with 4.8 stars across Google and Trustpilot.\n\nHow can we assist you today? Please tap one of the options below to get started:",
+  });
   const buttons = await sendWhatsAppButtons({
     phone,
-    body: "How can we assist you today? Please choose an option:",
+    body: "How can we assist you today? Please tap one of the options below to get started:",
     buttons: [
       { id: "book_car", title: "Car enquiry" },
       { id: "emergency_breakdown", title: "Emergency Breakdown" },
