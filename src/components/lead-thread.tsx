@@ -14,7 +14,7 @@ export type ThreadMessage = {
   created_at: string;
 };
 
-const AI_FALLBACK_TEXT = "I’m sorry, I’m having trouble helping with that right now. I’m connecting you with a member of our team now.";
+const AI_FALLBACK_TEXT = "Handoff needed.\n\nOur team will get back to you within 24 hours. Please do not contact this number — we will contact you first.";
 
 const SENDER_STYLES: Record<string, { label: string; className: string }> = {
   customer: { label: "Customer", className: "border border-white/10 bg-white/[0.05] text-[#dce3ee]" },

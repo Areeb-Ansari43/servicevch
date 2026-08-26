@@ -57,11 +57,6 @@ export function useLeadsData() {
         { event: "*", schema: "public", table: "accident_cases" },
         () => void refresh(),
       )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "messages" },
-        () => void refresh(),
-      )
       .subscribe((status) => {
         if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
           console.warn(`[LeadsData] Realtime sync status: ${status}`);

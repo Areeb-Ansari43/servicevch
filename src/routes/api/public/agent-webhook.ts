@@ -35,7 +35,11 @@ const WEBSITE_CATALOG = [
   { make: "Volkswagen", model: "Multivan PHEV", fuel: "Plug-in-Hybrid", price: "£350/week", year: "2024–25" },
 ];
 const STANDARD_TERMS =
-  "Minimum 4-week flexible term; standard allowance 1,000 miles per month; insurance, servicing and roadside breakdown cover included.";
+  "Minimum 6-week contract; 5,000 miles per month for all vehicles except Mercedes EQE and EQS, which have 4,000 miles per month; insurance and servicing included.";
+const CAR_ELIGIBILITY_PROMPT =
+  "Before we look at available vehicles, please confirm three things:\n\n1. Are you aged between 25 and 65 years old?\n2. Do you possess a full UK driving licence?\n3. Do you have any penalty points? If you have fewer than 6 points, renting with us may be difficult.\n\nPlease reply with your age, whether you hold a full UK licence, and how many points you have.";
+const HANDOFF_24H =
+  "Our team will get back to you within 24 hours. Please do not contact this number — we will contact you first.";
 
 type Turn = { sender: string; content: string; media_url?: string | null };
 type FleetVehicle = {
@@ -47,6 +51,18 @@ type FleetVehicle = {
   status: string | null;
   next_mot_date: string | null;
   pco_expiry_date: string | null;
+  weekly_price?: number | string | null;
+  monthly_mileage_allowance?: number | null;
+  minimum_contract_weeks?: number | null;
+  insurance_service_included?: boolean | null;
+};
+
+type CarEligibility = {
+  age?: number | null;
+  ageEligible?: boolean;
+  ukLicence?: boolean;
+  points?: number | null;
+  completed?: boolean;
 };
 
 type AiResult = {
@@ -257,6 +273,40 @@ function isTermsResponse(text: string): boolean {
   return /^(?:yes|no|yeah|nope|yep|not yet|i(?:'m| am) not sure)[.!\s]*$/i.test(text.trim());
 }
 
+function parseCarEligibility(text: string): CarEligibility {
+  const lower = text.toLowerCase();
+  const result: CarEligibility = {};
+  const labelledAge = lower.match(/(?:age|aged)\s*(?:is|:)?\s*(\d{2})/i);
+  const anyAge = lower.match(/\b(\d{2})\s*(?:years?\s*old)?\b/);
+  const age = Number(labelledAge?.[1] ?? anyAge?.[1]);
+  if (Number.isFinite(age) && age >= 18 && age <= 99) {
+    result.age = age;
+    result.ageEligible = age >= 25 && age <= 65;
+  }
+  if (/\b(?:no|not|don't|do not)\s+(?:have\s+)?(?:a\s+)?(?:full\s+)?(?:uk\s+)?licen[cs]e\b|\b(?:no|not)\s+licen[cs]e\b/i.test(lower)) {
+    result.ukLicence = false;
+  } else if (/\b(?:full\s+)?uk\s+licen[cs]e\b|\bfull\s+licen[cs]e\b|\b(?:yes|yeah|yep)\b/i.test(lower)) {
+    result.ukLicence = true;
+  }
+  if (/\bno\s+(?:penalty\s+)?points?\b/i.test(lower)) result.points = 0;
+  else {
+    const pointsMatch = lower.match(/(?:points?|penalty\s+points?)\s*(?:are|is|:)?\s*(\d{1,2})/i);
+    if (pointsMatch) result.points = Number(pointsMatch[1]);
+  }
+  result.completed = result.ageEligible !== undefined && result.ukLicence !== undefined && result.points !== undefined;
+  return result;
+}
+
+function eligibilityMissing(data: CarEligibility): string[] {
+  const missing: string[] = [];
+  if (data.age === undefined || data.age === null) missing.push("your age");
+  else if (!data.ageEligible) missing.push("confirmation that your age is between 25 and 65");
+  if (data.ukLicence === undefined) missing.push("whether you have a full UK driving licence");
+  else if (!data.ukLicence) missing.push("a full UK driving licence");
+  if (data.points === undefined || data.points === null) missing.push("the number of penalty points you have");
+  return missing;
+}
+
 function isPositiveClosure(text: string): boolean {
   return /^(?:yes|yeah|yep|yup|that'?s all|all good|no thanks|no thank you|that is all|that’s all)[.!\s]*$/i.test(
     text.trim(),
@@ -310,12 +360,12 @@ function websiteMatch(vehicle: FleetVehicle): (typeof WEBSITE_CATALOG)[number] |
 
 function formatCustomerFleet(fleet: FleetVehicle[]): string {
   const available = fleet.filter(isAvailable);
-  if (!available.length) return "I’m sorry, there are no vehicles currently marked available. A team member can confirm the next incoming cars.";
+  if (!available.length) return `I’m sorry, there are no vehicles currently marked available.\n\n${HANDOFF_24H}`;
   const lines = available.map((vehicle, index) => {
     const catalog = websiteMatch(vehicle);
-    const price = catalog?.price ?? "Price to confirm";
+    const price = vehicle.weekly_price != null ? `£${vehicle.weekly_price}/week` : catalog?.price ?? "Price to confirm";
     const year = vehicle.year ?? catalog?.year ?? "Year to confirm";
-    return `${index + 1}. ${vehicle.make} ${vehicle.model} (${year}) — ${catalog?.fuel ?? fuelCategory(vehicle.fuel_type)} — ${price}`;
+    return `${index + 1}. ${vehicle.make} ${vehicle.model} (${year}) — ${catalog?.fuel ?? fuelCategory(vehicle.fuel_type)} — ${price} — ${mileageAllowance(vehicle).toLocaleString("en-GB")} miles/month — ${contractWeeks(vehicle)} weeks`;
   });
   return `Thank you for your interest in our PCO fleet. Here are all vehicles currently marked available:\n\n${lines.join("\n")}\n\nPlease tell me which vehicle you would like to go with, and I will provide its complete contract details.\n\nPrices shown from ${VCH_WEBSITE}; vehicles without a published website rate are marked Price to confirm.`;
 }
@@ -332,11 +382,21 @@ function findSelectedVehicle(text: string, fleet: FleetVehicle[]): FleetVehicle 
   });
 }
 
+function mileageAllowance(vehicle: FleetVehicle): number {
+  const model = `${vehicle.make} ${vehicle.model}`.toLowerCase();
+  if (model.includes("eqe") || model.includes("eqs")) return 4000;
+  return Number(vehicle.monthly_mileage_allowance) || 5000;
+}
+
+function contractWeeks(vehicle: FleetVehicle): number {
+  return Number(vehicle.minimum_contract_weeks) || 6;
+}
+
 function formatVehicleDetails(vehicle: FleetVehicle): string {
   const catalog = websiteMatch(vehicle);
-  const price = catalog?.price ?? "Price to confirm";
+  const price = vehicle.weekly_price != null ? `£${vehicle.weekly_price}/week` : catalog?.price ?? "Price to confirm";
   const year = vehicle.year ?? catalog?.year ?? "Year to confirm";
-  return `Thank you for choosing the ${vehicle.make} ${vehicle.model}.\n\nVehicle: ${vehicle.make} ${vehicle.model}\nYear: ${year}\nFuel category: ${catalog?.fuel ?? fuelCategory(vehicle.fuel_type)}\nContract length: Minimum 4-week flexible term\nMileage allowance: 1,000 miles per month (standard plan)\nWeekly rate: ${price}\nIncluded: Servicing, maintenance and roadside breakdown cover\n\nAre you fully aware of and happy with these contract length and mileage details? Please reply Yes or No.`;
+  return `Thank you for choosing the ${vehicle.make} ${vehicle.model}.\n\nVehicle: ${vehicle.make} ${vehicle.model}\nYear: ${year}\nFuel category: ${catalog?.fuel ?? fuelCategory(vehicle.fuel_type)}\nContract length: Minimum ${contractWeeks(vehicle)} weeks\nMileage allowance: ${mileageAllowance(vehicle).toLocaleString("en-GB")} miles per month\nWeekly rate: ${price}\nIncluded: Insurance, servicing and maintenance\n\nAre you fully aware of and happy with these contract length and mileage details? Please reply Yes or No.`;
 }
 
 function formatFleet(fleet: FleetVehicle[]): string {
@@ -347,8 +407,8 @@ function formatFleet(fleet: FleetVehicle[]): string {
       .map((vehicle) => {
         const catalog = websiteMatch(vehicle);
         const year = vehicle.year ?? catalog?.year ?? "year to confirm";
-        const price = catalog?.price ?? "price to confirm";
-        return `${vehicle.make} ${vehicle.model} (${year}; ${price})`;
+        const price = vehicle.weekly_price != null ? `£${vehicle.weekly_price}/week` : catalog?.price ?? "price to confirm";
+        return `${vehicle.make} ${vehicle.model} (${year}; ${price}; ${mileageAllowance(vehicle).toLocaleString("en-GB")} miles/month; ${contractWeeks(vehicle)} weeks)`;
       })
       .join(", ");
     return `${category}: ${cars || "none currently available"}`;
@@ -357,7 +417,7 @@ function formatFleet(fleet: FleetVehicle[]): string {
 }
 
 async function sendWelcomeMenu(phone: unknown) {
-  const image = await sendWhatsAppImage({
+  const imagePromise = sendWhatsAppImage({
     phone,
     url: WELCOME_IMAGE_URL,
     caption: "👋 Hello, and welcome to Virtual Car Hire\n🚘 London's number one PCO car hire company with 4.8 stars across Google and Trustpilot.\n\nHow can we assist you today? Please tap one of the options below to get started:",
@@ -371,6 +431,7 @@ async function sendWelcomeMenu(phone: unknown) {
       { id: "report_accident", title: "Report Accident" },
     ],
   });
+  const image = await imagePromise;
   if (buttons.sent) return buttons;
   console.warn("[agent-webhook] welcome buttons unavailable; falling back to text menu", { reason: buttons.reason, imageSent: image.sent });
   const fallback = await sendWhatsAppText({ phone, text: WELCOME_MENU });
@@ -386,7 +447,7 @@ async function generateReply(
   fleet: FleetVehicle[],
 ): Promise<AiResult> {
   const fallback: AiResult = {
-    reply: "A team member will help you shortly.",
+    reply: HANDOFF_24H,
     needs_human: true,
     reason: "ai_unavailable_or_error",
     asks_closure: false,
@@ -446,15 +507,6 @@ async function generateReply(
       generationConfig: { responseMimeType: "application/json", responseSchema, temperature: 0.2 },
     };
     const requestHeaders = { "Content-Type": "application/json", "x-goog-api-key": geminiKey.trim() };
-    const preferredModels = [
-      "gemini-2.5-flash",
-      "gemini-2.5-flash-lite",
-      "gemini-3.5-flash",
-      "gemini-3.6-flash",
-      "gemini-3.7-flash",
-      "gemini-1.5-flash",
-    ];
-    const apiVersions = ["v1beta", "v1"];
     type GeminiGeneration = { response: Response; body: string; model: string; apiVersion: string };
     const callModel = async (apiVersion: string, model: string): Promise<GeminiGeneration> => {
       const response = await fetch(`https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent`, {
@@ -464,30 +516,12 @@ async function generateReply(
       });
       return { response, body: await response.text(), model, apiVersion };
     };
-    const discoverModels = async (apiVersion: string): Promise<string[]> => {
-      const response = await fetch(`https://generativelanguage.googleapis.com/${apiVersion}/models`, { headers: requestHeaders });
-      if (!response.ok) return [];
-      const modelList = await response.json() as { models?: { name?: string; supportedGenerationMethods?: string[] }[] };
-      return (modelList.models ?? [])
-        .filter((model) => model.supportedGenerationMethods?.includes("generateContent"))
-        .map((model) => model.name?.replace(/^models\//, ""))
-        .filter((model): model is string => Boolean(model));
-    };
-    let generation: GeminiGeneration | undefined;
-    for (const apiVersion of apiVersions) {
-      const discovered = await discoverModels(apiVersion);
-      const models = [...preferredModels.filter((model) => discovered.includes(model)), ...discovered.filter((model) => /flash/i.test(model) && !preferredModels.includes(model)), ...preferredModels.filter((model) => discovered.length === 0)];
-      for (const model of [...new Set(models)]) {
-        const attempt = await callModel(apiVersion, model);
-        generation = attempt;
-        if (attempt.response.ok) break;
-        // Try the next discovered model/version during transient Gemini outages.
-        // Only stop early for a definitive request/authentication error.
-        if (![404, 408, 429, 500, 502, 503, 504].includes(attempt.response.status)) break;
-      }
-      if (generation?.response.ok || (generation && ![404, 408, 429, 500, 502, 503, 504].includes(generation.response.status))) break;
+    // Avoid a /models discovery request on every inbound WhatsApp message.
+    // The normal path is one fast Flash request; retry once only if the model/version is unavailable.
+    let generation = await callModel("v1beta", "gemini-2.5-flash");
+    if (!generation.response.ok && [404, 408, 429, 500, 502, 503, 504].includes(generation.response.status)) {
+      generation = await callModel("v1", "gemini-2.5-flash");
     }
-    if (!generation) generation = await callModel("v1beta", "gemini-2.5-flash");
     if (!generation.response.ok) {
       console.error("[agent-webhook] Gemini API error", {
         status: generation.response.status,
@@ -657,10 +691,11 @@ export async function handleAgentWebhookRequest(request: Request) {
   let customerType = "new_customer";
   let accidentData: AccidentData = {};
   let breakdownData: BreakdownData = {};
+  let carEligibility: CarEligibility = {};
   const canonicalPhone = identityPhone && !/@lid$/i.test(identityPhone) ? identityPhone : null;
   if (canonicalPhone) {
     const { data: existing } = await (db.from("whatsapp_leads") as any)
-      .select("id, contact_name, ai_paused, status, closed_at, intent, accident_data, breakdown_data, customer_type")
+      .select("id, contact_name, ai_paused, status, closed_at, intent, accident_data, breakdown_data, car_enquiry_data, customer_type")
       .eq("user_id", userId)
       .eq("phone", canonicalPhone)
       .order("last_message_at", { ascending: false })
@@ -674,10 +709,11 @@ export async function handleAgentWebhookRequest(request: Request) {
     customerType = existing?.customer_type ?? customerType;
     accidentData = (existing?.accident_data ?? {}) as AccidentData;
     breakdownData = (existing?.breakdown_data ?? {}) as BreakdownData;
+    carEligibility = (existing?.car_enquiry_data ?? {}) as CarEligibility;
   }
   if (!leadId && canonicalPhone) {
     const { data: candidates } = await (db.from("whatsapp_leads") as any)
-      .select("id, contact_name, phone, ai_paused, status, closed_at, intent, accident_data, breakdown_data, customer_type")
+      .select("id, contact_name, phone, ai_paused, status, closed_at, intent, accident_data, breakdown_data, car_enquiry_data, customer_type")
       .eq("user_id", userId)
       .order("last_message_at", { ascending: false })
       .limit(500);
@@ -704,7 +740,7 @@ export async function handleAgentWebhookRequest(request: Request) {
   }
   if (!leadId && sessionId) {
     const { data: existing } = await (db.from("whatsapp_leads") as any)
-      .select("id, contact_name, ai_paused, status, closed_at, intent, accident_data, breakdown_data, customer_type")
+      .select("id, contact_name, ai_paused, status, closed_at, intent, accident_data, breakdown_data, car_enquiry_data, customer_type")
       .eq("user_id", userId)
       .eq("session_id", sessionId)
       .order("last_message_at", { ascending: false })
@@ -718,9 +754,10 @@ export async function handleAgentWebhookRequest(request: Request) {
     customerType = existing?.customer_type ?? customerType;
     accidentData = (existing?.accident_data ?? {}) as AccidentData;
     breakdownData = (existing?.breakdown_data ?? {}) as BreakdownData;
+    carEligibility = (existing?.car_enquiry_data ?? {}) as CarEligibility;
   } else if (!leadId && phone) {
     const { data: existing } = await (db.from("whatsapp_leads") as any)
-      .select("id, contact_name, ai_paused, status, closed_at, intent, accident_data, breakdown_data, customer_type")
+      .select("id, contact_name, ai_paused, status, closed_at, intent, accident_data, breakdown_data, car_enquiry_data, customer_type")
       .eq("user_id", userId)
       .eq("phone", phone)
       .order("last_message_at", { ascending: false })
@@ -734,6 +771,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     customerType = existing?.customer_type ?? customerType;
     accidentData = (existing?.accident_data ?? {}) as AccidentData;
     breakdownData = (existing?.breakdown_data ?? {}) as BreakdownData;
+    carEligibility = (existing?.car_enquiry_data ?? {}) as CarEligibility;
   }
 
   if (!leadId) {
@@ -833,7 +871,7 @@ export async function handleAgentWebhookRequest(request: Request) {
   }
 
   if (isAbusiveMessage(content)) {
-    const reply = "Handoff needed. A team member will contact you shortly.";
+    const reply = `Handoff needed.\n\n${HANDOFF_24H}`;
     await insertWithSessionFallback(db, "messages", {
       user_id: userId,
       lead_id: leadId,
@@ -875,6 +913,26 @@ export async function handleAgentWebhookRequest(request: Request) {
   const option = rawOption ??
     (!leadIntent && isBreakdownRequest(content) ? 2 : !leadIntent && isAccidentRequest(content) ? 3 : !leadIntent && isCarRequest(content) ? 1 : null);
 
+  if (!option && leadIntent === "book_car" && !carEligibility.completed) {
+    const incomingEligibility = parseCarEligibility(content);
+    const nextEligibility: CarEligibility = { ...carEligibility, ...incomingEligibility };
+    const missing = eligibilityMissing(nextEligibility);
+    if (missing.length || !nextEligibility.completed) {
+      const reply = !nextEligibility.ageEligible && nextEligibility.age !== undefined
+        ? `Thank you. Our standard rental age range is 25 to 65, so we may not be able to proceed with this enquiry.\n\n${HANDOFF_24H}`
+        : `Thanks. I still need ${missing.join(", ")}. Please send the answers together, for example: age 30, full UK licence, 3 points.`;
+      const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
+      if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
+      await db.from("whatsapp_leads").update({ car_enquiry_data: nextEligibility, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+      return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, eligibility: nextEligibility, needs_human: !outbound.sent });
+    }
+    const reply = formatCustomerFleet((fleet ?? []) as FleetVehicle[]);
+    const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
+    if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
+    await db.from("whatsapp_leads").update({ car_enquiry_data: nextEligibility, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+    return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, eligibility: nextEligibility, needs_human: !outbound.sent });
+  }
+
   if (!option && leadIntent === "book_car" && lastAgentMessage.toLowerCase().includes("full name") && isLikelyFullName(content)) {
     const customerName = content.trim();
     const reply = formatCustomerFleet((fleet ?? []) as FleetVehicle[]);
@@ -900,7 +958,7 @@ export async function handleAgentWebhookRequest(request: Request) {
 
   if (!option && leadIntent === "report_accident" && lastAgentMessage.toLowerCase().includes("full name") && isLikelyFullName(content)) {
     const customerName = content.trim();
-    const reply = "Accident Support\n\nThank you, " + customerName + ". Please now send the vehicle registration, incident date, location, a short description of what happened, and any photos. A team member will review this promptly.";
+    const reply = "Accident Support\n\nThank you, " + customerName + ". Please now send the vehicle registration, incident date, location, a short description of what happened, and any photos.";
     await db.from("whatsapp_leads").update({ contact_name: customerName, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
     await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
@@ -909,7 +967,7 @@ export async function handleAgentWebhookRequest(request: Request) {
 
   if (option === 1 || option === 2 || option === 3) {
     const reply = option === 1
-      ? "Car Enquiry\n\nThank you for your interest in our PCO fleet. Before we look at available vehicles, could you please tell me your full name?"
+      ? `Car Enquiry\n\n${CAR_ELIGIBILITY_PROMPT}`
       : option === 2
         ? `🛠️ Emergency Breakdown\n\nPlease arrange for the vehicle to be dropped off at our garage:\n\n${AUTO_SURGEON_ADDRESS}\n\n📍 Clickable map: ${AUTO_SURGEON_MAP}\n\nOnce the address has been sent, contact your own breakdown recovery provider, such as a local recovery company or RAC. Virtual Car Hire does not provide the recovery vehicle.\n\nPlease park the vehicle in front of The Auto Surgeon, leave the key in the letter box, and send us one clear photo and one video of the key in the letter box. I will check that both have been received before we close the case.`
         : "🚨 Accident Support\n\nWe are sorry to hear you have been in an accident. We are here to help guide you through the next steps safely.\n\nTo get started, please provide your full name:";
@@ -923,7 +981,7 @@ export async function handleAgentWebhookRequest(request: Request) {
         content: reply,
         session_id: sessionId,
       });
-      await db.from("whatsapp_leads").update({ intent, ai_summary: reply, ai_paused: false, closed_at: null, breakdown_data: option === 2 ? { ...breakdownData, garageInstructionsSent: true } : breakdownData, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+      await db.from("whatsapp_leads").update({ intent, ai_summary: reply, ai_paused: false, closed_at: null, car_enquiry_data: option === 1 ? {} : carEligibility, breakdown_data: option === 2 ? { ...breakdownData, garageInstructionsSent: true } : breakdownData, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
     }
     let alert: { sent: boolean; reason?: string } = { sent: false, reason: "not_needed" };
     if (!outbound.sent) {
@@ -1086,7 +1144,7 @@ export async function handleAgentWebhookRequest(request: Request) {
   }
 
   if (!option && isTermsResponse(content) && lastAgentMessage.toLowerCase().includes("are you fully aware")) {
-    const reply = "Thank you for contacting us. A team member will reply back to you within 24 hours to secure your place in this car.";
+    const reply = HANDOFF_24H;
     await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, handoff: true, session_id: sessionId });
     await db.from("whatsapp_leads").update({ status: "needs_human", customer_type: "needs_human", ai_paused: true, intent: leadIntent ?? "book_car", ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
@@ -1130,7 +1188,7 @@ export async function handleAgentWebhookRequest(request: Request) {
   }
 
   if (isPositiveClosure(content)) {
-    const reply = "Thanks for contacting Virtual Car Hire. Your conversation is now closed.";
+    const reply = `Thanks for contacting Virtual Car Hire.\n\n${HANDOFF_24H}`;
     await insertWithSessionFallback(db, "messages", {
       user_id: userId,
       lead_id: leadId,
