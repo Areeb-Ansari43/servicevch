@@ -7,13 +7,15 @@ import { sendWhatsAppButtons, sendWhatsAppImage, sendWhatsAppText } from "@/lib/
 const CRM_BASE = "https://servicevch.pages.dev";
 const VCH_WEBSITE = "https://virtualcarhire.pages.dev/our-fleet";
 const WELCOME_IMAGE_URL = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663646717561/LWsrZDwfCPweeEQG.webp";
+const AUTO_SURGEON_ADDRESS = "The Auto Surgeon, Unit 3 Squirrels Trading Estate, Viveash Close, Hayes UB3 4RZ";
+const AUTO_SURGEON_MAP = "https://www.google.com/maps/search/?api=1&query=The+Auto+Surgeon+Unit+3+Squirrels+Trading+Estate+Viveash+Close+Hayes+UB3+4RZ";
 const WELCOME_MENU =
   "👋 Hello, and welcome to Virtual Car Hire\n" +
   "🚘 London's number one PCO car hire company with 4.8 stars across Google and Trustpilot.\n\n" +
-  "How can we assist you today? Please reply with the number corresponding to your choice:\n" +
-  "🚗 1. Enquire about a car\n" +
-  "⚠️ 2. Report accident\n\n" +
-  "Please reply with 1 or 2 to get started.";
+  "How can we assist you today? Please choose one of the options below:\n" +
+  "🚗 Car enquiry\n" +
+  "🛠️ Emergency Breakdown\n" +
+  "⚠️ Report Accident";
 const WEBSITE_CATALOG = [
   { make: "Mercedes", model: "E300", fuel: "Plug-in-Hybrid", price: "£340/week", year: "2021–24" },
   { make: "Mercedes", model: "Vito", fuel: "Petrol", price: "£380/week", year: "2021–24" },
@@ -52,6 +54,15 @@ type AiResult = {
   needs_human: boolean;
   reason: string;
   asks_closure: boolean;
+};
+
+type BreakdownData = {
+  garageInstructionsSent?: boolean;
+  recoveryGuidanceSent?: boolean;
+  keyPhotoUrl?: string;
+  keyVideoUrl?: string;
+  keyMediaChecked?: boolean;
+  closed?: boolean;
 };
 
 type AccidentData = {
@@ -231,11 +242,15 @@ function isLikelyFullName(text: string): boolean {
 }
 
 function parseMenuOption(text: string): 1 | 2 | 3 | null {
-  const normalized = text.trim().toLowerCase();
-  if (/^(?:option\s*)?\[?1\]?[.)]?$/.test(normalized) || normalized === "book a car") return 1;
-  if (/^(?:option\s*)?\[?2\]?[.)]?$/.test(normalized) || normalized === "report accident") return 2;
-  if (/^(?:option\s*)?\[?3\]?[.)]?$/.test(normalized) || normalized === "speak to human") return 3;
+  const normalized = text.trim().toLowerCase().replace(/[.!]+$/g, "");
+  if (/^(?:option\s*)?\[?1\]?$/.test(normalized) || /^(?:car enquiry|enquire about a car|book a car)$/.test(normalized)) return 1;
+  if (/^(?:option\s*)?\[?2\]?$/.test(normalized) || /^(?:emergency breakdown|breakdown|emergency)$/.test(normalized)) return 2;
+  if (/^(?:option\s*)?\[?3\]?$/.test(normalized) || /^(?:report accident|accident)$/.test(normalized)) return 3;
   return null;
+}
+
+function isBreakdownRequest(text: string): boolean {
+  return /\b(?:breakdown|broken down|broke down|vehicle won't start|car won't start|stranded|recovery)\b/i.test(text);
 }
 
 function isTermsResponse(text: string): boolean {
@@ -348,7 +363,8 @@ async function sendWelcomeMenu(phone: unknown) {
     body: "How can we assist you today? Please choose an option:",
     buttons: [
       { id: "book_car", title: "Car enquiry" },
-      { id: "report_accident", title: "Emergency breakdown" },
+      { id: "emergency_breakdown", title: "Emergency Breakdown" },
+      { id: "report_accident", title: "Report Accident" },
     ],
   });
   if (buttons.sent) return buttons;
@@ -639,10 +655,11 @@ export async function handleAgentWebhookRequest(request: Request) {
   let leadIntent: string | null = null;
   let customerType = "new_customer";
   let accidentData: AccidentData = {};
+  let breakdownData: BreakdownData = {};
   const canonicalPhone = identityPhone && !/@lid$/i.test(identityPhone) ? identityPhone : null;
   if (canonicalPhone) {
     const { data: existing } = await (db.from("whatsapp_leads") as any)
-      .select("id, contact_name, ai_paused, status, closed_at, intent, accident_data, customer_type")
+      .select("id, contact_name, ai_paused, status, closed_at, intent, accident_data, breakdown_data, customer_type")
       .eq("user_id", userId)
       .eq("phone", canonicalPhone)
       .order("last_message_at", { ascending: false })
@@ -655,10 +672,11 @@ export async function handleAgentWebhookRequest(request: Request) {
     leadIntent = existing?.intent ?? null;
     customerType = existing?.customer_type ?? customerType;
     accidentData = (existing?.accident_data ?? {}) as AccidentData;
+    breakdownData = (existing?.breakdown_data ?? {}) as BreakdownData;
   }
   if (!leadId && canonicalPhone) {
     const { data: candidates } = await (db.from("whatsapp_leads") as any)
-      .select("id, contact_name, phone, ai_paused, status, closed_at, intent, accident_data, customer_type")
+      .select("id, contact_name, phone, ai_paused, status, closed_at, intent, accident_data, breakdown_data, customer_type")
       .eq("user_id", userId)
       .order("last_message_at", { ascending: false })
       .limit(500);
@@ -680,11 +698,12 @@ export async function handleAgentWebhookRequest(request: Request) {
       leadIntent = existing.intent ?? null;
       customerType = existing.customer_type ?? customerType;
       accidentData = (existing.accident_data ?? {}) as AccidentData;
+      breakdownData = (existing.breakdown_data ?? {}) as BreakdownData;
     }
   }
   if (!leadId && sessionId) {
     const { data: existing } = await (db.from("whatsapp_leads") as any)
-      .select("id, contact_name, ai_paused, status, closed_at, intent, accident_data, customer_type")
+      .select("id, contact_name, ai_paused, status, closed_at, intent, accident_data, breakdown_data, customer_type")
       .eq("user_id", userId)
       .eq("session_id", sessionId)
       .order("last_message_at", { ascending: false })
@@ -697,9 +716,10 @@ export async function handleAgentWebhookRequest(request: Request) {
     leadIntent = existing?.intent ?? null;
     customerType = existing?.customer_type ?? customerType;
     accidentData = (existing?.accident_data ?? {}) as AccidentData;
+    breakdownData = (existing?.breakdown_data ?? {}) as BreakdownData;
   } else if (!leadId && phone) {
     const { data: existing } = await (db.from("whatsapp_leads") as any)
-      .select("id, contact_name, ai_paused, status, closed_at, intent, accident_data, customer_type")
+      .select("id, contact_name, ai_paused, status, closed_at, intent, accident_data, breakdown_data, customer_type")
       .eq("user_id", userId)
       .eq("phone", phone)
       .order("last_message_at", { ascending: false })
@@ -712,6 +732,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     leadIntent = existing?.intent ?? null;
     customerType = existing?.customer_type ?? customerType;
     accidentData = (existing?.accident_data ?? {}) as AccidentData;
+    breakdownData = (existing?.breakdown_data ?? {}) as BreakdownData;
   }
 
   if (!leadId) {
@@ -786,7 +807,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     .from("vehicles")
     .select("reg, make, model, year, fuel_type, status, next_mot_date, pco_expiry_date");
 
-  const rawOption = parseMenuOption(content) ?? (/^(?:book_car|enquire_about_a_car|enquire|report_accident|accident)$/i.test(content.trim()) ? (/(?:accident|report)/i.test(content) ? 2 : 1) : null);
+  const rawOption = parseMenuOption(content) ?? (/^(?:book_car|enquire_about_a_car|enquire|emergency_breakdown|breakdown|report_accident|accident)$/i.test(content.trim()) ? (/(?:emergency|breakdown)/i.test(content) ? 2 : /(?:accident|report)/i.test(content) ? 3 : 1) : null);
 
   if ((isNewLead || closed) && !isMenuReset(content) && !rawOption) {
     const reply = WELCOME_MENU;
@@ -849,7 +870,7 @@ export async function handleAgentWebhookRequest(request: Request) {
   }
 
   const option = rawOption ??
-    (!leadIntent && isAccidentRequest(content) ? 2 : !leadIntent && isCarRequest(content) ? 1 : null);
+    (!leadIntent && isBreakdownRequest(content) ? 2 : !leadIntent && isAccidentRequest(content) ? 3 : !leadIntent && isCarRequest(content) ? 1 : null);
 
   if (!option && leadIntent === "book_car" && lastAgentMessage.toLowerCase().includes("full name") && isLikelyFullName(content)) {
     const customerName = content.trim();
@@ -883,11 +904,13 @@ export async function handleAgentWebhookRequest(request: Request) {
     return json({ ok: true, lead_id: leadId, reply, outbound, needs_human: !outbound.sent });
   }
 
-  if (option === 1 || option === 2) {
+  if (option === 1 || option === 2 || option === 3) {
     const reply = option === 1
       ? "Car Enquiry\n\nThank you for your interest in our PCO fleet. Before we look at available vehicles, could you please tell me your full name?"
-      : "🚨 Accident Support\n\nWe are sorry to hear you've been in an accident. We are here to help guide you through the next steps safely.\n\nTo get started, please provide your full name:";
-    const intent = option === 1 ? "book_car" : "report_accident";
+      : option === 2
+        ? `🛠️ Emergency Breakdown\n\nPlease arrange for the vehicle to be dropped off at our garage:\n\n${AUTO_SURGEON_ADDRESS}\n\n📍 Clickable map: ${AUTO_SURGEON_MAP}\n\nOnce the address has been sent, contact your own breakdown recovery provider, such as a local recovery company or RAC. Virtual Car Hire does not provide the recovery vehicle.\n\nPlease park the vehicle in front of The Auto Surgeon, leave the key in the letter box, and send us one clear photo and one video of the key in the letter box. I will check that both have been received before we close the case.`
+        : "🚨 Accident Support\n\nWe are sorry to hear you have been in an accident. We are here to help guide you through the next steps safely.\n\nTo get started, please provide your full name:";
+    const intent = option === 1 ? "book_car" : option === 2 ? "emergency_breakdown" : "report_accident";
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
     if (outbound.sent) {
       await insertWithSessionFallback(db, "messages", {
@@ -897,13 +920,55 @@ export async function handleAgentWebhookRequest(request: Request) {
         content: reply,
         session_id: sessionId,
       });
-      await db.from("whatsapp_leads").update({ intent, ai_summary: reply, ai_paused: false, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+      await db.from("whatsapp_leads").update({ intent, ai_summary: reply, ai_paused: false, closed_at: null, breakdown_data: option === 2 ? { ...breakdownData, garageInstructionsSent: true } : breakdownData, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
     }
     let alert: { sent: boolean; reason?: string } = { sent: false, reason: "not_needed" };
     if (!outbound.sent) {
       alert = await sendTelegramAlert({ name: leadName, phone, reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
     }
     return json({ ok: true, lead_id: leadId, reply, needs_human: !outbound.sent, ai_paused: !outbound.sent, telegram_alert: alert, outbound });
+  }
+
+  if (!option && leadIntent === "emergency_breakdown") {
+    const next: BreakdownData = { ...breakdownData };
+    const normalizedMediaType = (mediaType ?? "").toLowerCase();
+    if (mediaUrl && normalizedMediaType === "image" && !next.keyPhotoUrl) next.keyPhotoUrl = mediaUrl;
+    if (mediaUrl && normalizedMediaType === "video" && !next.keyVideoUrl) next.keyVideoUrl = mediaUrl;
+    const mediaComplete = Boolean(next.keyPhotoUrl && next.keyVideoUrl);
+    if (mediaComplete && next.keyMediaChecked && isPositiveClosure(content) && lastAgentMessage.toLowerCase().includes("is that all for today")) {
+      const summary = `Emergency breakdown case\n\nGarage: ${AUTO_SURGEON_ADDRESS}\nMap: ${AUTO_SURGEON_MAP}\nKey photo: Received\nKey video: Received`;
+      const { error: caseError } = await db.from("accident_cases").insert({
+        user_id: userId,
+        source_lead_id: leadId,
+        customer_phone: phone,
+        case_type: "breakdown",
+        garage_name: "The Auto Surgeon",
+        garage_address: AUTO_SURGEON_ADDRESS,
+        garage_map_url: AUTO_SURGEON_MAP,
+        key_photo_url: next.keyPhotoUrl,
+        key_video_url: next.keyVideoUrl,
+        evidence_urls: [next.keyPhotoUrl, next.keyVideoUrl],
+        ai_summary: summary,
+        severity: "minor",
+        status: "open",
+      } as never);
+      if (caseError) console.error("[agent-webhook] breakdown case insert failed", { leadId, error: caseError.message });
+      const reply = "✅ Thank you. The breakdown case and key media have been saved for our team. This conversation is now closed.";
+      const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
+      if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, handoff: true, session_id: sessionId });
+      await db.from("whatsapp_leads").update({ breakdown_data: { ...next, closed: true }, status: "closed", ai_paused: true, closed_at: new Date().toISOString(), ai_summary: summary, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+      const alert = await sendTelegramAlert({ name: leadName, phone, reason: caseError ? "Breakdown case requires manual CRM review" : "Breakdown media verified and customer confirmed closure", leadId, history: [...history, { sender: "ai_agent", content: summary }, { sender: "ai_agent", content: reply }], mediaUrl, closed: true });
+      return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, telegram_alert: alert, breakdown_case_saved: !caseError });
+    }
+    next.keyMediaChecked = mediaComplete;
+    const reply = mediaComplete
+      ? "✅ I have received a clear photo and video of the key in the letter box. Please check that everything is correct. Is that all for today? Reply Yes or No."
+      : `🛠️ Emergency Breakdown\n\nI still need ${!next.keyPhotoUrl ? "one clear photo" : "one clear video"} of the key after it has been placed in the letter box. Please send the missing file here.`;
+    const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
+    if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
+    await db.from("whatsapp_leads").update({ breakdown_data: next, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+    const alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
+    return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, telegram_alert: alert, breakdown_media_complete: mediaComplete });
   }
 
   if (!option && leadIntent === "report_accident") {
@@ -1028,7 +1093,7 @@ export async function handleAgentWebhookRequest(request: Request) {
 
   if (option === 3) {
     const reply =
-      "No problem — I’m connecting you with a member of our team now. They’ll reply here shortly.";
+      "🚨 Accident Support\n\nWe are sorry to hear you have been in an accident. To begin verification, please send your full name and the vehicle registration you drive for Virtual Car Hire.";
     await insertWithSessionFallback(db, "messages", {
       user_id: userId,
       lead_id: leadId,
@@ -1040,24 +1105,25 @@ export async function handleAgentWebhookRequest(request: Request) {
     await db
       .from("whatsapp_leads")
       .update({
-        status: "needs_human",
-        customer_type: "needs_human",
-        ai_paused: true,
-        intent: "speak_to_human",
+        status: "active",
+        ai_paused: false,
+        closed_at: null,
+        intent: "report_accident",
         ai_summary: reply,
+        last_message_at: new Date().toISOString(),
       } as never)
       .eq("id", leadId);
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
-    const alert = await sendTelegramAlert({
+    const alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({
       name: leadName,
       phone,
-      reason: outbound.sent ? "Customer requested a human" : `WhatsApp Cloud API reply failed: ${outbound.reason}`,
+      reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`,
       leadId,
       history: [...history, { sender: "ai_agent", content: reply }],
       mediaUrl,
       closed: false,
     });
-    return json({ ok: true, lead_id: leadId, reply, needs_human: true, telegram_alert: alert, outbound });
+    return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, needs_human: !outbound.sent, telegram_alert: alert, outbound });
   }
 
   if (isPositiveClosure(content)) {
