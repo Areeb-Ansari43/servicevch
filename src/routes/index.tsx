@@ -914,12 +914,12 @@ function VehiclesList({
             return (
             <div
               key={v.id}
-              className="group relative flex min-h-[405px] flex-col overflow-hidden rounded-2xl border p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-[#ff6a00]/60 hover:shadow-xl hover:shadow-orange-500/10 sm:min-h-[430px]"
+              className="group relative flex min-h-[365px] flex-col overflow-hidden rounded-2xl border p-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:border-[#ff6a00]/60 hover:shadow-xl hover:shadow-orange-500/10 sm:min-h-[385px]"
               style={{ borderColor: T.border, background: T.panel }}
               >
               {artwork ? (
-                <div className="pointer-events-none absolute inset-x-0 bottom-12 top-20 z-0 flex items-end justify-end opacity-65 transition-all duration-200 group-hover:opacity-100 group-hover:brightness-[1.25] group-hover:contrast-125 group-hover:drop-shadow-[0_0_18px_rgba(255,255,255,0.55)]" aria-hidden="true">
-                  <img src={artwork} alt="" className="h-full w-[94%] object-contain object-right mix-blend-normal sm:w-[98%]" />
+                <div className="pointer-events-none absolute inset-x-0 bottom-10 top-24 z-0 flex items-end justify-end opacity-50 transition-all duration-200 group-hover:opacity-95 group-hover:brightness-[1.25] group-hover:contrast-125 group-hover:drop-shadow-[0_0_18px_rgba(255,255,255,0.55)]" aria-hidden="true">
+                  <img src={artwork} alt="" className="h-full w-[86%] object-contain object-right mix-blend-normal sm:w-[90%]" />
                 </div>
               ) : (
                 <div className="pointer-events-none absolute right-4 top-24 z-0 opacity-[0.07] transition-opacity group-hover:opacity-[0.13]">
@@ -933,7 +933,7 @@ function VehiclesList({
               <button onClick={() => onOpen(v)} className="relative z-10 block max-w-[82%] text-left">
                 <div className="line-clamp-2 text-lg font-extrabold uppercase leading-[1.08] tracking-tight text-[#f3f5f8] sm:text-xl">{v.make} {v.model}</div>
               </button>
-              <div className="relative z-10 mt-5 grid max-w-[58%] grid-cols-1 gap-2.5 text-xs text-[#aab3c2] sm:max-w-[48%]">
+              <div className="relative z-10 mt-4 grid max-w-[56%] grid-cols-1 gap-2 text-xs text-[#aab3c2] sm:max-w-[46%]">
                 <div className="flex items-center gap-2.5 border-b pb-2.5" style={{ borderColor: T.borderSoft }}><Icon.Calendar className="h-6 w-6 shrink-0 text-[#aeb8c9]" /><span><span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#7d8799]">Year</span><span className="text-lg font-semibold text-[#e8ebf0]">{v.year}</span></span></div>
                 <div className="flex items-center gap-2.5 border-b pb-2.5" style={{ borderColor: T.borderSoft }}><Icon.Bolt className={`h-6 w-6 shrink-0 ${v.fuel_type === "Electric" ? "text-sky-300" : "text-[#ff8a3d]"}`} /><span><span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#7d8799]">Fuel</span><span className={`mt-0.5 inline-block rounded-md border px-2 py-0.5 text-sm font-bold ${fuelStyle(v.fuel_type)}`}>{v.fuel_type}</span></span></div>
                 <div className="flex items-center gap-2.5 border-b pb-2.5" style={{ borderColor: T.borderSoft }}><Icon.Gauge className="h-6 w-6 shrink-0 text-[#aeb8c9]" /><span><span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#7d8799]">Mileage</span><span className="text-lg font-semibold text-[#e8ebf0]">{v.current_mileage.toLocaleString()} mi</span></span></div>
@@ -941,7 +941,7 @@ function VehiclesList({
               </div>
               {driverByVehicle.get(v.id)?.driver_name && <div className="relative z-10 mt-2 max-w-[62%] truncate text-[10px] text-sky-200 sm:max-w-[48%]">Driver: <span className="font-semibold">{driverByVehicle.get(v.id)?.driver_name}</span></div>}
               <div className="relative z-10 mt-auto pt-4">
-                <button onClick={() => onOpen(v)} className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#ff8a3d]/80 bg-[#15171d]/70 px-3 py-3 text-sm font-bold text-[#ff8a3d] transition hover:bg-[#ff8a3d] hover:text-white"><span className="flex h-7 w-7 items-center justify-center rounded-full border border-current">→</span> View Details <span>→</span></button>
+                <button onClick={() => onOpen(v)} className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#ff8a3d]/80 bg-[#15171d]/70 px-3 py-2.5 text-sm font-bold text-[#ff8a3d] transition hover:bg-[#ff8a3d] hover:text-white"><span className="flex h-7 w-7 items-center justify-center rounded-full border border-current">→</span> View Details <span>→</span></button>
               </div>
             </div>
           );
