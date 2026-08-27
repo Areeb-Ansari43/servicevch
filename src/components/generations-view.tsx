@@ -117,10 +117,24 @@ export function GenerationsView({ vehicles, drivers, toast }: Props) {
       doc.addImage(await imageData("/assets/vchletter-permission-background.png"), "PNG", 0, 0, 612, 792);
       doc.setTextColor(25, 25, 25); doc.setFont("helvetica", "normal"); doc.setFontSize(11); doc.text(new Date(documentDate).toLocaleDateString("en-GB"), 480, 150);
       doc.setFont("helvetica", "bold"); doc.setFontSize(18); doc.text("PERMISSION LETTER", 205, 190);
-      doc.setFont("helvetica", "normal"); doc.setFontSize(10);
-      const permissionRows: Array<[string, string]> = [["Vehicle Registration", selectedReg], ["Make and Model", `${make} ${model}`], ["Driver Name", scan.fullName], ["Address", `${scan.address}, ${scan.postcode}`], ["Driving Licence No", scan.licence], ["Hire start date.", startDate], ["Hire end date", endDate], ["Insurance Policy No", insurance]];
-      let py = 300; permissionRows.forEach(([label, value]) => { doc.text(`${label} :`, 54, py); doc.text(String(value || ""), 180, py); py += 22; });
-      doc.text("Regards,", 54, 690); doc.setFont("helvetica", "bold"); doc.text(ownerSignature, 54, 716); doc.setFont("helvetica", "normal"); doc.text("Director (FA-IBI LTD)", 54, 734);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(11);
+      const body = [
+        "To Whom It May Concern,",
+        "We confirm that the below vehicle can be used for the carriage of passengers for hire and reward by prior appointments (private hire) as specified on insurance policy:",
+        insurance.toUpperCase(),
+        "We authorise and give permission to the following individual to use the vehicle for all private hire bookings from UBER, BOLT, OLA, FREE NOW app, WHEELY and other private hire operators.",
+      ];
+      let bodyY = 515;
+      for (const paragraph of body) {
+        const lines = doc.splitTextToSize(paragraph, 504);
+        doc.text(lines, 54, bodyY);
+        bodyY -= lines.length * 14 + (paragraph === insurance.toUpperCase() ? 4 : 11);
+      }
+      let py = bodyY - 8;
+      const permissionRows: Array<[string, string]> = [["Vehicle Registration", selectedReg], ["Make and Model", `${make} ${model}`], ["Driver Name", scan.fullName], ["Address", `${scan.address}, ${scan.postcode}`], ["Driving Licence No", scan.licence]];
+      permissionRows.forEach(([label, value]) => { doc.text(`${label} :`, 54, py); doc.text(String(value || ""), 180, py); py -= 22; });
+      py -= 4; doc.text("Hire start date. :", 54, py); doc.text(startDate, 160, py); py -= 15; doc.text("Hire end date    :", 54, py); doc.text(endDate, 160, py); py -= 12;
+      doc.text("Regards,", 54, 175); doc.addImage(await imageData("/assets/vchletter-signature.png"), "PNG", 54, 125, 180, 74); doc.setFont("helvetica", "bold"); doc.text(ownerSignature || "Muhammad Sohail Qureshi", 54, 108); doc.setFont("helvetica", "normal"); doc.text("Director (FA-IBI LTD)", 54, 94);
     } else {
       doc.addImage(await imageData("/assets/vchletter-contract-page-1.png"), "PNG", 0, 0, 612, 792);
       doc.setTextColor(20, 20, 20); doc.setFont("helvetica", "bold"); doc.setFontSize(8.8);
