@@ -1011,10 +1011,16 @@ export async function handleAgentWebhookRequest(request: Request) {
   const option = rawOption ??
     (!leadIntent && isBreakdownRequest(content) ? 2 : !leadIntent && isAccidentRequest(content) ? 3 : !leadIntent && isCarRequest(content) ? 1 : null);
 
+  const recentAgentMessages = history
+    .filter((turn) => turn.sender === "ai_agent")
+    .slice(-6)
+    .map((turn) => turn.content)
+    .join("\n");
+  const carEligibilityPromptActive = /before we look at available vehicles|are you aged between 25 and 65|valid pco badge|pc[o0] badge|penalty points|please reply simply: yes, yes/i.test(recentAgentMessages);
   const carEligibilityActive =
     leadIntent === "book_car" ||
-    (!carEligibility.completed && Object.keys(carEligibility).length > 0) ||
-    /are you aged between 25 and 65|valid pco badge|pc[o0] badge|penalty points/i.test(lastAgentMessage);
+    carEligibilityPromptActive ||
+    (!carEligibility.completed && Object.keys(carEligibility).length > 0);
   if (!option && carEligibilityActive) {
     const incomingEligibility = parseCarEligibility(content, carEligibility);
     const nextEligibility: CarEligibility = { ...carEligibility, ...incomingEligibility };
