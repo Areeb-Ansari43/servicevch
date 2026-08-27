@@ -964,7 +964,7 @@ export async function handleAgentWebhookRequest(request: Request) {
   const compactEligibilityAnswer = /^\s*(?:(?:yes|yeah|yep|no|nope)[\s,;|/]+){1,2}(?:yes|yeah|yep|no|nope)\s*(?:[-–—:=\s]+)\s*\d{1,2}\s*(?:points?)?\s*$/i.test(content);
   const rawOption = compactEligibilityAnswer ? null : parseMenuOption(content) ?? (/^(?:book_car|enquire_about_a_car|enquire|emergency_breakdown|breakdown|report_accident|accident)$/i.test(content.trim()) ? (/(?:emergency|breakdown)/i.test(content) ? 2 : /(?:accident|report)/i.test(content) ? 3 : 1) : null);
 
-  if ((isNewLead || closed) && !isMenuReset(content) && !rawOption) {
+  if ((isNewLead || closed) && !isMenuReset(content) && !rawOption && !compactEligibilityAnswer) {
     const reply = WELCOME_MENU;
     const outbound = await sendWelcomeMenu(phone ?? chatId);
     if (outbound.sent) {
@@ -1012,7 +1012,7 @@ export async function handleAgentWebhookRequest(request: Request) {
 
   // A fresh menu tap is an explicit new session. Reopen the lead and let the
   // option branch send the next prompt instead of silently returning closed.
-  if (closed && !rawOption) {
+  if (closed && !rawOption && !compactEligibilityAnswer) {
     console.info("[agent-webhook] conversation closed; no AI reply", { leadId });
     return json({ ok: true, lead_id: leadId, closed: true, reply: null, needs_human: false });
   }
@@ -1046,7 +1046,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     recentAgentMessages.lastIndexOf("accident verification"),
   );
   const carPromptIsMostRecent = lastCarPromptIndex > lastAccidentPromptIndex;
-  const accidentActive = !compactEligibilityAnswer && !carPromptIsMostRecent && (leadIntent === "report_accident" || accidentPromptActive);
+  const accidentActive = !carPromptIsMostRecent && (leadIntent === "report_accident" || accidentPromptActive);
   const carEligibilityActive =
     !accidentActive && (
       compactEligibilityAnswer ||

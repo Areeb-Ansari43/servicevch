@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { getRuntimeEnv } from "@/integrations/supabase/config";
 
 const scanSchema = z.object({
   imageBase64: z.string().min(100).max(12_000_000),
@@ -17,8 +18,8 @@ export const scanDrivingLicence = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((value) => scanSchema.parse(value))
   .handler(async ({ data }) => {
-    const endpoint = process.env.AZURE_DOCINTEL_ENDPOINT?.trim().replace(/\/$/, "");
-    const key = process.env.AZURE_DOCINTEL_KEY?.trim();
+    const endpoint = getRuntimeEnv("AZURE_DOCINTEL_ENDPOINT")?.trim().replace(/\/$/, "");
+    const key = getRuntimeEnv("AZURE_DOCINTEL_KEY")?.trim();
     if (!endpoint || !key) throw new Error("Azure Document Intelligence is not configured on the server.");
 
     const bytes = Uint8Array.from(atob(data.imageBase64.replace(/^data:[^;]+;base64,/, "")), (char) => char.charCodeAt(0));
