@@ -37,7 +37,7 @@ const WEBSITE_CATALOG = [
 const STANDARD_TERMS =
   "Minimum 6-week contract; 5,000 miles per month for all vehicles except Mercedes EQE and EQS, which have 4,000 miles per month; insurance and servicing included.";
 const CAR_ELIGIBILITY_PROMPT =
-  "Before we look at available vehicles, please confirm three things:\n\n1. Are you aged between 25 and 65 years old?\n2. Do you possess a valid PCO badge?\n3. Do you have any penalty points? If you have fewer than 6 points, renting with us may be difficult.\n\nFor your answer, please reply simply: Yes, Yes, and specify your points. For example: 1. Yes 2. Yes 3. Yes - 3 points.";
+  "Before we look at available vehicles, please confirm three things:\n\n1. Are you aged between 25 and 65 years old?\n2. Do you possess a valid PCO badge?\n3. Do you have any penalty points? If you have more than 6 points, renting with us may be difficult.\n\nFor your answer, please reply simply: Yes, Yes, and specify your points. For example: 1. Yes 2. Yes 3. Yes - 3 points.";
 const HANDOFF_24H =
   "Our team will get back to you within 24 hours. Please do not contact this number — we will contact you first.";
 
@@ -1036,7 +1036,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     .join("\n");
   const carEligibilityPromptActive = /before we look at available vehicles|are you aged between 25 and 65|valid pco badge|pc[o0] badge|penalty points|please reply simply: yes, yes/i.test(recentAgentMessages);
   const accidentPromptActive = /accident support|accident verification|your full name and the vehicle registration|other driver|accident report/i.test(recentAgentMessages);
-  const accidentActive = leadIntent !== "book_car" && (leadIntent === "report_accident" || accidentPromptActive);
+  const accidentActive = !compactEligibilityAnswer && leadIntent !== "book_car" && (leadIntent === "report_accident" || accidentPromptActive);
   const carEligibilityActive =
     !accidentActive && (
       compactEligibilityAnswer ||
