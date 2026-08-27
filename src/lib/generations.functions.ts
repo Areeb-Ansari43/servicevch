@@ -7,8 +7,8 @@ const scanSchema = z.object({
   mimeType: z.enum(["image/jpeg", "image/png", "application/pdf"]),
 });
 
-const readField = (field: any) => String(field?.valueString ?? field?.content ?? "").trim();
-const readDate = (field: any) => String(field?.valueDate ?? field?.content ?? "").trim();
+const readField = (field: any) => String(field?.valueString ?? field?.valueNumber ?? field?.valueCountryRegion ?? field?.content ?? "").trim();
+const readDate = (field: any) => String(field?.valueDate ?? field?.valueString ?? field?.content ?? "").trim();
 const normalizeAddress = (value: string) => value.replace(/\s+/g, " ").replace(/\s*,\s*/g, ", ").trim();
 const findPostcode = (value: string) => value.match(/\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/i)?.[0]?.toUpperCase() ?? "";
 
@@ -32,8 +32,8 @@ export const scanDrivingLicence = createServerFn({ method: "POST" })
     if (!operation) throw new Error("Azure did not return a scan operation.");
 
     let result: any = null;
-    for (let attempt = 0; attempt < 30; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, Math.min(500 + attempt * 250, 2000)));
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, Math.min(250 + attempt * 150, 1000)));
       const poll = await fetch(operation, { headers: { "Ocp-Apim-Subscription-Key": key } });
       if (!poll.ok) throw new Error(`Azure scan polling failed (${poll.status}).`);
       const body = await poll.json() as any;
@@ -54,6 +54,7 @@ export const scanDrivingLicence = createServerFn({ method: "POST" })
       licence: readField(fields.DocumentNumber).replace(/\s+/g, "").toUpperCase(),
       address: normalizeAddress(fullAddress.replace(postcode, "").trim()),
       postcode,
+      rawFields: Object.fromEntries(Object.entries(fields).map(([name, field]: [string, any]) => [name, field?.valueString ?? field?.valueDate ?? field?.content ?? null])),
       confidence: Object.fromEntries(Object.entries(fields).map(([name, field]: [string, any]) => [name, field?.confidence ?? null])),
       reviewRequired: true,
     };
