@@ -66,10 +66,34 @@ export function getMetaConfigStatus() {
   return { hasAccessToken: Boolean(accessToken), hasPhoneNumberId: Boolean(phoneNumberId), hasWabaId: Boolean(wabaId), graphVersion: GRAPH_VERSION };
 }
 
-export function sendWhatsAppText(params: { phone: unknown; text: string }) {
+function splitWhatsAppText(text: string, maxLength = 3800): string[] {
+  const normalized = text.trim();
+  if (normalized.length <= maxLength) return [normalized];
+  const chunks: string[] = [];
+  let remaining = normalized;
+  while (remaining.length > maxLength) {
+    let cut = remaining.lastIndexOf("\n", maxLength);
+    if (cut < Math.floor(maxLength * 0.55)) cut = remaining.lastIndexOf(" ", maxLength);
+    if (cut < Math.floor(maxLength * 0.55)) cut = maxLength;
+    chunks.push(remaining.slice(0, cut).trim());
+    remaining = remaining.slice(cut).trim();
+  }
+  if (remaining) chunks.push(remaining);
+  return chunks;
+}
+
+export async function sendWhatsAppText(params: { phone: unknown; text: string }): Promise<MetaSendResult> {
   const to = normalizeMetaPhone(params.phone);
-  if (!to) return Promise.resolve<MetaSendResult>({ sent: false, reason: "customer_phone_missing" });
-  return sendPayload({ ...base(to), type: "text", text: { preview_url: false, body: params.text } });
+  if (!to) return { sent: false, reason: "customer_phone_missing" };
+  const chunks = splitWhatsAppText(params.text);
+  console.info("[meta-whatsapp] text dispatch", { chunks: chunks.length, maxChunkLength: Math.max(...chunks.map((chunk) => chunk.length)) });
+  let messageId: string | undefined;
+  for (const chunk of chunks) {
+    const result = await sendPayload({ ...base(to), type: "text", text: { preview_url: false, body: chunk } });
+    if (!result.sent) return result;
+    messageId = result.messageId ?? messageId;
+  }
+  return { sent: true, messageId };
 }
 
 export function sendWhatsAppImage(params: { phone: unknown; url: string; caption?: string }) {

@@ -1046,7 +1046,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     recentAgentMessages.lastIndexOf("accident verification"),
   );
   const carPromptIsMostRecent = lastCarPromptIndex > lastAccidentPromptIndex;
-  const accidentActive = !carPromptIsMostRecent && (leadIntent === "report_accident" || accidentPromptActive);
+  const accidentActive = !compactEligibilityAnswer && !carPromptIsMostRecent && (leadIntent === "report_accident" || accidentPromptActive);
   const carEligibilityActive =
     !accidentActive && (
       compactEligibilityAnswer ||
