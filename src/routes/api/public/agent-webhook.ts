@@ -283,6 +283,14 @@ function isLikelyFullName(text: string): boolean {
   return value.length >= 3 && value.length <= 90 && !isCarRequest(value) && /^[A-Za-z][A-Za-z .'-]+$/.test(value);
 }
 
+function parseAccidentIdentity(text: string): { name: string; registration: string } | null {
+  const value = text.trim().replace(/\s+/g, " ");
+  const match = value.match(/\b([A-Z]{2}\d{2}\s?[A-Z]{3})\b/i);
+  if (!match) return null;
+  const name = value.slice(0, match.index ?? 0).replace(/[,:;|/-]+\s*$/, "").trim();
+  return name.length >= 3 ? { name, registration: match[1].toUpperCase().replace(/\s+/g, " ") } : null;
+}
+
 function parseMenuOption(text: string): 1 | 2 | 3 | null {
   const normalized = text.trim().toLowerCase().replace(/[.!]+$/g, "");
   if (/^(?:option\s*)?\[?1\]?$/.test(normalized) || /^(?:car enquiry|enquire about a car|book a car)$/.test(normalized)) return 1;
@@ -1112,13 +1120,17 @@ export async function handleAgentWebhookRequest(request: Request) {
     }
   }
 
-  if (!option && leadIntent === "report_accident" && /full name|provide your full name/i.test(lastAgentMessage) && isLikelyFullName(content)) {
-    const customerName = content.trim();
-    const reply = "Accident Support\n\nThank you, " + customerName + ". Please now send the vehicle registration, incident date, location, a short description of what happened, and any photos.";
-    await db.from("whatsapp_leads").update({ contact_name: customerName, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+  const accidentIdentity = parseAccidentIdentity(content);
+  if (!option && accidentActive && /full name|provide your full name|vehicle registration/i.test(lastAgentMessage) && (accidentIdentity || isLikelyFullName(content))) {
+    const customerName = accidentIdentity?.name ?? content.trim();
+    const suppliedRegistration = accidentIdentity?.registration ?? "";
+    const reply = suppliedRegistration
+      ? `Accident Support\n\nThank you, ${customerName}. I have recorded vehicle registration ${suppliedRegistration}. I am checking these details against our driver records now. If verified, I will collect the accident details next.`
+      : `Accident Support\n\nThank you, ${customerName}. Please now send the vehicle registration, incident date, location, a short description of what happened, and any photos.`;
+    await db.from("whatsapp_leads").update({ contact_name: customerName, vehicle_registration: suppliedRegistration || undefined, intent: "report_accident", ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
     await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
-    return json({ ok: true, lead_id: leadId, reply, outbound, needs_human: !outbound.sent });
+    return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, needs_human: !outbound.sent, accident_identity: accidentIdentity });
   }
 
   if (option === 1 || option === 2 || option === 3) {
