@@ -426,16 +426,25 @@ function websiteMatch(vehicle: FleetVehicle): (typeof WEBSITE_CATALOG)[number] |
   });
 }
 
+function uniqueAvailableVehicles(fleet: FleetVehicle[]): FleetVehicle[] {
+  const unique = new Map<string, FleetVehicle>();
+  for (const vehicle of fleet.filter(isAvailable)) {
+    const key = `${vehicle.make.trim().toLowerCase()}|${vehicle.model.trim().toLowerCase()}`;
+    if (!unique.has(key)) unique.set(key, vehicle);
+  }
+  return [...unique.values()];
+}
+
+function availableYears(fleet: FleetVehicle[], vehicle: FleetVehicle): string {
+  const years = [...new Set(fleet.filter((candidate) => isAvailable(candidate) && candidate.make.trim().toLowerCase() === vehicle.make.trim().toLowerCase() && candidate.model.trim().toLowerCase() === vehicle.model.trim().toLowerCase()).map((candidate) => candidate.year).filter((year): year is number => year != null))].sort();
+  return years.length ? years.join(", ") : "year to confirm";
+}
+
 function formatCustomerFleet(fleet: FleetVehicle[]): string {
-  const available = fleet.filter(isAvailable);
+  const available = uniqueAvailableVehicles(fleet);
   if (!available.length) return `I’m sorry, there are no vehicles currently marked available.\n\n${HANDOFF_24H}`;
-  const lines = available.map((vehicle, index) => {
-    const catalog = websiteMatch(vehicle);
-    const price = vehicle.weekly_price != null ? `£${vehicle.weekly_price}/week` : catalog?.price ?? "Price to confirm";
-    const year = vehicle.year ?? catalog?.year ?? "Year to confirm";
-    return `${index + 1}. ${vehicle.make} ${vehicle.model} (${year}) — ${catalog?.fuel ?? fuelCategory(vehicle.fuel_type)} — ${price} — ${mileageAllowance(vehicle).toLocaleString("en-GB")} miles/month — ${contractWeeks(vehicle)} weeks`;
-  });
-  return `Thank you for your interest in our PCO fleet. Here are all vehicles currently marked available:\n\n${lines.join("\n")}\n\nPlease tell me which vehicle you would like to go with, and I will provide its complete contract details.\n\nPrices shown from ${VCH_WEBSITE}; vehicles without a published website rate are marked Price to confirm.`;
+  const lines = available.map((vehicle, index) => `${index + 1}. ${vehicle.make} ${vehicle.model} (${availableYears(fleet, vehicle)})`);
+  return `Thank you for your interest in our PCO fleet. These vehicle options are currently available:\n\n${lines.join("\n")}\n\nPlease reply with the make and model you would like, and I will send its price, mileage allowance, contract length, and included services.`;
 }
 
 function findSelectedVehicle(text: string, fleet: FleetVehicle[]): FleetVehicle | undefined {
@@ -475,20 +484,15 @@ function formatVehicleDetails(vehicle: FleetVehicle): string {
 }
 
 function formatFleet(fleet: FleetVehicle[]): string {
-  const available = fleet.filter(isAvailable);
+  const available = uniqueAvailableVehicles(fleet);
   const grouped = ["Electric", "Plug-in-Hybrid", "Petrol"].map((category) => {
     const cars = available
       .filter((vehicle) => fuelCategory(vehicle.fuel_type) === category)
-      .map((vehicle) => {
-        const catalog = websiteMatch(vehicle);
-        const year = vehicle.year ?? catalog?.year ?? "year to confirm";
-        const price = vehicle.weekly_price != null ? `£${vehicle.weekly_price}/week` : catalog?.price ?? "price to confirm";
-        return `${vehicle.make} ${vehicle.model} (${year}; ${price}; ${mileageAllowance(vehicle).toLocaleString("en-GB")} miles/month; ${contractWeeks(vehicle)} weeks)`;
-      })
+      .map((vehicle) => `${vehicle.make} ${vehicle.model} (${availableYears(fleet, vehicle)})`)
       .join(", ");
     return `${category}: ${cars || "none currently available"}`;
   });
-  return `Available vehicles (${available.length}/${fleet.length}; rented, in-service and off-road vehicles excluded):\n${grouped.join("\n")}`;
+  return `Available vehicle choices (${available.length} unique make/model options; rented, in-service and off-road vehicles excluded):\n${grouped.join("\n")}\nOnly provide price, mileage allowance, contract length, and inclusions after the customer selects a vehicle.`;
 }
 
 async function sendWelcomeMenu(phone: unknown) {
