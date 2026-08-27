@@ -1456,12 +1456,23 @@ function phoneKey(value: string | null | undefined): string {
   return digits.startsWith("0") ? `44${digits.slice(1)}` : digits;
 }
 
+function phoneKeysMatch(left: string | null | undefined, right: string | null | undefined): boolean {
+  const a = phoneKey(left);
+  const b = phoneKey(right);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  // Drivers are sometimes stored with a shortened local number while Meta
+  // stores the full international number. Require an 8-digit suffix so this
+  // remains safer than matching on a single short fragment.
+  return a.length >= 8 && b.length >= 8 && a.slice(-8) === b.slice(-8);
+}
+
 function DriverPreviewModal({ driver, vehicle, onClose }: { driver: DriverTrack; vehicle?: Vehicle; onClose: () => void }) {
   const { leads, loading: leadsLoading } = useLeadsData();
   const loadConversation = useServerFn(getLeadConversation);
   const [messages, setMessages] = useState<Array<{ id: string; sender: string; content: string; created_at: string; media_url: string | null }>>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const lead = leads.find((item) => phoneKey(item.phone) === phoneKey(driver.phone));
+  const lead = leads.find((item) => phoneKeysMatch(item.phone, driver.phone));
   useEffect(() => {
     let cancelled = false;
     if (!lead) { setMessages([]); return; }
