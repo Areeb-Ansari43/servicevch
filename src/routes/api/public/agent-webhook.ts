@@ -961,7 +961,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     .from("vehicles")
     .select("reg, make, model, year, fuel_type, status, next_mot_date, pco_expiry_date");
 
-  const compactEligibilityAnswer = /^\s*(?:(?:yes|yeah|yep|no|nope)[\s,;|/]+){1,2}(?:yes|yeah|yep|no|nope)\s*(?:[-–—:=\s]+)\s*\d{1,2}\s*$/i.test(content);
+  const compactEligibilityAnswer = /^\s*(?:(?:yes|yeah|yep|no|nope)[\s,;|/]+){1,2}(?:yes|yeah|yep|no|nope)\s*(?:[-–—:=\s]+)\s*\d{1,2}\s*(?:points?)?\s*$/i.test(content);
   const rawOption = compactEligibilityAnswer ? null : parseMenuOption(content) ?? (/^(?:book_car|enquire_about_a_car|enquire|emergency_breakdown|breakdown|report_accident|accident)$/i.test(content.trim()) ? (/(?:emergency|breakdown)/i.test(content) ? 2 : /(?:accident|report)/i.test(content) ? 3 : 1) : null);
 
   if ((isNewLead || closed) && !isMenuReset(content) && !rawOption) {
@@ -1212,7 +1212,10 @@ export async function handleAgentWebhookRequest(request: Request) {
     return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, telegram_alert: alert, breakdown_media_complete: mediaComplete });
   }
 
-  if (!option && leadIntent === "report_accident") {
+  // Accident prompt precedence is authoritative. A lead may carry stale
+  // book_car intent from an earlier conversation, so the latest accident
+  // prompt must still route the next customer reply into verification.
+  if (!option && (leadIntent === "report_accident" || accidentActive)) {
     const next: AccidentData = { ...accidentData, evidenceUrls: [...(accidentData.evidenceUrls ?? [])] };
     const lowerLast = lastAgentMessage.toLowerCase();
 
