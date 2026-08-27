@@ -80,23 +80,24 @@ async function classify(kind: IntakeKind, text: string, name: string, issue: str
       temperature: 0.15,
     },
   };
-  for (const model of ["gemini-2.5-flash", "gemini-2.0-flash"]) {
+  const model = (getRuntimeEnv("GEMINI_MODEL") ?? "gemini-2.0-flash-001").trim();
+  for (const selectedModel of [model]) {
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
         body: JSON.stringify(body),
       });
       const raw = await response.text();
       if (!response.ok) {
-        console.error("[ai-intake] Gemini error", { model, status: response.status, body: raw.slice(0, 1000) });
+        console.error("[ai-intake] Gemini error", { model: selectedModel, status: response.status, body: raw.slice(0, 1000) });
         continue;
       }
       const data = JSON.parse(raw) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
       const result = parseJson(data.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") ?? "");
       if (result) return result;
     } catch (error) {
-      console.error("[ai-intake] Gemini request failed", { model, error: error instanceof Error ? error.message : String(error) });
+      console.error("[ai-intake] Gemini request failed", { model: selectedModel, error: error instanceof Error ? error.message : String(error) });
     }
   }
   return fallback;

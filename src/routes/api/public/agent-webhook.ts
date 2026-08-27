@@ -477,10 +477,17 @@ async function generateReply(
   hasMedia: boolean,
   fleet: FleetVehicle[],
 ): Promise<AiResult> {
+  const fallbackReply = isBreakdownRequest(latest)
+    ? `I’m here to help. If the vehicle is unsafe, move to a safe place and call 999 if anyone is injured or in immediate danger. For recovery, please use your own provider and take the vehicle to ${AUTO_SURGEON_ADDRESS}. Send your registration and location so I can guide you through the next step.`
+    : isAccidentRequest(latest)
+      ? "I’m here to help with the accident report. Please send your full name, the vehicle registration, the accident location, and whether anyone is injured. You can send photos and videos separately."
+      : isCarRequest(latest)
+        ? formatCustomerFleet(fleet)
+        : "I’m here to help. Please tell me what has happened, your vehicle registration, and your current location if this is urgent.";
   const fallback: AiResult = {
-    reply: HANDOFF_24H,
-    needs_human: true,
-    reason: "ai_unavailable_or_error",
+    reply: fallbackReply,
+    needs_human: false,
+    reason: "ai_fallback_used",
     asks_closure: false,
   };
   const system =
@@ -547,12 +554,10 @@ async function generateReply(
       });
       return { response, body: await response.text(), model, apiVersion };
     };
-    // Avoid a /models discovery request on every inbound WhatsApp message.
-    // The normal path is one fast Flash request; retry once only if the model/version is unavailable.
-    let generation = await callModel("v1beta", "gemini-2.5-flash");
-    if (!generation.response.ok && [404, 408, 429, 500, 502, 503, 504].includes(generation.response.status)) {
-      generation = await callModel("v1", "gemini-2.5-flash");
-    }
+    // Use one stable low-latency model request. Do not turn a model 404 into a
+    // customer handoff; the deterministic fallback above keeps the workflow moving.
+    const model = (getRuntimeEnv("GEMINI_MODEL") ?? "gemini-2.0-flash-001").trim();
+    const generation = await callModel("v1beta", model);
     if (!generation.response.ok) {
       console.error("[agent-webhook] Gemini API error", {
         status: generation.response.status,
