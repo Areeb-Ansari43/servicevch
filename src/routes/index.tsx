@@ -9,6 +9,7 @@ import { ApexAssistant } from "@/components/apex-assistant";
 import { ChatSimulator } from "@/components/chat-simulator";
 import { LeadThread } from "@/components/lead-thread";
 import { getLeadConversation } from "@/lib/chat.functions";
+import { GenerationsView } from "@/components/generations-view";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -283,7 +284,7 @@ export function UKPlate({ reg, size = "md" }: { reg: string; size?: "sm" | "md" 
 }
 
 /* ---------------- App ---------------- */
-export type View = "dashboard" | "vehicles" | "add" | "services" | "log-service" | "mileage" | "drivers" | "leads" | "accidents";
+export type View = "dashboard" | "vehicles" | "add" | "services" | "log-service" | "mileage" | "drivers" | "leads" | "accidents" | "generations";
 
 export const VIEW_PATH: Record<View, string> = {
   dashboard: "/",
@@ -295,6 +296,7 @@ export const VIEW_PATH: Record<View, string> = {
   drivers: "/drivers",
   leads: "/whatsapp-leads",
   accidents: "/accident-cases",
+  generations: "/generations",
 };
 
 export const regSlug = (reg: string) => reg.replace(/\s+/g, "").toUpperCase();
@@ -392,6 +394,8 @@ export function FleetShell({ view }: { view: View }) {
             <WhatsAppLeadsView toast={toast} />
           ) : view === "accidents" ? (
             <AccidentCasesView toast={toast} />
+          ) : view === "generations" ? (
+            <GenerationsView vehicles={data.vehicles} drivers={data.drivers} toast={toast} />
           ) : null}
 
         </main>
@@ -452,6 +456,7 @@ function Sidebar({ view, setView, onSignOut, account, mobileOpen, onClose }: {
     { id: "drivers", label: "Drivers", Icon: Icon.Chat },
     { id: "leads", label: "WhatsApp Leads", Icon: Icon.Chat },
     { id: "accidents", label: "Accident Cases", Icon: Icon.Crash },
+    { id: "generations", label: "Generations", Icon: Icon.Calendar },
     { id: "add", label: "Add Vehicle", Icon: Icon.Plus },
   ];
   const email = account?.email ?? "";
@@ -550,6 +555,7 @@ function GlobalSearch({ vehicles, drivers, services, goto }: { vehicles: Vehicle
     ...services.filter((s) => `${s.registration} ${s.service_type} ${s.description}`.toLowerCase().includes(q)).slice(0, 5).map((s) => ({ label: s.service_type, meta: `${s.registration} · ${s.description || "Service record"}`, view: "services" as View })),
     ...(q.includes("lead") || q.includes("whatsapp") ? [{ label: "WhatsApp Leads", meta: "Open customer conversations", view: "leads" as View }] : []),
     ...(q.includes("accident") || q.includes("crash") ? [{ label: "Accident Cases", meta: "Open accident reports", view: "accidents" as View }] : []),
+    ...(q.includes("generation") || q.includes("contract") || q.includes("permission") ? [{ label: "Generations", meta: "Permission letters and contracts", view: "generations" as View }] : []),
   ].slice(0, 8) : [];
   return (
     <div className="relative min-w-0 flex-1">
