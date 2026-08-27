@@ -92,10 +92,14 @@ type BreakdownVerification = {
 type BreakdownData = {
   garageInstructionsSent?: boolean;
   recoveryGuidanceSent?: boolean;
+  vehiclePhotoUrl?: string;
+  vehiclePhotoVerification?: BreakdownVerification;
   keyPhotoUrl?: string;
   keyVideoUrl?: string;
   keyPhotoVerification?: BreakdownVerification;
   keyVideoVerification?: BreakdownVerification;
+  keyEvidenceUrl?: string;
+  keyEvidenceVerification?: BreakdownVerification;
   keyMediaChecked?: boolean;
   closed?: boolean;
 };
@@ -108,6 +112,7 @@ type AccidentData = {
   atFaultDriverName?: string;
   atFaultDriverLicenseUrl?: string;
   atFaultVehicleReg?: string;
+  insuranceProvider?: string;
   incidentDate?: string;
   incidentTime?: string;
   location?: string;
@@ -245,6 +250,7 @@ function accidentMissing(data: AccidentData): string[] {
   if (!data.atFaultDriverName) missing.push("the other driver’s full name");
   if (!data.atFaultDriverLicenseUrl) missing.push("a clear photo of their driving licence");
   if (!data.atFaultVehicleReg) missing.push("their vehicle registration");
+  if (!data.insuranceProvider) missing.push("the other driver’s insurance provider");
   if (!data.incidentDate) missing.push("the date of the accident");
   if (!data.incidentTime) missing.push("the time of the accident");
   if (!data.location) missing.push("the place of the accident");
@@ -262,6 +268,7 @@ function formatAccidentSummary(data: AccidentData): string {
     "",
     `Other driver: ${data.atFaultDriverName ?? "Not supplied"}`,
     `Other vehicle registration: ${data.atFaultVehicleReg ?? "Not supplied"}`,
+    `Insurance provider: ${data.insuranceProvider ?? "Not supplied"}`,
     `Licence image: ${data.atFaultDriverLicenseUrl ? "Received" : "Missing"}`,
     `Accident date: ${data.incidentDate ?? "Not supplied"}`,
     `Accident time: ${data.incidentTime ?? "Not supplied"}`,
@@ -1094,7 +1101,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     const reply = option === 1
       ? `Car Enquiry\n\n${CAR_ELIGIBILITY_PROMPT}`
       : option === 2
-        ? `🛠️ Emergency Breakdown\n\nPlease arrange for the vehicle to be dropped off at our garage:\n\n${AUTO_SURGEON_ADDRESS}\n\n📍 Clickable map: ${AUTO_SURGEON_MAP}\n\nOnce the address has been sent, contact your own breakdown recovery provider, such as a local recovery company or RAC. Virtual Car Hire does not provide the recovery vehicle.\n\nPlease park the vehicle in front of The Auto Surgeon, leave the key in the letter box, and send us one clear photo and one video of the key in the letter box. I will check that both have been received before we close the case.`
+        ? `🛠️ Emergency Breakdown\n\nPlease arrange for the vehicle to be dropped off at our garage:\n\n${AUTO_SURGEON_ADDRESS}\n\n📍 Clickable map: ${AUTO_SURGEON_MAP}\n\nOnce the address has been sent, contact your own breakdown recovery provider, such as a local recovery company or RAC. Virtual Car Hire does not provide the recovery vehicle.\n\nPlease park the vehicle in front of The Auto Surgeon and send:\n1. One clear photo of the vehicle parked in front of the garage.\n2. Either a photo or video showing the key being placed in the letter box.\n\nI will check both pieces of evidence before we close the case.`
         : "🚨 Accident Support\n\nWe are sorry to hear you have been in an accident. We are here to help guide you through the next steps safely.\n\nTo get started, please provide your full name:";
     const intent = option === 1 ? "book_car" : option === 2 ? "emergency_breakdown" : "report_accident";
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
@@ -1118,22 +1125,32 @@ export async function handleAgentWebhookRequest(request: Request) {
   if (!option && leadIntent === "emergency_breakdown") {
     const next: BreakdownData = { ...breakdownData };
     const normalizedMediaType = (mediaType ?? "").toLowerCase();
-    let photoVerification = next.keyPhotoVerification;
+    const vehicleEvidencePrompt = "Inspect this photo for a vehicle parked in front of The Auto Surgeon garage. Return JSON only with status exactly verified, unclear, or rejected; confidence from 0 to 1; and a short reason. Mark verified only when a real vehicle is clearly visible and reasonably parked at the garage frontage. Do not identify or infer any person.";
+    const keyEvidencePrompt = "Inspect this photo for a vehicle key clearly placed inside or immediately at a letter box. Return JSON only with status exactly verified, unclear, or rejected; confidence from 0 to 1; and a short reason. Mark verified only when both the key and letter box placement are clear. Do not identify or infer any person.";
     if (mediaUrl && normalizedMediaType === "image") {
-      photoVerification = await verifyImageEvidence(mediaUrl, mediaMimeType ?? "image/jpeg");
-      next.keyPhotoUrl = next.keyPhotoUrl ?? mediaUrl;
-      next.keyPhotoVerification = photoVerification;
+      if (!next.vehiclePhotoUrl) {
+        next.vehiclePhotoUrl = mediaUrl;
+        next.vehiclePhotoVerification = await verifyImageEvidence(mediaUrl, mediaMimeType ?? "image/jpeg", vehicleEvidencePrompt);
+      } else {
+        next.keyPhotoUrl = next.keyPhotoUrl ?? mediaUrl;
+        next.keyEvidenceUrl = next.keyEvidenceUrl ?? mediaUrl;
+        next.keyPhotoVerification = await verifyImageEvidence(mediaUrl, mediaMimeType ?? "image/jpeg", keyEvidencePrompt);
+        next.keyEvidenceVerification = next.keyPhotoVerification;
+      }
     }
     if (mediaUrl && normalizedMediaType === "video") {
       next.keyVideoUrl = next.keyVideoUrl ?? mediaUrl;
+      next.keyEvidenceUrl = next.keyEvidenceUrl ?? mediaUrl;
       next.keyVideoVerification = next.keyVideoVerification ?? {
         status: "received_pending_review",
-        reason: "Video received and retained for review.",
+        reason: "Key video received and retained for review.",
         checkedAt: new Date().toISOString(),
       };
+      next.keyEvidenceVerification = next.keyVideoVerification;
     }
-    const photoVerified = next.keyPhotoVerification?.status === "verified";
-    const mediaComplete = Boolean(next.keyPhotoUrl && next.keyVideoUrl && photoVerified);
+    const vehicleVerified = next.vehiclePhotoVerification?.status === "verified";
+    const keyEvidenceVerified = next.keyEvidenceVerification?.status === "verified" || next.keyVideoVerification?.status === "received_pending_review";
+    const mediaComplete = Boolean(next.vehiclePhotoUrl && vehicleVerified && next.keyEvidenceUrl && keyEvidenceVerified);
     if (mediaComplete && next.keyMediaChecked && isPositiveClosure(content) && lastAgentMessage.toLowerCase().includes("is that all for today")) {
       const summary = `Emergency breakdown case\n\nGarage: ${AUTO_SURGEON_ADDRESS}\nMap: ${AUTO_SURGEON_MAP}\nKey photo: Received\nKey video: Received`;
       const { error: caseError } = await db.from("accident_cases").insert({
@@ -1146,7 +1163,7 @@ export async function handleAgentWebhookRequest(request: Request) {
         garage_map_url: AUTO_SURGEON_MAP,
         key_photo_url: next.keyPhotoUrl,
         key_video_url: next.keyVideoUrl,
-        evidence_urls: [next.keyPhotoUrl, next.keyVideoUrl],
+        evidence_urls: [next.vehiclePhotoUrl, next.keyEvidenceUrl].filter(Boolean),
         ai_summary: summary,
         severity: "minor",
         status: "open",
@@ -1160,11 +1177,14 @@ export async function handleAgentWebhookRequest(request: Request) {
       return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, telegram_alert: alert, breakdown_case_saved: !caseError });
     }
     next.keyMediaChecked = mediaComplete;
-    const reply = mediaUrl && normalizedMediaType === "image" && photoVerification && photoVerification.status !== "verified"
-      ? `📷 Photo received. ${photoVerification.reason}\n\nPlease send a clear photo showing the key inside the letter box. I will check it again before continuing.`
+    const currentVerification = normalizedMediaType === "image"
+      ? (next.vehiclePhotoUrl === mediaUrl ? next.vehiclePhotoVerification : next.keyEvidenceVerification)
+      : next.keyVideoVerification;
+    const reply = currentVerification && currentVerification.status !== "verified" && currentVerification.status !== "received_pending_review"
+      ? `📷 Evidence received. ${currentVerification.reason}\n\nPlease resend a clear image showing ${next.vehiclePhotoUrl === mediaUrl ? "the vehicle reasonably parked in front of The Auto Surgeon" : "the key being placed in the letter box"}. I will check it again before continuing.`
       : mediaComplete
-        ? "✅ The key photo has been checked and the key video has been received. Please check that everything is correct. Is that all for today? Reply Yes or No."
-        : `🛠️ Emergency Breakdown\n\nI still need ${!next.keyPhotoUrl ? "one clear photo" : "one clear video"} of the key after it has been placed in the letter box. Please send the missing file here.`;
+        ? "✅ I have checked the vehicle photo and received the key photo/video. Both pieces of evidence are saved. Is that all for today? Reply Yes or No."
+        : `🛠️ Emergency Breakdown\n\nI still need ${!next.vehiclePhotoUrl ? "one clear photo of the vehicle parked in front of The Auto Surgeon" : !next.keyEvidenceUrl ? "a photo or video showing the key being placed in the letter box" : "a clearer piece of evidence"}. Please send the missing file here.`;
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
     if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
     await db.from("whatsapp_leads").update({ breakdown_data: next, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
@@ -1228,6 +1248,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     next.atFaultDriverLicenseUrl = next.atFaultDriverLicenseUrl ?? licenseUrl ?? undefined;
     next.atFaultDriverName = next.atFaultDriverName ?? labeledValue(content, ["other driver", "driver name", "their name"]) ?? undefined;
     next.atFaultVehicleReg = next.atFaultVehicleReg ?? labeledValue(content, ["their car reg", "their vehicle reg", "other car reg", "other vehicle registration"]) ?? extractReg(content) ?? undefined;
+    next.insuranceProvider = next.insuranceProvider ?? labeledValue(content, ["insurance", "insurance provider", "insurer"]) ?? undefined;
     next.incidentDate = next.incidentDate ?? labeledValue(content, ["date", "accident date"]) ?? extractDate(content) ?? undefined;
     next.incidentTime = next.incidentTime ?? labeledValue(content, ["time", "accident time"]) ?? extractTime(content) ?? undefined;
     next.location = next.location ?? labeledValue(content, ["place", "location", "accident location"]) ?? undefined;
@@ -1249,6 +1270,7 @@ export async function handleAgentWebhookRequest(request: Request) {
           at_fault_driver_name: next.atFaultDriverName,
           at_fault_driver_license_url: next.atFaultDriverLicenseUrl,
           at_fault_vehicle_reg: next.atFaultVehicleReg,
+          insurance_provider: next.insuranceProvider,
           incident_date: next.incidentDate,
           incident_time: next.incidentTime,
           location: next.location,
