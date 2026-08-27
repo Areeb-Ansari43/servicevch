@@ -1066,6 +1066,30 @@ export async function handleAgentWebhookRequest(request: Request) {
       carEligibilityPromptActive ||
       (!carEligibility.completed && Object.keys(carEligibility).length > 0)
     );
+  const selectedVehicleRequest = !option && leadIntent === "book_car" && findSelectedVehicle(content, (fleet ?? []) as FleetVehicle[]) && (/(which vehicle|which car|available|fleet|vehicles currently marked)/i.test(lastAgentMessage) || carEligibility.completed);
+  if (selectedVehicleRequest) {
+    const selected = findSelectedVehicle(content, (fleet ?? []) as FleetVehicle[]);
+    if (selected) {
+      const reply = formatVehicleDetails(selected);
+      const selectedVehicle = {
+        make: selected.make,
+        model: selected.model,
+        year: selected.year ?? websiteMatch(selected)?.year ?? null,
+        weeklyRate: selected.weekly_price != null ? `£${selected.weekly_price}/week` : websiteMatch(selected)?.price ?? "Price to confirm",
+        mileage: mileageAllowance(selected),
+        contractWeeks: contractWeeks(selected),
+      };
+      const nextEligibility: CarEligibility = { ...carEligibility, completed: true, selectedVehicle };
+      const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
+      if (outbound.sent) {
+        await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
+        await db.from("whatsapp_leads").update({ car_enquiry_data: nextEligibility, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+      }
+      const alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
+      return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, needs_human: !outbound.sent, telegram_alert: alert });
+    }
+  }
+
   if (!option && carEligibilityActive) {
     const incomingEligibility = parseCarEligibility(content, carEligibility);
     const nextEligibility: CarEligibility = { ...carEligibility, ...incomingEligibility };
