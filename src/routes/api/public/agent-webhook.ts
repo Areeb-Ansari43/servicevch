@@ -457,13 +457,20 @@ function formatCustomerFleet(fleet: FleetVehicle[]): string {
 
 function findSelectedVehicle(text: string, fleet: FleetVehicle[]): FleetVehicle | undefined {
   const value = text.toLowerCase();
+  const compactValue = value.replace(/[^a-z0-9]/g, "");
   const available = fleet.filter(isAvailable);
   return available.find((vehicle) => {
     const make = vehicle.make.toLowerCase();
     const model = vehicle.model.toLowerCase();
     const reg = vehicle.reg.toLowerCase();
-    return value.includes(reg) || (value.includes(make) && value.includes(model)) ||
-      value.includes(model) || (value.includes(make) && /\b(?:300|350|220)\b/.test(value) && model.includes(value.match(/\b(?:300|350|220)\b/)?.[0] ?? ""));
+    const compactMake = make.replace(/[^a-z0-9]/g, "");
+    const compactModel = model.replace(/[^a-z0-9]/g, "");
+    const modelQuery = compactValue.replace(compactMake, "");
+    return value.includes(reg) ||
+      (value.includes(make) && value.includes(model)) ||
+      value.includes(model) ||
+      (modelQuery.length >= 3 && compactModel.includes(modelQuery)) ||
+      (value.includes(make) && /\b(?:300|350|220)\b/.test(value) && model.includes(value.match(/\b(?:300|350|220)\b/)?.[0] ?? ""));
   });
 }
 
@@ -1095,16 +1102,30 @@ export async function handleAgentWebhookRequest(request: Request) {
     const nextEligibility: CarEligibility = { ...carEligibility, ...incomingEligibility };
     nextEligibility.completed = eligibilityMissing(nextEligibility).length === 0;
     const missing = eligibilityMissing(nextEligibility);
+    if (nextEligibility.pcoBadge === false) {
+      const reply = `I’m sorry, you cannot rent a car with us because our vehicles are for PCO car drivers using them for taxi jobs. A valid PCO badge is required.\n\nOur team will review this enquiry and contact you within 24 hours.`;
+      const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
+      if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, handoff: true, session_id: sessionId });
+      await db.from("whatsapp_leads").update({ car_enquiry_data: { ...nextEligibility, closed: true }, status: "closed", ai_paused: true, closed_at: new Date().toISOString(), ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+      const alert = await sendTelegramAlert({ name: leadName, phone, reason: "Car enquiry closed: no valid PCO badge", leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: true });
+      return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, eligibility: nextEligibility, telegram_alert: alert, needs_human: false });
+    }
     if (missing.length || !nextEligibility.completed) {
-        const reply = !nextEligibility.ageEligible && nextEligibility.age !== undefined
-        ? `Thank you. Our standard rental age range is 25 to 65, so we may not be able to proceed with this enquiry.\n\n${HANDOFF_24H}`
-        : `Thanks. I still need ${missing.join(", ")}. Please reply naturally—for example: I’m 30, I have a valid PCO badge, and I have 3 points.`;
+      const warnings = [
+        nextEligibility.ageEligible === false ? "It may be difficult to rent with us if you are between 18 and 25, as our insurance may not allow it. We will continue and a member of our team will contact you within 24 hours." : "",
+        nextEligibility.points != null && nextEligibility.points > 6 ? "Having more than 6 points may cause our insurance not to hire you. We will still continue and a member of our team will contact you within 24 hours." : "",
+      ].filter(Boolean);
+      const reply = `${warnings.length ? `${warnings.join("\n\n")}\n\n` : ""}Thanks. I still need ${missing.join(", ")}. Please reply naturally—for example: I’m 30, I have a valid PCO badge, and I have 3 points.`;
       const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
       if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
       await db.from("whatsapp_leads").update({ car_enquiry_data: nextEligibility, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
       return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, eligibility: nextEligibility, needs_human: !outbound.sent });
     }
-    const reply = formatCustomerFleet((fleet ?? []) as FleetVehicle[]);
+    const eligibilityWarnings = [
+      nextEligibility.ageEligible === false ? "Please note: our insurance may not allow rentals outside the standard 25–65 age range." : "",
+      nextEligibility.points != null && nextEligibility.points > 6 ? "Please note: more than 6 points may make insurance approval difficult." : "",
+    ].filter(Boolean);
+    const reply = `${eligibilityWarnings.length ? `${eligibilityWarnings.join("\n\n")}\n\n` : ""}${formatCustomerFleet((fleet ?? []) as FleetVehicle[])}`;
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
     if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
     await db.from("whatsapp_leads").update({ car_enquiry_data: nextEligibility, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
