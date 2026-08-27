@@ -956,7 +956,8 @@ export async function handleAgentWebhookRequest(request: Request) {
     .from("vehicles")
     .select("reg, make, model, year, fuel_type, status, next_mot_date, pco_expiry_date");
 
-  const rawOption = parseMenuOption(content) ?? (/^(?:book_car|enquire_about_a_car|enquire|emergency_breakdown|breakdown|report_accident|accident)$/i.test(content.trim()) ? (/(?:emergency|breakdown)/i.test(content) ? 2 : /(?:accident|report)/i.test(content) ? 3 : 1) : null);
+  const compactEligibilityAnswer = /^\s*(?:(?:yes|yeah|yep|no|nope)[\s,;|/]+){2}(?:yes|yeah|yep|no|nope)\s*(?:[-–—:=\s]+)\s*\d{1,2}\s*$/i.test(content);
+  const rawOption = compactEligibilityAnswer ? null : parseMenuOption(content) ?? (/^(?:book_car|enquire_about_a_car|enquire|emergency_breakdown|breakdown|report_accident|accident)$/i.test(content.trim()) ? (/(?:emergency|breakdown)/i.test(content) ? 2 : /(?:accident|report)/i.test(content) ? 3 : 1) : null);
 
   if ((isNewLead || closed) && !isMenuReset(content) && !rawOption) {
     const reply = WELCOME_MENU;
@@ -1030,6 +1031,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     .join("\n");
   const carEligibilityPromptActive = /before we look at available vehicles|are you aged between 25 and 65|valid pco badge|pc[o0] badge|penalty points|please reply simply: yes, yes/i.test(recentAgentMessages);
   const carEligibilityActive =
+    compactEligibilityAnswer ||
     leadIntent === "book_car" ||
     carEligibilityPromptActive ||
     (!carEligibility.completed && Object.keys(carEligibility).length > 0);
@@ -1051,6 +1053,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
     if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
     await db.from("whatsapp_leads").update({ car_enquiry_data: nextEligibility, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+    if (!outbound.sent) console.error("[agent-webhook] completed car fleet reply failed", { leadId, reason: outbound.reason, content });
     return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, eligibility: nextEligibility, needs_human: !outbound.sent });
   }
 
