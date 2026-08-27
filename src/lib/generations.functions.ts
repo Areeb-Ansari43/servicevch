@@ -33,8 +33,8 @@ export const scanDrivingLicence = createServerFn({ method: "POST" })
     if (!operation) throw new Error("Azure did not return a scan operation.");
 
     let result: any = null;
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, Math.min(250 + attempt * 150, 1000)));
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, Math.min(150 + attempt * 75, 500)));
       const poll = await fetch(operation, { headers: { "Ocp-Apim-Subscription-Key": key } });
       if (!poll.ok) throw new Error(`Azure scan polling failed (${poll.status}).`);
       const body = await poll.json() as any;
