@@ -1036,7 +1036,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     .join("\n");
   const carEligibilityPromptActive = /before we look at available vehicles|are you aged between 25 and 65|valid pco badge|pc[o0] badge|penalty points|please reply simply: yes, yes/i.test(recentAgentMessages);
   const accidentPromptActive = /accident support|accident verification|your full name and the vehicle registration|other driver|accident report/i.test(recentAgentMessages);
-  const accidentActive = leadIntent === "report_accident" || accidentPromptActive;
+  const accidentActive = leadIntent !== "book_car" && (leadIntent === "report_accident" || accidentPromptActive);
   const carEligibilityActive =
     !accidentActive && (
       compactEligibilityAnswer ||
