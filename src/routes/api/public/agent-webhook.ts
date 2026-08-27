@@ -331,7 +331,7 @@ function eligibilityMissing(data: CarEligibility): string[] {
   else if (!data.ageEligible) missing.push("confirmation that your age is between 25 and 65");
   if (data.pcoBadge === undefined) missing.push("whether you have a valid PCO badge");
   else if (!data.pcoBadge) missing.push("a valid PCO badge");
-  else if (data.pcoBadgeVerification?.status !== "verified") missing.push("a clear photo of your valid PCO badge");
+
   if (data.points === undefined || data.points === null) missing.push("the number of penalty points you have");
   return missing;
 }
@@ -992,28 +992,11 @@ export async function handleAgentWebhookRequest(request: Request) {
   if (!option && (leadIntent === "book_car" || /are you aged between 25 and 65|valid pco badge|pc[o0] badge|penalty points/i.test(lastAgentMessage))) {
     const incomingEligibility = parseCarEligibility(content);
     const nextEligibility: CarEligibility = { ...carEligibility, ...incomingEligibility };
-    if (mediaUrl && (mediaType ?? "").toLowerCase() === "image") {
-      const badgeVerification = await verifyImageEvidence(
-        mediaUrl,
-        mediaMimeType ?? "image/jpeg",
-        "Inspect this image for a PCO badge or private-hire driver badge. Return JSON only with status exactly verified, unclear, or rejected; confidence from 0 to 1; and a short reason. Mark verified only when a badge is clearly visible and appears to be an official PCO/private-hire badge. Do not identify or infer the person. If the badge is not visible, unreadable, or unclear, use unclear.",
-      );
-      nextEligibility.pcoBadgeUrl = mediaUrl;
-      nextEligibility.pcoBadgeVerification = badgeVerification;
-      if (badgeVerification.status === "verified") nextEligibility.pcoBadge = true;
-      if (badgeVerification.status !== "verified") {
-        const reply = `📷 PCO badge photo received. ${badgeVerification.reason}\n\nPlease send a clear photo of the full valid PCO badge. I will verify it again before showing the available cars.`;
-        const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
-        if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
-        await db.from("whatsapp_leads").update({ car_enquiry_data: nextEligibility, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
-        return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, eligibility: nextEligibility, needs_human: !outbound.sent });
-      }
-    }
     const missing = eligibilityMissing(nextEligibility);
     if (missing.length || !nextEligibility.completed) {
         const reply = !nextEligibility.ageEligible && nextEligibility.age !== undefined
         ? `Thank you. Our standard rental age range is 25 to 65, so we may not be able to proceed with this enquiry.\n\n${HANDOFF_24H}`
-        : `Thanks. I still need ${missing.join(", ")}. Please reply naturally—for example: age 30, valid PCO badge, 3 points.`;
+        : `Thanks. I still need ${missing.join(", ")}. Please reply naturally—for example: I’m 30, I have a valid PCO badge, and I have 3 points.`;
       const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
       if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
       await db.from("whatsapp_leads").update({ car_enquiry_data: nextEligibility, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
