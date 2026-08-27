@@ -248,7 +248,6 @@ function normalizeDriverName(value: string): string {
 function accidentMissing(data: AccidentData): string[] {
   const missing: string[] = [];
   if (!data.atFaultDriverName) missing.push("the other driver’s full name");
-  if (!data.atFaultDriverLicenseUrl) missing.push("a clear photo of their driving licence");
   if (!data.atFaultVehicleReg) missing.push("their vehicle registration");
   if (!data.insuranceProvider) missing.push("the other driver’s insurance provider");
   if (!data.incidentDate) missing.push("the date of the accident");
@@ -269,7 +268,6 @@ function formatAccidentSummary(data: AccidentData): string {
     `Other driver: ${data.atFaultDriverName ?? "Not supplied"}`,
     `Other vehicle registration: ${data.atFaultVehicleReg ?? "Not supplied"}`,
     `Insurance provider: ${data.insuranceProvider ?? "Not supplied"}`,
-    `Licence image: ${data.atFaultDriverLicenseUrl ? "Received" : "Missing"}`,
     `Accident date: ${data.incidentDate ?? "Not supplied"}`,
     `Accident time: ${data.incidentTime ?? "Not supplied"}`,
     `Location: ${data.location ?? "Not supplied"}`,
@@ -1152,7 +1150,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     const keyEvidenceVerified = next.keyEvidenceVerification?.status === "verified" || next.keyVideoVerification?.status === "received_pending_review";
     const mediaComplete = Boolean(next.vehiclePhotoUrl && vehicleVerified && next.keyEvidenceUrl && keyEvidenceVerified);
     if (mediaComplete && next.keyMediaChecked && isPositiveClosure(content) && lastAgentMessage.toLowerCase().includes("is that all for today")) {
-      const summary = `Emergency breakdown case\n\nGarage: ${AUTO_SURGEON_ADDRESS}\nMap: ${AUTO_SURGEON_MAP}\nKey photo: Received\nKey video: Received`;
+      const summary = `Emergency breakdown case\n\nGarage: ${AUTO_SURGEON_ADDRESS}\nMap: ${AUTO_SURGEON_MAP}\nVehicle photo: Verified\nKey evidence: ${next.keyVideoUrl ? "Video received" : "Photo verified"}`;
       const { error: caseError } = await db.from("accident_cases").insert({
         user_id: userId,
         source_lead_id: leadId,
@@ -1227,16 +1225,17 @@ export async function handleAgentWebhookRequest(request: Request) {
         normalizeDriverName(candidate.driver_name ?? "") === normalizeDriverName(next.driverName ?? ""),
       );
       if (!driver) {
-        const reply = "🚨 I could not verify that driver name and registration together in our CRM. Please check the spelling and registration and send them again.";
+        const reply = "🚨 I could not verify that driver name and registration against an active rental. Our team will review this request. Please check the spelling and registration.";
         const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
-        if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
-        const alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
-        return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, telegram_alert: alert });
+        if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, handoff: true, session_id: sessionId });
+        await db.from("whatsapp_leads").update({ status: "needs_human", customer_type: "needs_human", ai_paused: true, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+        const alert = await sendTelegramAlert({ name: leadName, phone, reason: "Accident driver and registration could not be verified against an active rental", leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
+        return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, telegram_alert: alert, needs_human: true });
       }
       next.verified = true;
       next.vehicleId = driver.vehicle_id ?? null;
       customerType = "existing_customer";
-      const reply = "✅ Your driver details have been verified in our CRM. Please now send the following information:\\n\\n1. The other driver’s full name and a clear picture of their driving licence\\n2. Their vehicle registration\\n3. The date and time of the accident\\n4. The place of the accident\\n5. A description of what happened\\n6. All photos and videos of the accident\\n\\nYou can send the details in separate messages. I will tell you if anything is still missing.";
+      const reply = "✅ Your driver details have been verified in our CRM. Please now send the following information:\\n\\n1. The other driver’s full name\\n2. Their vehicle registration\\n3. Their insurance provider\\n4. The date and time of the accident\\n5. The place of the accident\\n6. A description of what happened\\n7. Photos and/or videos of the accident\\n\\nYou can send the details in separate messages. I will tell you if anything is still missing.";
       const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
       if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
       await db.from("whatsapp_leads").update({ accident_data: next, customer_type: customerType, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
