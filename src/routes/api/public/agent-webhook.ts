@@ -37,7 +37,7 @@ const WEBSITE_CATALOG = [
 const STANDARD_TERMS =
   "Minimum 6-week contract; 5,000 miles per month for all vehicles except Mercedes EQE and EQS, which have 4,000 miles per month; insurance and servicing included.";
 const CAR_ELIGIBILITY_PROMPT =
-  "Before we look at available vehicles, please confirm three things:\n\n1. Are you aged between 25 and 65 years old?\n2. Do you possess a valid PCO badge?\n3. Do you have any penalty points? If you have fewer than 6 points, renting with us may be difficult.\n\nPlease reply with your age, whether you have a valid PCO badge, and how many points you have.";
+  "Before we look at available vehicles, please confirm three things:\n\n1. Are you aged between 25 and 65 years old?\n2. Do you possess a valid PCO badge?\n3. Do you have any penalty points? If you have fewer than 6 points, renting with us may be difficult.\n\nFor your answer, please reply simply: Yes, Yes, and specify your points. For example: 1. Yes 2. Yes 3. Yes - 3 points.";
 const HANDOFF_24H =
   "Our team will get back to you within 24 hours. Please do not contact this number — we will contact you first.";
 
@@ -298,6 +298,16 @@ function parseCarEligibility(text: string): CarEligibility {
   const lower = text.toLowerCase().replace(/[’]/g, "'");
   const result: CarEligibility = {};
 
+  // Customers often answer the three numbered questions compactly, for
+  // example: "1.Yes 2.Yes 3.Yes-3". Treat those as answers to the
+  // eligibility questions rather than sending the message to the generic AI.
+  const numberedAge = lower.match(/(?:^|[\s,])1\s*[.)-]?\s*(yes|yeah|yep|no|nope)\b/i);
+  if (numberedAge) result.ageEligible = /^(?:yes|yeah|yep)$/i.test(numberedAge[1]);
+  const numberedBadge = lower.match(/(?:^|[\s,])2\s*[.)-]?\s*(yes|yeah|yep|no|nope)\b/i);
+  if (numberedBadge) result.pcoBadge = /^(?:yes|yeah|yep)$/i.test(numberedBadge[1]);
+  const numberedPoints = lower.match(/(?:^|[\s,])3\s*[.)-]?\s*(?:yes|yeah|yep|no|nope)?\s*[-:=]?\s*(\d{1,2})\b/i);
+  if (numberedPoints) result.points = Number(numberedPoints[1]);
+
   // Accept natural answers such as “I am 40”, “40 years old”, “age: 40”,
   // or the compact “40, full UK, 0 points”.
   const labelledAge = lower.match(/(?:\b(?:age|aged)\b|\b(?:i\s*am|i'm|im)\b)\s*(?:is|:)?\s*(\d{2})/i);
@@ -327,7 +337,7 @@ function parseCarEligibility(text: string): CarEligibility {
 
 function eligibilityMissing(data: CarEligibility): string[] {
   const missing: string[] = [];
-  if (data.age === undefined || data.age === null) missing.push("your age");
+  if (data.ageEligible !== true && (data.age === undefined || data.age === null)) missing.push("whether your age is between 25 and 65");
   else if (!data.ageEligible) missing.push("confirmation that your age is between 25 and 65");
   if (data.pcoBadge === undefined) missing.push("whether you have a valid PCO badge");
   else if (!data.pcoBadge) missing.push("a valid PCO badge");
@@ -989,7 +999,11 @@ export async function handleAgentWebhookRequest(request: Request) {
   const option = rawOption ??
     (!leadIntent && isBreakdownRequest(content) ? 2 : !leadIntent && isAccidentRequest(content) ? 3 : !leadIntent && isCarRequest(content) ? 1 : null);
 
-  if (!option && (leadIntent === "book_car" || /are you aged between 25 and 65|valid pco badge|pc[o0] badge|penalty points/i.test(lastAgentMessage))) {
+  const carEligibilityActive =
+    leadIntent === "book_car" ||
+    (!carEligibility.completed && Object.keys(carEligibility).length > 0) ||
+    /are you aged between 25 and 65|valid pco badge|pc[o0] badge|penalty points/i.test(lastAgentMessage);
+  if (!option && carEligibilityActive) {
     const incomingEligibility = parseCarEligibility(content);
     const nextEligibility: CarEligibility = { ...carEligibility, ...incomingEligibility };
     const missing = eligibilityMissing(nextEligibility);
