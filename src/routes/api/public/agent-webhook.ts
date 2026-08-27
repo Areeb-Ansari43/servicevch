@@ -294,7 +294,7 @@ function isTermsResponse(text: string): boolean {
   return /^(?:yes|no|yeah|nope|yep|not yet|i(?:'m| am) not sure)[.!\s]*$/i.test(text.trim());
 }
 
-function parseCarEligibility(text: string): CarEligibility {
+function parseCarEligibility(text: string, existing: CarEligibility = {}): CarEligibility {
   const lower = text.toLowerCase().replace(/[’]/g, "'");
   const result: CarEligibility = {};
 
@@ -329,6 +329,18 @@ function parseCarEligibility(text: string): CarEligibility {
   } else {
     const pointsMatch = lower.match(/(?:points?|penalty\s+points?)\s*(?:are|is|:|=)?\s*(\d{1,2})|\b(\d{1,2})\s*(?:penalty\s+)?points?\b/i);
     if (pointsMatch) result.points = Number(pointsMatch[1] ?? pointsMatch[2]);
+  }
+
+  // Also support the simple conversational sequence requested by the
+  // business: "Yes", "Yes", then "Yes 0". Assign a standalone affirmative
+  // to the next unanswered question, using the persisted state to preserve
+  // answers across separate WhatsApp messages.
+  const simpleAnswer = lower.match(/^\s*(yes|yeah|yep|no|nope)(?:\s+(\d{1,2}))?\s*[.!]?\s*$/i);
+  if (simpleAnswer) {
+    const affirmative = /^(?:yes|yeah|yep)$/i.test(simpleAnswer[1]);
+    if (existing.ageEligible === undefined && result.ageEligible === undefined) result.ageEligible = affirmative;
+    else if (existing.pcoBadge === undefined && result.pcoBadge === undefined) result.pcoBadge = affirmative;
+    if (simpleAnswer[2] !== undefined && result.points === undefined) result.points = Number(simpleAnswer[2]);
   }
 
   result.completed = result.ageEligible !== undefined && result.pcoBadge !== undefined && result.points !== undefined;
@@ -1004,8 +1016,9 @@ export async function handleAgentWebhookRequest(request: Request) {
     (!carEligibility.completed && Object.keys(carEligibility).length > 0) ||
     /are you aged between 25 and 65|valid pco badge|pc[o0] badge|penalty points/i.test(lastAgentMessage);
   if (!option && carEligibilityActive) {
-    const incomingEligibility = parseCarEligibility(content);
+    const incomingEligibility = parseCarEligibility(content, carEligibility);
     const nextEligibility: CarEligibility = { ...carEligibility, ...incomingEligibility };
+    nextEligibility.completed = eligibilityMissing(nextEligibility).length === 0;
     const missing = eligibilityMissing(nextEligibility);
     if (missing.length || !nextEligibility.completed) {
         const reply = !nextEligibility.ageEligible && nextEligibility.age !== undefined
