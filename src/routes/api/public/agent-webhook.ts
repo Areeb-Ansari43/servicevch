@@ -1035,11 +1035,15 @@ export async function handleAgentWebhookRequest(request: Request) {
     .map((turn) => turn.content)
     .join("\n");
   const carEligibilityPromptActive = /before we look at available vehicles|are you aged between 25 and 65|valid pco badge|pc[o0] badge|penalty points|please reply simply: yes, yes/i.test(recentAgentMessages);
+  const accidentPromptActive = /accident support|accident verification|your full name and the vehicle registration|other driver|accident report/i.test(recentAgentMessages);
+  const accidentActive = leadIntent === "report_accident" || accidentPromptActive;
   const carEligibilityActive =
-    compactEligibilityAnswer ||
-    leadIntent === "book_car" ||
-    carEligibilityPromptActive ||
-    (!carEligibility.completed && Object.keys(carEligibility).length > 0);
+    !accidentActive && (
+      compactEligibilityAnswer ||
+      leadIntent === "book_car" ||
+      carEligibilityPromptActive ||
+      (!carEligibility.completed && Object.keys(carEligibility).length > 0)
+    );
   if (!option && carEligibilityActive) {
     const incomingEligibility = parseCarEligibility(content, carEligibility);
     const nextEligibility: CarEligibility = { ...carEligibility, ...incomingEligibility };
@@ -1108,7 +1112,7 @@ export async function handleAgentWebhookRequest(request: Request) {
       ? `Car Enquiry\n\n${CAR_ELIGIBILITY_PROMPT}`
       : option === 2
         ? `🛠️ Emergency Breakdown\n\nPlease arrange for the vehicle to be dropped off at our garage:\n\n${AUTO_SURGEON_ADDRESS}\n\n📍 Clickable map: ${AUTO_SURGEON_MAP}\n\nOnce the address has been sent, contact your own breakdown recovery provider, such as a local recovery company or RAC. Virtual Car Hire does not provide the recovery vehicle.\n\nPlease park the vehicle in front of The Auto Surgeon and send:\n1. One clear photo of the vehicle parked in front of the garage.\n2. Either a photo or video showing the key being placed in the letter box.\n\nI will check both pieces of evidence before we close the case.`
-        : "🚨 Accident Support\n\nWe are sorry to hear you have been in an accident. We are here to help guide you through the next steps safely.\n\nTo get started, please provide your full name:";
+        : "🚨 Accident Support\n\nWe are sorry to hear you have been in an accident. We are here to help guide you through the next steps safely.\n\nTo get started, please provide your full name and vehicle registration number together. We will cross-check both against our active CRM records before collecting the accident details.";
     const intent = option === 1 ? "book_car" : option === 2 ? "emergency_breakdown" : "report_accident";
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
     if (outbound.sent) {
@@ -1119,7 +1123,7 @@ export async function handleAgentWebhookRequest(request: Request) {
         content: reply,
         session_id: sessionId,
       });
-      await db.from("whatsapp_leads").update({ intent, ai_summary: reply, ai_paused: false, closed_at: null, car_enquiry_data: option === 1 ? {} : carEligibility, breakdown_data: option === 2 ? { ...breakdownData, garageInstructionsSent: true } : breakdownData, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+      await db.from("whatsapp_leads").update({ intent, ai_summary: reply, ai_paused: false, closed_at: null, car_enquiry_data: option === 1 || option === 3 ? {} : carEligibility, breakdown_data: option === 2 ? { ...breakdownData, garageInstructionsSent: true } : breakdownData, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
     }
     let alert: { sent: boolean; reason?: string } = { sent: false, reason: "not_needed" };
     if (!outbound.sent) {
