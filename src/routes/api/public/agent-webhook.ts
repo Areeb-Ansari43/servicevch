@@ -301,6 +301,13 @@ function parseCarEligibility(text: string, existing: CarEligibility = {}): CarEl
   // Customers often answer the three numbered questions compactly, for
   // example: "1.Yes 2.Yes 3.Yes-3". Treat those as answers to the
   // eligibility questions rather than sending the message to the generic AI.
+  const compactThreeAnswers = lower.match(/^\s*(yes|yeah|yep|no|nope)\s*(?:[\n,;|/]+|\s+)(yes|yeah|yep|no|nope)\s*(?:[\n,;|/]+|\s+)(yes|yeah|yep|no|nope)\s*(?:[-–—:=\s]+)\s*(\d{1,2})\s*$/i);
+  if (compactThreeAnswers) {
+    result.ageEligible = /^(?:yes|yeah|yep)$/i.test(compactThreeAnswers[1]);
+    result.pcoBadge = /^(?:yes|yeah|yep)$/i.test(compactThreeAnswers[2]);
+    result.points = Number(compactThreeAnswers[4]);
+  }
+
   const numberedAge = lower.match(/(?:^|[\s,])1\s*[.)-]?\s*(yes|yeah|yep|no|nope)\b/i);
   if (numberedAge) result.ageEligible = /^(?:yes|yeah|yep)$/i.test(numberedAge[1]);
   const numberedBadge = lower.match(/(?:^|[\s,])2\s*[.)-]?\s*(yes|yeah|yep|no|nope)\b/i);
