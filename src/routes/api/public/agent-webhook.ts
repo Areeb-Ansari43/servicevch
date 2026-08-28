@@ -1074,9 +1074,11 @@ export async function handleAgentWebhookRequest(request: Request) {
       carEligibilityPromptActive ||
       (!carEligibility.completed && Object.keys(carEligibility).length > 0)
     );
-  const selectedVehicleRequest = !option && leadIntent === "book_car" && findSelectedVehicle(content, (fleet ?? []) as FleetVehicle[]) && (/(which vehicle|which car|available|fleet|vehicles currently marked|make and model)/i.test(lastAgentMessage) || carEligibility.completed || carEligibility.ageEligible !== undefined);
+  const matchedVehicle = !option ? findSelectedVehicle(content, (fleet ?? []) as FleetVehicle[]) : undefined;
+  const selectedVehicleRequest = !option && Boolean(matchedVehicle) && (/(which vehicle|which car|available|fleet|vehicles currently marked|make and model)/i.test(lastAgentMessage) || leadIntent === "book_car" || carEligibility.completed || carEligibility.ageEligible !== undefined);
+  if (matchedVehicle) console.info("[agent-webhook] vehicle selection candidate", { leadId, content, matchedVehicle: `${matchedVehicle.make} ${matchedVehicle.model}`, selectedVehicleRequest });
   if (selectedVehicleRequest) {
-    const selected = findSelectedVehicle(content, (fleet ?? []) as FleetVehicle[]);
+    const selected = matchedVehicle;
     if (selected) {
       const reply = formatVehicleDetails(selected);
       const selectedVehicle = {
