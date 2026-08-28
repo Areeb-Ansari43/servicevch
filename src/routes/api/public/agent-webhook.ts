@@ -314,12 +314,12 @@ function parseCarEligibility(text: string, existing: CarEligibility = {}): CarEl
   // Customers often answer the three numbered questions compactly, for
   // example: "1.Yes 2.Yes 3.Yes-3". Treat those as answers to the
   // eligibility questions rather than sending the message to the generic AI.
-  const compactThreeAnswers = lower.match(/^\s*(yes|yeah|yep|no|nope)\s*(?:[\n,;|/]+|\s+)(yes|yeah|yep|no|nope)\s*(?:[\n,;|/]+|\s+)(yes|yeah|yep|no|nope)\s*(?:[-–—:=\s]+)\s*(\d{1,2})\s*$/i);
+  const compactThreeAnswers = lower.match(/^\s*(yes|yeah|yep|no|nope)\s*(?:[\n,;|/]+|\s+)(yes|yeah|yep|no|nope)\s*(?:[\n,;|/]+|\s+)(yes|yeah|yep|no|nope)(?:\s*(?:[-–—:=\s]+)\s*(\d{1,2})\s*(?:points?)?)?\s*$/i);
   const compactTwoYesPoints = lower.match(/^\s*(yes|yeah|yep|no|nope)\s*(?:[\n,;|/]+|\s+)(yes|yeah|yep|no|nope)\s*(?:[-–—:=\s]+)\s*(\d{1,2})\s*$/i);
   if (compactThreeAnswers) {
     result.ageEligible = /^(?:yes|yeah|yep)$/i.test(compactThreeAnswers[1]);
     result.pcoBadge = /^(?:yes|yeah|yep)$/i.test(compactThreeAnswers[2]);
-    result.points = Number(compactThreeAnswers[4]);
+    result.points = compactThreeAnswers[4] === undefined ? (/^(?:no|nope)$/i.test(compactThreeAnswers[3]) ? 0 : undefined) : Number(compactThreeAnswers[4]);
   } else if (compactTwoYesPoints) {
     result.ageEligible = /^(?:yes|yeah|yep)$/i.test(compactTwoYesPoints[1]);
     result.pcoBadge = /^(?:yes|yeah|yep)$/i.test(compactTwoYesPoints[2]);
@@ -981,7 +981,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     .from("vehicles")
     .select("reg, make, model, year, fuel_type, status, next_mot_date, pco_expiry_date");
 
-  const compactEligibilityAnswer = /^\s*(?:(?:yes|yeah|yep|no|nope)[\s,;|/]+){1,2}(?:yes|yeah|yep|no|nope)\s*(?:[-–—:=\s]+)\s*\d{1,2}\s*(?:points?)?\s*$/i.test(content);
+  const compactEligibilityAnswer = /^\s*(?:(?:yes|yeah|yep|no|nope)[\s,;|/]+){1,2}(?:yes|yeah|yep|no|nope)(?:\s*(?:[-–—:=\s]+)\s*\d{1,2}\s*(?:points?)?)?\s*$/i.test(content);
   const accidentIdentityCandidate = parseAccidentIdentity(content);
   const accidentIdentityReply = Boolean(accidentIdentityCandidate?.registration || (extractReg(content) && /[A-Za-z]{2}\s?\d{2}\s?[A-Za-z]{3}/i.test(content)));
   const rawOption = compactEligibilityAnswer ? null : parseMenuOption(content) ?? (/^(?:book_car|enquire_about_a_car|enquire|emergency_breakdown|breakdown|report_accident|accident)$/i.test(content.trim()) ? (/(?:emergency|breakdown)/i.test(content) ? 2 : /(?:accident|report)/i.test(content) ? 3 : 1) : null);
