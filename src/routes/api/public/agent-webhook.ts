@@ -307,79 +307,111 @@ function isTermsResponse(text: string): boolean {
   return /^(?:yes|no|yeah|nope|yep|not yet|i(?:'m| am) not sure)[.!\s]*$/i.test(text.trim());
 }
 
-function parseCarEligibility(text: string, existing: CarEligibility = {}): CarEligibility {
+export function parseCarEligibility(text: string, existing: CarEligibility = {}): CarEligibility {
   const lower = text.toLowerCase().replace(/[’]/g, "'");
   const result: CarEligibility = {};
 
-  // Customers often answer the three numbered questions compactly, for
-  // example: "1.Yes 2.Yes 3.Yes-3". Treat those as answers to the
-  // eligibility questions rather than sending the message to the generic AI.
-  const compactThreeAnswers = lower.match(/^\s*(yes|yeah|yep|no|nope)\s*(?:[\n,;|/]+|\s+)(yes|yeah|yep|no|nope)\s*(?:[\n,;|/]+|\s+)(yes|yeah|yep|no|nope)(?:\s*(?:[-–—:=\s]+)\s*(\d{1,2})\s*(?:points?)?)?\s*$/i);
-  const compactTwoYesPoints = lower.match(/^\s*(yes|yeah|yep|no|nope)\s*(?:[\n,;|/]+|\s+)(yes|yeah|yep|no|nope)\s*(?:[-–—:=\s]+)\s*(\d{1,2})\s*$/i);
-  if (compactThreeAnswers) {
-    result.ageEligible = /^(?:yes|yeah|yep)$/i.test(compactThreeAnswers[1]);
-    result.pcoBadge = /^(?:yes|yeah|yep)$/i.test(compactThreeAnswers[2]);
-    result.points = compactThreeAnswers[4] === undefined ? (/^(?:no|nope)$/i.test(compactThreeAnswers[3]) ? 0 : undefined) : Number(compactThreeAnswers[4]);
-  } else if (compactTwoYesPoints) {
-    result.ageEligible = /^(?:yes|yeah|yep)$/i.test(compactTwoYesPoints[1]);
-    result.pcoBadge = /^(?:yes|yeah|yep)$/i.test(compactTwoYesPoints[2]);
-    result.points = Number(compactTwoYesPoints[3]);
+  const cleanedText = lower.replace(/(?:^|[\s,;|/])([123])\s*[.)-]?\s*/g, " ").trim();
+
+  // 1) Numbered item extraction
+  const numbered1 = lower.match(/(?:^|[\s,;|/])1\s*[.)-]?\s*(yes|yeah|yep|no|nope)\b/i);
+  if (numbered1) result.ageEligible = /^(?:yes|yeah|yep)$/i.test(numbered1[1]);
+
+  const numbered2 = lower.match(/(?:^|[\s,;|/])2\s*[.)-]?\s*(yes|yeah|yep|no|nope)\b/i);
+  if (numbered2) result.pcoBadge = /^(?:yes|yeah|yep)$/i.test(numbered2[1]);
+
+  const numbered3 = lower.match(/(?:^|[\s,;|/])3\s*[.)-]?\s*(yes|yeah|yep|no|nope|none|zero|\d{1,2})?(?:\s*[-:=]?\s*(\d{1,2}|\bno\b|\bnone\b|\bzero\b))?\b/i);
+  if (numbered3) {
+    const val = (numbered3[2] || numbered3[1] || "").toLowerCase();
+    if (val === "no" || val === "none" || val === "zero" || val === "0") {
+      result.points = 0;
+    } else if (/^\d{1,2}$/.test(val)) {
+      result.points = Number(val);
+    }
   }
 
-  const numberedAge = lower.match(/(?:^|[\s,])1\s*[.)-]?\s*(yes|yeah|yep|no|nope)\b/i);
-  if (numberedAge) result.ageEligible = /^(?:yes|yeah|yep)$/i.test(numberedAge[1]);
-  const numberedBadge = lower.match(/(?:^|[\s,])2\s*[.)-]?\s*(yes|yeah|yep|no|nope)\b/i);
-  if (numberedBadge) result.pcoBadge = /^(?:yes|yeah|yep)$/i.test(numberedBadge[1]);
-  const numberedPoints = lower.match(/(?:^|[\s,])3\s*[.)-]?\s*(?:yes|yeah|yep|no|nope)?\s*[-:=]?\s*(\d{1,2})\b/i);
-  if (numberedPoints) result.points = Number(numberedPoints[1]);
-
-  // Accept natural answers such as “I am 40”, “40 years old”, “age: 40”,
-  // or the compact “40, full UK, 0 points”.
-  const labelledAge = lower.match(/(?:\b(?:age|aged)\b|\b(?:i\s*am|i'm|im)\b)\s*(?:is|:)?\s*(\d{2})/i);
-  const anyAge = lower.match(/\b(\d{2})\s*(?:years?\s*old)?\b/);
-  const age = Number(labelledAge?.[1] ?? anyAge?.[1]);
-  if (Number.isFinite(age) && age >= 18 && age <= 99) {
-    result.age = age;
-    result.ageEligible = age >= 25 && age <= 65;
+  // 2) Compact 3-part or 2-part answer extraction
+  if (result.ageEligible === undefined || result.pcoBadge === undefined || result.points === undefined) {
+    const compactMatch = cleanedText.match(/^\s*(yes|yeah|yep|no|nope)\s*(?:[\n,;|/]+\s*|\s+)(yes|yeah|yep|no|nope)\s*(?:[\n,;|/]+\s*|\s+)(?:(\d{1,2}|yes|yeah|yep|no|nope|none|zero)\s*(?:points?)?|(\d{1,2}))\s*$/i);
+    if (compactMatch) {
+      if (result.ageEligible === undefined) result.ageEligible = /^(?:yes|yeah|yep)$/i.test(compactMatch[1]);
+      if (result.pcoBadge === undefined) result.pcoBadge = /^(?:yes|yeah|yep)$/i.test(compactMatch[2]);
+      if (result.points === undefined) {
+        const ptsVal = compactMatch[3] || compactMatch[4];
+        if (/^(?:no|nope|none|zero)$/i.test(ptsVal)) result.points = 0;
+        else if (/^\d{1,2}$/.test(ptsVal)) result.points = Number(ptsVal);
+      }
+    }
   }
 
-  const badgeNegative = /\b(?:no|not|don't|do not|never|can't|cannot|without)\b[^.\n]{0,35}\b(?:have|hold|possess|get|pc[o0])\b[^.\n]{0,20}\b(?:pc[o0]\s*)?(?:badge|licen[cs]e|card|permit)\b|\bno\s+(?:valid\s+)?pc[o0]\s+badge\b/i.test(lower);
-  const badgeMentioned = /\b(?:valid\s+)?pc[o0]\s+(?:badge|licen[cs]e|card|permit)\b|\bpc[o0]\s+approved\b|\bpc[o0]\b/i.test(lower);
-  const positiveBadge = /\b(?:valid|current|active|approved|full)\b[^.\n]{0,25}\b(?:pc[o0]|badge|permit|card)\b|\b(?:yes|yeah|yep|i\s+(?:do|have|hold|possess))\b[^.\n]{0,20}\b(?:it|one|badge|pc[o0])\b/i.test(lower);
-  if (badgeNegative) result.pcoBadge = false;
-  else if ((badgeMentioned && !badgeNegative) || positiveBadge || (/\b(?:yes|yeah|yep)\b/i.test(lower) && !badgeNegative)) result.pcoBadge = true;
-
-  if (/\b(?:no|zero|none)\s+(?:penalty\s+)?points?\b/i.test(lower)) {
-    result.points = 0;
-  } else {
-    const pointsMatch = lower.match(/(?:points?|penalty\s+points?)\s*(?:are|is|:|=)?\s*(\d{1,2})|\b(\d{1,2})\s*(?:penalty\s+)?points?\b/i);
-    if (pointsMatch) result.points = Number(pointsMatch[1] ?? pointsMatch[2]);
+  // 3) Age detection
+  if (result.ageEligible === undefined) {
+    const labelledAge = lower.match(/(?:\b(?:age|aged)\b|\b(?:i\s*am|i'm|im)\b)\s*(?:is|:)?\s*(\d{2})/i);
+    const anyAge = lower.match(/\b(\d{2})\s*(?:years?\s*old)?\b/);
+    const ageVal = Number(labelledAge?.[1] ?? anyAge?.[1]);
+    if (Number.isFinite(ageVal) && ageVal >= 18 && ageVal <= 99) {
+      result.age = ageVal;
+      result.ageEligible = ageVal >= 25 && ageVal <= 65;
+    }
   }
 
-  // Also support the simple conversational sequence requested by the
-  // business: "Yes", "Yes", then "Yes 0". Assign a standalone affirmative
-  // to the next unanswered question, using the persisted state to preserve
-  // answers across separate WhatsApp messages.
-  const simpleAnswer = lower.match(/^\s*(yes|yeah|yep|no|nope)(?:\s+(\d{1,2}))?\s*[.!]?\s*$/i);
-  if (simpleAnswer) {
-    const affirmative = /^(?:yes|yeah|yep)$/i.test(simpleAnswer[1]);
-    if (existing.ageEligible === undefined && result.ageEligible === undefined) result.ageEligible = affirmative;
-    else if (existing.pcoBadge === undefined && result.pcoBadge === undefined) result.pcoBadge = affirmative;
-    if (simpleAnswer[2] !== undefined && result.points === undefined) result.points = Number(simpleAnswer[2]);
-    else if (simpleAnswer[2] === undefined && !affirmative && existing.points === undefined && result.points === undefined) result.points = 0;
+  // 4) PCO Badge detection (only if not already set by numbered/compact answer)
+  if (result.pcoBadge === undefined) {
+    const badgeNegative = /\b(?:no|not|don't|do not|never|can't|cannot|without)\b[^.\n]{0,35}\b(?:have|hold|possess|get|pc[o0])\b[^.\n]{0,20}\b(?:pc[o0]\s*)?(?:badge|licen[cs]e|card|permit)\b|\bno\s+(?:valid\s+)?pc[o0]\s+badge\b/i.test(lower);
+    const badgeMentioned = /\b(?:valid\s+)?pc[o0]\s+(?:badge|licen[cs]e|card|permit)\b|\bpc[o0]\s+approved\b|\bpc[o0]\b/i.test(lower);
+    const positiveBadge = /\b(?:valid|current|active|approved|full)\b[^.\n]{0,25}\b(?:pc[o0]|badge|permit|card)\b|\b(?:yes|yeah|yep|i\s+(?:do|have|hold|possess))\b[^.\n]{0,20}\b(?:it|one|badge|pc[o0])\b/i.test(lower);
+    if (badgeNegative) {
+      result.pcoBadge = false;
+    } else if (positiveBadge || (badgeMentioned && !badgeNegative)) {
+      result.pcoBadge = true;
+    }
   }
 
-  result.completed = result.ageEligible !== undefined && result.pcoBadge !== undefined && result.points !== undefined;
+  // 5) Penalty points detection
+  if (result.points === undefined) {
+    if (/\b(?:no|zero|none|nil|clean)\s+(?:penalty\s+)?points?\b|\bno\s+points\b|\bclean\s+licen[cs]e\b/i.test(lower)) {
+      result.points = 0;
+    } else {
+      const pointsMatch = lower.match(/(?:points?|penalty\s+points?)\s*(?:are|is|:|=)?\s*(\d{1,2})|\b(\d{1,2})\s*(?:penalty\s+)?points?\b/i);
+      if (pointsMatch) result.points = Number(pointsMatch[1] ?? pointsMatch[2]);
+    }
+  }
+
+  // 6) Sequential simple answers ("Yes", "No", "0")
+  if (result.ageEligible === undefined || result.pcoBadge === undefined || result.points === undefined) {
+    const simpleAnswer = lower.match(/^\s*(yes|yeah|yep|no|nope|none|zero)(?:\s+(\d{1,2}))?\s*[.!]?\s*$/i);
+    if (simpleAnswer) {
+      const word = simpleAnswer[1].toLowerCase();
+      const affirmative = /^(?:yes|yeah|yep)$/i.test(word);
+      const isNegativeWord = /^(?:no|nope|none|zero)$/i.test(word);
+
+      if (existing.ageEligible === undefined && result.ageEligible === undefined) {
+        result.ageEligible = affirmative;
+      } else if (existing.pcoBadge === undefined && result.pcoBadge === undefined) {
+        result.pcoBadge = affirmative;
+      } else if (existing.points === undefined && result.points === undefined) {
+        if (simpleAnswer[2] !== undefined) {
+          result.points = Number(simpleAnswer[2]);
+        } else if (isNegativeWord || affirmative) {
+          result.points = 0;
+        }
+      }
+    }
+  }
+
+  const hasAge = result.ageEligible !== undefined || existing.ageEligible !== undefined;
+  const hasPco = result.pcoBadge !== undefined || existing.pcoBadge !== undefined;
+  const hasPoints = result.points !== undefined || existing.points !== undefined;
+  result.completed = hasAge && hasPco && hasPoints;
+
   return result;
 }
 
 function eligibilityMissing(data: CarEligibility): string[] {
   const missing: string[] = [];
   if (data.ageEligible !== true && (data.age === undefined || data.age === null)) missing.push("whether your age is between 25 and 65");
-  else if (!data.ageEligible) missing.push("confirmation that your age is between 25 and 65");
+  else if (!data.ageEligible && data.ageEligible !== undefined) missing.push("confirmation that your age is between 25 and 65");
   if (data.pcoBadge === undefined) missing.push("whether you have a valid PCO badge");
-  else if (!data.pcoBadge) missing.push("a valid PCO badge");
-
   if (data.points === undefined || data.points === null) missing.push("the number of penalty points you have");
   return missing;
 }
@@ -421,31 +453,52 @@ function fuelCategory(value: string | null): "Electric" | "Plug-in-Hybrid" | "Pe
   return "Petrol";
 }
 
-function isAvailable(vehicle: FleetVehicle): boolean {
-  const status = (vehicle.status ?? "").toLowerCase();
-  return ["available", "active", "in stock"].includes(status);
+export function isAvailable(vehicle: FleetVehicle): boolean {
+  const status = (vehicle.status ?? "").toLowerCase().replace(/[\s_-]/g, "");
+  // Strictly available: "available" or "active" (which maps from DB available status in fleet-data).
+  // Strictly exclude unavailable: "rented", "inservice", "offroad", "maintenance", "assigned".
+  if (status.includes("rent") || status.includes("service") || status.includes("off") || status.includes("maint")) {
+    return false;
+  }
+  return status === "available" || status === "active" || status === "instock";
+}
+
+export function normalizeModelKey(model: string): string {
+  return model
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
 }
 
 function websiteMatch(vehicle: FleetVehicle): (typeof WEBSITE_CATALOG)[number] | undefined {
   const make = vehicle.make.toLowerCase();
-  const model = vehicle.model.toLowerCase().replace(/[-_]/g, " ").replace(/\s+/g, " ").trim();
+  const model = normalizeModelKey(vehicle.model);
   return WEBSITE_CATALOG.find((item) => {
-    const itemModel = item.model.toLowerCase().replace(/[-_]/g, " ").replace(/\s+/g, " ").trim();
+    const itemModel = normalizeModelKey(item.model);
     return item.make.toLowerCase() === make && (itemModel.includes(model.replace(/ estate$/i, "")) || model.includes(itemModel.replace(/ ev$/i, "")));
   });
 }
 
-function uniqueAvailableVehicles(fleet: FleetVehicle[]): FleetVehicle[] {
+export function uniqueAvailableVehicles(fleet: FleetVehicle[]): FleetVehicle[] {
   const unique = new Map<string, FleetVehicle>();
   for (const vehicle of fleet.filter(isAvailable)) {
-    const key = `${vehicle.make.trim().toLowerCase()}|${vehicle.model.trim().toLowerCase()}`;
+    const key = `${vehicle.make.trim().toLowerCase()}|${normalizeModelKey(vehicle.model)}`;
     if (!unique.has(key)) unique.set(key, vehicle);
   }
   return [...unique.values()];
 }
 
-function availableYears(fleet: FleetVehicle[], vehicle: FleetVehicle): string {
-  const years = [...new Set(fleet.filter((candidate) => isAvailable(candidate) && candidate.make.trim().toLowerCase() === vehicle.make.trim().toLowerCase() && candidate.model.trim().toLowerCase() === vehicle.model.trim().toLowerCase()).map((candidate) => candidate.year).filter((year): year is number => year != null))].sort();
+export function availableYears(fleet: FleetVehicle[], vehicle: FleetVehicle): string {
+  const years = [...new Set(
+    fleet
+      .filter(
+        (candidate) =>
+          isAvailable(candidate) &&
+          candidate.make.trim().toLowerCase() === vehicle.make.trim().toLowerCase() &&
+          normalizeModelKey(candidate.model) === normalizeModelKey(vehicle.model)
+      )
+      .map((candidate) => candidate.year)
+      .filter((year): year is number => year != null)
+  )].sort();
   return years.length ? years.join(", ") : "year to confirm";
 }
 
@@ -1077,7 +1130,7 @@ export async function handleAgentWebhookRequest(request: Request) {
       (!carEligibility.completed && Object.keys(carEligibility).length > 0)
     );
   const matchedVehicle = !option && !accidentIdentityReply ? findSelectedVehicle(content, (fleet ?? []) as FleetVehicle[]) : undefined;
-  const selectedVehicleRequest = !option && Boolean(matchedVehicle) && (/(which vehicle|which car|available|fleet|vehicles currently marked|make and model)/i.test(lastAgentMessage) || leadIntent === "book_car" || carEligibility.completed || carEligibility.ageEligible !== undefined);
+  const selectedVehicleRequest = !option && Boolean(matchedVehicle) && carEligibility.pcoBadge !== false && (/(which vehicle|which car|available|fleet|vehicles currently marked|make and model)/i.test(lastAgentMessage) || leadIntent === "book_car" || carEligibility.completed || carEligibility.ageEligible !== undefined);
   if (matchedVehicle) console.info("[agent-webhook] vehicle selection candidate", { leadId, content, matchedVehicle: `${matchedVehicle.make} ${matchedVehicle.model}`, selectedVehicleRequest });
   if (selectedVehicleRequest) {
     const selected = matchedVehicle;
@@ -1138,7 +1191,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, eligibility: nextEligibility, needs_human: !outbound.sent });
   }
 
-  if (!option && leadIntent === "book_car" && lastAgentMessage.toLowerCase().includes("full name") && isLikelyFullName(content)) {
+  if (!option && leadIntent === "book_car" && carEligibility.pcoBadge !== false && lastAgentMessage.toLowerCase().includes("full name") && isLikelyFullName(content)) {
     const customerName = content.trim();
     const reply = formatCustomerFleet((fleet ?? []) as FleetVehicle[]);
     await db.from("whatsapp_leads").update({ contact_name: customerName, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
@@ -1147,7 +1200,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     return json({ ok: true, lead_id: leadId, reply, outbound, needs_human: !outbound.sent });
   }
 
-  if (!option && leadIntent === "book_car" && findSelectedVehicle(content, (fleet ?? []) as FleetVehicle[]) && /(which vehicle|which car|available|fleet|vehicles currently marked)/i.test(lastAgentMessage)) {
+  if (!option && leadIntent === "book_car" && carEligibility.pcoBadge !== false && findSelectedVehicle(content, (fleet ?? []) as FleetVehicle[]) && /(which vehicle|which car|available|fleet|vehicles currently marked)/i.test(lastAgentMessage)) {
     const selected = findSelectedVehicle(content, (fleet ?? []) as FleetVehicle[]);
     if (selected) {
       const reply = formatVehicleDetails(selected);
