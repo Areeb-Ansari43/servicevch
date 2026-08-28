@@ -9,53 +9,28 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as AccidentCasesRouteImport } from './routes/accident-cases'
-import { Route as AddVehicleRouteImport } from './routes/add-vehicle'
-import { Route as DriverMileageRouteImport } from './routes/driver-mileage'
-import { Route as DriversRouteImport } from './routes/drivers'
-import { Route as GenerationsRouteImport } from './routes/generations'
-import { Route as LoginRouteImport } from './routes/login'
 import { Route as WhatsappLeadsRouteImport } from './routes/whatsapp-leads'
-import { Route as ApiWebhookRouteImport } from './routes/api/webhook'
-import { Route as ServiceHistoryIndexRouteImport } from './routes/service-history.index'
-import { Route as ServiceHistoryNewRouteImport } from './routes/service-history.new'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as GenerationsRouteImport } from './routes/generations'
+import { Route as DriversRouteImport } from './routes/drivers'
+import { Route as DriverMileageRouteImport } from './routes/driver-mileage'
+import { Route as AddVehicleRouteImport } from './routes/add-vehicle'
+import { Route as AccidentCasesRouteImport } from './routes/accident-cases'
+import { Route as IndexRouteImport } from './routes/index'
 import { Route as VehiclesIndexRouteImport } from './routes/vehicles.index'
+import { Route as ServiceHistoryIndexRouteImport } from './routes/service-history.index'
 import { Route as VehiclesRegRouteImport } from './routes/vehicles.$reg'
-import { Route as ApiJobsInactivityRouteImport } from './routes/api/jobs/inactivity'
-import { Route as ApiPublicAgentWebhookRouteImport } from './routes/api/public/agent-webhook'
-import { Route as ApiPublicAiIntakeRouteImport } from './routes/api/public/ai-intake'
-import { Route as ApiPublicExpiryAlertsRouteImport } from './routes/api/public/expiry-alerts'
+import { Route as ServiceHistoryNewRouteImport } from './routes/service-history.new'
+import { Route as ApiWebhookRouteImport } from './routes/api/webhook'
 import { Route as ApiPublicTelegramBotRouteImport } from './routes/api/public/telegram-bot'
+import { Route as ApiPublicExpiryAlertsRouteImport } from './routes/api/public/expiry-alerts'
+import { Route as ApiPublicAiIntakeRouteImport } from './routes/api/public/ai-intake'
+import { Route as ApiPublicAgentWebhookRouteImport } from './routes/api/public/agent-webhook'
+import { Route as ApiJobsInactivityRouteImport } from './routes/api/jobs/inactivity'
 
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AccidentCasesRoute = AccidentCasesRouteImport.update({
-  id: '/accident-cases',
-  path: '/accident-cases',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AddVehicleRoute = AddVehicleRouteImport.update({
-  id: '/add-vehicle',
-  path: '/add-vehicle',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DriverMileageRoute = DriverMileageRouteImport.update({
-  id: '/driver-mileage',
-  path: '/driver-mileage',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DriversRoute = DriversRouteImport.update({
-  id: '/drivers',
-  path: '/drivers',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const GenerationsRoute = GenerationsRouteImport.update({
-  id: '/generations',
-  path: '/generations',
+const WhatsappLeadsRoute = WhatsappLeadsRouteImport.update({
+  id: '/whatsapp-leads',
+  path: '/whatsapp-leads',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -63,24 +38,34 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const WhatsappLeadsRoute = WhatsappLeadsRouteImport.update({
-  id: '/whatsapp-leads',
-  path: '/whatsapp-leads',
+const GenerationsRoute = GenerationsRouteImport.update({
+  id: '/generations',
+  path: '/generations',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiWebhookRoute = ApiWebhookRouteImport.update({
-  id: '/api/webhook',
-  path: '/api/webhook',
+const DriversRoute = DriversRouteImport.update({
+  id: '/drivers',
+  path: '/drivers',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ServiceHistoryIndexRoute = ServiceHistoryIndexRouteImport.update({
-  id: '/service-history/',
-  path: '/service-history/',
+const DriverMileageRoute = DriverMileageRouteImport.update({
+  id: '/driver-mileage',
+  path: '/driver-mileage',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ServiceHistoryNewRoute = ServiceHistoryNewRouteImport.update({
-  id: '/service-history/new',
-  path: '/service-history/new',
+const AddVehicleRoute = AddVehicleRouteImport.update({
+  id: '/add-vehicle',
+  path: '/add-vehicle',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccidentCasesRoute = AccidentCasesRouteImport.update({
+  id: '/accident-cases',
+  path: '/accident-cases',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const VehiclesIndexRoute = VehiclesIndexRouteImport.update({
@@ -88,24 +73,29 @@ const VehiclesIndexRoute = VehiclesIndexRouteImport.update({
   path: '/vehicles/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ServiceHistoryIndexRoute = ServiceHistoryIndexRouteImport.update({
+  id: '/service-history/',
+  path: '/service-history/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const VehiclesRegRoute = VehiclesRegRouteImport.update({
   id: '/vehicles/$reg',
   path: '/vehicles/$reg',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiJobsInactivityRoute = ApiJobsInactivityRouteImport.update({
-  id: '/api/jobs/inactivity',
-  path: '/api/jobs/inactivity',
+const ServiceHistoryNewRoute = ServiceHistoryNewRouteImport.update({
+  id: '/service-history/new',
+  path: '/service-history/new',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiPublicAgentWebhookRoute = ApiPublicAgentWebhookRouteImport.update({
-  id: '/api/public/agent-webhook',
-  path: '/api/public/agent-webhook',
+const ApiWebhookRoute = ApiWebhookRouteImport.update({
+  id: '/api/webhook',
+  path: '/api/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiPublicAiIntakeRoute = ApiPublicAiIntakeRouteImport.update({
-  id: '/api/public/ai-intake',
-  path: '/api/public/ai-intake',
+const ApiPublicTelegramBotRoute = ApiPublicTelegramBotRouteImport.update({
+  id: '/api/public/telegram-bot',
+  path: '/api/public/telegram-bot',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicExpiryAlertsRoute = ApiPublicExpiryAlertsRouteImport.update({
@@ -113,9 +103,19 @@ const ApiPublicExpiryAlertsRoute = ApiPublicExpiryAlertsRouteImport.update({
   path: '/api/public/expiry-alerts',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiPublicTelegramBotRoute = ApiPublicTelegramBotRouteImport.update({
-  id: '/api/public/telegram-bot',
-  path: '/api/public/telegram-bot',
+const ApiPublicAiIntakeRoute = ApiPublicAiIntakeRouteImport.update({
+  id: '/api/public/ai-intake',
+  path: '/api/public/ai-intake',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicAgentWebhookRoute = ApiPublicAgentWebhookRouteImport.update({
+  id: '/api/public/agent-webhook',
+  path: '/api/public/agent-webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiJobsInactivityRoute = ApiJobsInactivityRouteImport.update({
+  id: '/api/jobs/inactivity',
+  path: '/api/jobs/inactivity',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -266,46 +266,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/accident-cases': {
-      id: '/accident-cases'
-      path: '/accident-cases'
-      fullPath: '/accident-cases'
-      preLoaderRoute: typeof AccidentCasesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/add-vehicle': {
-      id: '/add-vehicle'
-      path: '/add-vehicle'
-      fullPath: '/add-vehicle'
-      preLoaderRoute: typeof AddVehicleRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/driver-mileage': {
-      id: '/driver-mileage'
-      path: '/driver-mileage'
-      fullPath: '/driver-mileage'
-      preLoaderRoute: typeof DriverMileageRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/drivers': {
-      id: '/drivers'
-      path: '/drivers'
-      fullPath: '/drivers'
-      preLoaderRoute: typeof DriversRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/generations': {
-      id: '/generations'
-      path: '/generations'
-      fullPath: '/generations'
-      preLoaderRoute: typeof GenerationsRouteImport
+    '/whatsapp-leads': {
+      id: '/whatsapp-leads'
+      path: '/whatsapp-leads'
+      fullPath: '/whatsapp-leads'
+      preLoaderRoute: typeof WhatsappLeadsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -315,32 +280,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/whatsapp-leads': {
-      id: '/whatsapp-leads'
-      path: '/whatsapp-leads'
-      fullPath: '/whatsapp-leads'
-      preLoaderRoute: typeof WhatsappLeadsRouteImport
+    '/generations': {
+      id: '/generations'
+      path: '/generations'
+      fullPath: '/generations'
+      preLoaderRoute: typeof GenerationsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/webhook': {
-      id: '/api/webhook'
-      path: '/api/webhook'
-      fullPath: '/api/webhook'
-      preLoaderRoute: typeof ApiWebhookRouteImport
+    '/drivers': {
+      id: '/drivers'
+      path: '/drivers'
+      fullPath: '/drivers'
+      preLoaderRoute: typeof DriversRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/service-history/': {
-      id: '/service-history/'
-      path: '/service-history'
-      fullPath: '/service-history/'
-      preLoaderRoute: typeof ServiceHistoryIndexRouteImport
+    '/driver-mileage': {
+      id: '/driver-mileage'
+      path: '/driver-mileage'
+      fullPath: '/driver-mileage'
+      preLoaderRoute: typeof DriverMileageRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/service-history/new': {
-      id: '/service-history/new'
-      path: '/service-history/new'
-      fullPath: '/service-history/new'
-      preLoaderRoute: typeof ServiceHistoryNewRouteImport
+    '/add-vehicle': {
+      id: '/add-vehicle'
+      path: '/add-vehicle'
+      fullPath: '/add-vehicle'
+      preLoaderRoute: typeof AddVehicleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/accident-cases': {
+      id: '/accident-cases'
+      path: '/accident-cases'
+      fullPath: '/accident-cases'
+      preLoaderRoute: typeof AccidentCasesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/vehicles/': {
@@ -350,6 +329,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VehiclesIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/service-history/': {
+      id: '/service-history/'
+      path: '/service-history'
+      fullPath: '/service-history/'
+      preLoaderRoute: typeof ServiceHistoryIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/vehicles/$reg': {
       id: '/vehicles/$reg'
       path: '/vehicles/$reg'
@@ -357,25 +343,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VehiclesRegRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/jobs/inactivity': {
-      id: '/api/jobs/inactivity'
-      path: '/api/jobs/inactivity'
-      fullPath: '/api/jobs/inactivity'
-      preLoaderRoute: typeof ApiJobsInactivityRouteImport
+    '/service-history/new': {
+      id: '/service-history/new'
+      path: '/service-history/new'
+      fullPath: '/service-history/new'
+      preLoaderRoute: typeof ServiceHistoryNewRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/agent-webhook': {
-      id: '/api/public/agent-webhook'
-      path: '/api/public/agent-webhook'
-      fullPath: '/api/public/agent-webhook'
-      preLoaderRoute: typeof ApiPublicAgentWebhookRouteImport
+    '/api/webhook': {
+      id: '/api/webhook'
+      path: '/api/webhook'
+      fullPath: '/api/webhook'
+      preLoaderRoute: typeof ApiWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/ai-intake': {
-      id: '/api/public/ai-intake'
-      path: '/api/public/ai-intake'
-      fullPath: '/api/public/ai-intake'
-      preLoaderRoute: typeof ApiPublicAiIntakeRouteImport
+    '/api/public/telegram-bot': {
+      id: '/api/public/telegram-bot'
+      path: '/api/public/telegram-bot'
+      fullPath: '/api/public/telegram-bot'
+      preLoaderRoute: typeof ApiPublicTelegramBotRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/expiry-alerts': {
@@ -385,11 +371,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicExpiryAlertsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/telegram-bot': {
-      id: '/api/public/telegram-bot'
-      path: '/api/public/telegram-bot'
-      fullPath: '/api/public/telegram-bot'
-      preLoaderRoute: typeof ApiPublicTelegramBotRouteImport
+    '/api/public/ai-intake': {
+      id: '/api/public/ai-intake'
+      path: '/api/public/ai-intake'
+      fullPath: '/api/public/ai-intake'
+      preLoaderRoute: typeof ApiPublicAiIntakeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/agent-webhook': {
+      id: '/api/public/agent-webhook'
+      path: '/api/public/agent-webhook'
+      fullPath: '/api/public/agent-webhook'
+      preLoaderRoute: typeof ApiPublicAgentWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/jobs/inactivity': {
+      id: '/api/jobs/inactivity'
+      path: '/api/jobs/inactivity'
+      fullPath: '/api/jobs/inactivity'
+      preLoaderRoute: typeof ApiJobsInactivityRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
