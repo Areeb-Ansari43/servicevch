@@ -982,6 +982,8 @@ export async function handleAgentWebhookRequest(request: Request) {
     .select("reg, make, model, year, fuel_type, status, next_mot_date, pco_expiry_date");
 
   const compactEligibilityAnswer = /^\s*(?:(?:yes|yeah|yep|no|nope)[\s,;|/]+){1,2}(?:yes|yeah|yep|no|nope)\s*(?:[-–—:=\s]+)\s*\d{1,2}\s*(?:points?)?\s*$/i.test(content);
+  const accidentIdentityCandidate = parseAccidentIdentity(content);
+  const accidentIdentityReply = Boolean(accidentIdentityCandidate?.registration || (extractReg(content) && /[A-Za-z]{2}\s?\d{2}\s?[A-Za-z]{3}/i.test(content)));
   const rawOption = compactEligibilityAnswer ? null : parseMenuOption(content) ?? (/^(?:book_car|enquire_about_a_car|enquire|emergency_breakdown|breakdown|report_accident|accident)$/i.test(content.trim()) ? (/(?:emergency|breakdown)/i.test(content) ? 2 : /(?:accident|report)/i.test(content) ? 3 : 1) : null);
 
   if ((isNewLead || closed) && !isMenuReset(content) && !rawOption && !compactEligibilityAnswer) {
@@ -1066,7 +1068,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     recentAgentMessages.lastIndexOf("accident verification"),
   );
   const carPromptIsMostRecent = lastCarPromptIndex > lastAccidentPromptIndex;
-  const accidentActive = !compactEligibilityAnswer && !carPromptIsMostRecent && (leadIntent === "report_accident" || accidentPromptActive);
+  const accidentActive = !compactEligibilityAnswer && (accidentIdentityReply || (!carPromptIsMostRecent && (leadIntent === "report_accident" || accidentPromptActive)));
   const carEligibilityActive =
     !accidentActive && (
       compactEligibilityAnswer ||
@@ -1074,7 +1076,7 @@ export async function handleAgentWebhookRequest(request: Request) {
       carEligibilityPromptActive ||
       (!carEligibility.completed && Object.keys(carEligibility).length > 0)
     );
-  const matchedVehicle = !option ? findSelectedVehicle(content, (fleet ?? []) as FleetVehicle[]) : undefined;
+  const matchedVehicle = !option && !accidentIdentityReply ? findSelectedVehicle(content, (fleet ?? []) as FleetVehicle[]) : undefined;
   const selectedVehicleRequest = !option && Boolean(matchedVehicle) && (/(which vehicle|which car|available|fleet|vehicles currently marked|make and model)/i.test(lastAgentMessage) || leadIntent === "book_car" || carEligibility.completed || carEligibility.ageEligible !== undefined);
   if (matchedVehicle) console.info("[agent-webhook] vehicle selection candidate", { leadId, content, matchedVehicle: `${matchedVehicle.make} ${matchedVehicle.model}`, selectedVehicleRequest });
   if (selectedVehicleRequest) {
