@@ -495,24 +495,58 @@ function websiteMatch(vehicle: FleetVehicle): (typeof WEBSITE_CATALOG)[number] |
   });
 }
 
+export function simplifyVehicleName(make: string, model: string): { make: string; model: string } {
+  const combined = `${make} ${model}`.toUpperCase().replace(/\s+/g, " ");
+
+  if (combined.includes("MERCEDES") || combined.includes("BENZ")) {
+    if (combined.includes("E220") || combined.includes("E 220")) return { make: "Mercedes", model: "E220D" };
+    if (combined.includes("E300") || combined.includes("E 300")) return { make: "Mercedes", model: "E300" };
+    if (combined.includes("EQE")) return { make: "Mercedes", model: "EQE" };
+    if (combined.includes("EQS")) return { make: "Mercedes", model: "EQS" };
+    if (combined.includes("VITO")) return { make: "Mercedes", model: "Vito" };
+    if (combined.includes("V-CLASS") || combined.includes("V CLASS") || combined.includes("V250") || combined.includes("V 250")) return { make: "Mercedes", model: "V-Class" };
+    return { make: "Mercedes", model: model.replace(/MERCEDES-BENZ|MERCEDES|BENZ/gi, "").trim() || model };
+  }
+
+  if (combined.includes("TOYOTA")) {
+    if (combined.includes("AURIS")) return { make: "Toyota", model: "Auris Estate" };
+    if (combined.includes("COROLLA")) return { make: "Toyota", model: "Corolla" };
+    if (combined.includes("PRIUS")) return { make: "Toyota", model: "Prius" };
+    return { make: "Toyota", model: model.replace(/TOYOTA/gi, "").trim() || model };
+  }
+
+  if (combined.includes("MG")) {
+    if (combined.includes("MG5") || combined.includes("MG 5")) return { make: "MG", model: "5EV" };
+    return { make: "MG", model: model.replace(/MG/gi, "").trim() || model };
+  }
+
+  return { make: make.trim(), model: model.trim() };
+}
+
 export function uniqueAvailableVehicles(fleet: FleetVehicle[]): FleetVehicle[] {
   const unique = new Map<string, FleetVehicle>();
   for (const vehicle of fleet.filter(isAvailable)) {
-    const key = `${vehicle.make.trim().toLowerCase()}|${normalizeModelKey(vehicle.model)}`;
-    if (!unique.has(key)) unique.set(key, vehicle);
+    const simplified = simplifyVehicleName(vehicle.make, vehicle.model);
+    const key = `${simplified.make.toLowerCase()}|${normalizeModelKey(simplified.model)}`;
+    if (!unique.has(key)) {
+      unique.set(key, { ...vehicle, make: simplified.make, model: simplified.model });
+    }
   }
   return [...unique.values()];
 }
 
 export function availableYears(fleet: FleetVehicle[], vehicle: FleetVehicle): string {
+  const simplifiedVehicle = simplifyVehicleName(vehicle.make, vehicle.model);
   const years = [...new Set(
     fleet
-      .filter(
-        (candidate) =>
-          isAvailable(candidate) &&
-          candidate.make.trim().toLowerCase() === vehicle.make.trim().toLowerCase() &&
-          normalizeModelKey(candidate.model) === normalizeModelKey(vehicle.model)
-      )
+      .filter((candidate) => {
+        if (!isAvailable(candidate)) return false;
+        const candidateSimp = simplifyVehicleName(candidate.make, candidate.model);
+        return (
+          candidateSimp.make.toLowerCase() === simplifiedVehicle.make.toLowerCase() &&
+          normalizeModelKey(candidateSimp.model) === normalizeModelKey(simplifiedVehicle.model)
+        );
+      })
       .map((candidate) => candidate.year)
       .filter((year): year is number => year != null)
   )].sort();
@@ -522,7 +556,10 @@ export function availableYears(fleet: FleetVehicle[], vehicle: FleetVehicle): st
 function formatCustomerFleet(fleet: FleetVehicle[]): string {
   const available = uniqueAvailableVehicles(fleet);
   if (!available.length) return `I’m sorry, there are no vehicles currently marked available.\n\n${HANDOFF_24H}`;
-  const lines = available.map((vehicle, index) => `${index + 1}. ${vehicle.make} ${vehicle.model} (${availableYears(fleet, vehicle)})`);
+  const lines = available.map((vehicle, index) => {
+    const simplified = simplifyVehicleName(vehicle.make, vehicle.model);
+    return `${index + 1}. ${simplified.make} ${simplified.model} (${availableYears(fleet, vehicle)})`;
+  });
   return `Thank you for your interest in our PCO fleet. These vehicle options are currently available:\n\n${lines.join("\n")}\n\nPlease reply with the make and model you would like, and I will send its price, mileage allowance, contract length, and included services.`;
 }
 
@@ -563,10 +600,11 @@ function formatCarHandoffSummary(data: CarEligibility, answer: string): string {
 }
 
 function formatVehicleDetails(vehicle: FleetVehicle): string {
+  const simplified = simplifyVehicleName(vehicle.make, vehicle.model);
   const catalog = websiteMatch(vehicle);
   const price = vehicle.weekly_price != null ? `£${vehicle.weekly_price}/week` : catalog?.price ?? "Price to confirm";
   const year = vehicle.year ?? catalog?.year ?? "Year to confirm";
-  return `Thank you for choosing the ${vehicle.make} ${vehicle.model}.\n\nVehicle: ${vehicle.make} ${vehicle.model}\nYear: ${year}\nFuel category: ${catalog?.fuel ?? fuelCategory(vehicle.fuel_type)}\nContract length: Minimum ${contractWeeks(vehicle)} weeks\nMileage allowance: ${mileageAllowance(vehicle).toLocaleString("en-GB")} miles per month\nWeekly rate: ${price}\nIncluded: PCO license, car service fully done, insurance and maintenance\n\nAre you happy to proceed with these terms? Reply Yes to proceed or No.`;
+  return `Thank you for choosing the ${simplified.make} ${simplified.model}.\n\nVehicle: ${simplified.make} ${simplified.model}\nYear: ${year}\nFuel category: ${catalog?.fuel ?? fuelCategory(vehicle.fuel_type)}\nContract length: Minimum ${contractWeeks(vehicle)} weeks\nMileage allowance: ${mileageAllowance(vehicle).toLocaleString("en-GB")} miles per month\nWeekly rate: ${price}\nIncluded: PCO license, car service fully done, insurance and maintenance\n\nAre you happy to proceed with these terms? Reply Yes to proceed or No.`;
 }
 
 function formatFleet(fleet: FleetVehicle[]): string {
@@ -574,7 +612,10 @@ function formatFleet(fleet: FleetVehicle[]): string {
   const grouped = ["Electric", "Plug-in-Hybrid", "Petrol"].map((category) => {
     const cars = available
       .filter((vehicle) => fuelCategory(vehicle.fuel_type) === category)
-      .map((vehicle) => `${vehicle.make} ${vehicle.model} (${availableYears(fleet, vehicle)})`)
+      .map((vehicle) => {
+        const simplified = simplifyVehicleName(vehicle.make, vehicle.model);
+        return `${simplified.make} ${simplified.model} (${availableYears(fleet, vehicle)})`;
+      })
       .join(", ");
     return `${category}: ${cars || "none currently available"}`;
   });
@@ -1226,7 +1267,16 @@ export async function handleAgentWebhookRequest(request: Request) {
       nextEligibility.ageEligible === false ? "It may be difficult to rent with us if your age is outside 25 to 65, as our insurance may not allow it. We will continue." : "",
       nextEligibility.points != null && nextEligibility.points > 6 ? "Sorry, you may be unable to rent with us as your points are too high, but we will continue." : "",
     ].filter(Boolean);
-    const reply = `${eligibilityWarnings.length ? `${eligibilityWarnings.join("\n\n")}\n\n` : ""}${formatCustomerFleet((fleet ?? []) as FleetVehicle[])}`;
+
+    let reply = "";
+    if (nextEligibility.selectedVehicle) {
+      const sel = nextEligibility.selectedVehicle;
+      const vehicleDesc = `${sel.make} ${sel.model} (${sel.year ?? "year to confirm"}) — ${sel.weeklyRate}, ${sel.mileage.toLocaleString("en-GB")} miles/month, ${sel.contractWeeks}-week contract.`;
+      reply = `${eligibilityWarnings.length ? `${eligibilityWarnings.join("\n\n")}\n\n` : ""}Great! Here is a summary of your request:\n\n🚗 Vehicle: ${vehicleDesc}\n\nIs this everything? Reply Yes to confirm.`;
+    } else {
+      reply = `${eligibilityWarnings.length ? `${eligibilityWarnings.join("\n\n")}\n\n` : ""}${formatCustomerFleet((fleet ?? []) as FleetVehicle[])}`;
+    }
+
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
     if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
     await db.from("whatsapp_leads").update({ car_enquiry_data: nextEligibility, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
