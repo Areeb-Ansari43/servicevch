@@ -366,6 +366,7 @@ function parseCarEligibility(text: string, existing: CarEligibility = {}): CarEl
     if (existing.ageEligible === undefined && result.ageEligible === undefined) result.ageEligible = affirmative;
     else if (existing.pcoBadge === undefined && result.pcoBadge === undefined) result.pcoBadge = affirmative;
     if (simpleAnswer[2] !== undefined && result.points === undefined) result.points = Number(simpleAnswer[2]);
+    else if (simpleAnswer[2] === undefined && !affirmative && existing.points === undefined && result.points === undefined) result.points = 0;
   }
 
   result.completed = result.ageEligible !== undefined && result.pcoBadge !== undefined && result.points !== undefined;
@@ -1073,7 +1074,7 @@ export async function handleAgentWebhookRequest(request: Request) {
       carEligibilityPromptActive ||
       (!carEligibility.completed && Object.keys(carEligibility).length > 0)
     );
-  const selectedVehicleRequest = !option && leadIntent === "book_car" && findSelectedVehicle(content, (fleet ?? []) as FleetVehicle[]) && (/(which vehicle|which car|available|fleet|vehicles currently marked)/i.test(lastAgentMessage) || carEligibility.completed);
+  const selectedVehicleRequest = !option && leadIntent === "book_car" && findSelectedVehicle(content, (fleet ?? []) as FleetVehicle[]) && (/(which vehicle|which car|available|fleet|vehicles currently marked|make and model)/i.test(lastAgentMessage) || carEligibility.completed || carEligibility.ageEligible !== undefined);
   if (selectedVehicleRequest) {
     const selected = findSelectedVehicle(content, (fleet ?? []) as FleetVehicle[]);
     if (selected) {
