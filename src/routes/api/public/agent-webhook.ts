@@ -218,6 +218,10 @@ function isAccidentRequest(text: string): boolean {
   return /\b(?:accident|crash|collision|bumped|damage|damaged|smash|hit|incident)\b/i.test(text);
 }
 
+function isHelpMessage(text: string): boolean {
+  return /\b(?:help|assist|assistance|support|question|query|need info|information|how do i|can you|tell me)\b/i.test(text);
+}
+
 function normalizeReg(value: string): string {
   return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
@@ -276,22 +280,20 @@ function accidentMissing(data: AccidentData): string[] {
 
 function formatAccidentSummary(data: AccidentData): string {
   return [
-    "🚨 Accident report summary",
+    "🚨 Accident Report Summary:",
+    `• Your driver: ${data.driverName ?? "Not supplied"}`,
+    `• Your vehicle registration: ${data.driverReg ?? "Not supplied"}`,
+    `• Other driver: ${data.atFaultDriverName ?? "Not supplied"}`,
+    `• Other vehicle registration: ${data.atFaultVehicleReg ?? "Not supplied"}`,
+    `• Insurance provider: ${data.insuranceProvider ?? "Not supplied"}`,
+    `• Incident date: ${data.incidentDate ?? "Not supplied"}`,
+    `• Incident time: ${data.incidentTime ?? "Not supplied"}`,
+    `• Location: ${data.location ?? "Not supplied"}`,
+    `• Description: ${data.description ?? "Not supplied"}`,
+    `• Photos/Videos: ${data.evidenceUrls?.length ? `${data.evidenceUrls.length} file(s) received` : "None"}`,
     "",
-    `Your driver: ${data.driverName ?? "Not supplied"}`,
-    `Your vehicle registration: ${data.driverReg ?? "Not supplied"}`,
-    "",
-    `Other driver: ${data.atFaultDriverName ?? "Not supplied"}`,
-    `Other vehicle registration: ${data.atFaultVehicleReg ?? "Not supplied"}`,
-    `Insurance provider: ${data.insuranceProvider ?? "Not supplied"}`,
-    `Accident date: ${data.incidentDate ?? "Not supplied"}`,
-    `Accident time: ${data.incidentTime ?? "Not supplied"}`,
-    `Location: ${data.location ?? "Not supplied"}`,
-    `Description: ${data.description ?? "Not supplied"}`,
-    `Photos/videos: ${data.evidenceUrls?.length ? `${data.evidenceUrls.length} file(s) received` : "Missing"}`,
-    "",
-    "Is this information correct? Please reply Yes or No.",
-  ].join("\\n");
+    "Is this information correct? Reply Yes to confirm or No to edit.",
+  ].join("\n");
 }
 
 function isLikelyFullName(text: string): boolean {
@@ -564,7 +566,7 @@ function formatVehicleDetails(vehicle: FleetVehicle): string {
   const catalog = websiteMatch(vehicle);
   const price = vehicle.weekly_price != null ? `£${vehicle.weekly_price}/week` : catalog?.price ?? "Price to confirm";
   const year = vehicle.year ?? catalog?.year ?? "Year to confirm";
-  return `Thank you for choosing the ${vehicle.make} ${vehicle.model}.\n\nVehicle: ${vehicle.make} ${vehicle.model}\nYear: ${year}\nFuel category: ${catalog?.fuel ?? fuelCategory(vehicle.fuel_type)}\nContract length: Minimum ${contractWeeks(vehicle)} weeks\nMileage allowance: ${mileageAllowance(vehicle).toLocaleString("en-GB")} miles per month\nWeekly rate: ${price}\nIncluded: Insurance, servicing and maintenance\n\nAre you fully aware of and happy with these contract length and mileage details? Please reply Yes or No.`;
+  return `Thank you for choosing the ${vehicle.make} ${vehicle.model}.\n\nVehicle: ${vehicle.make} ${vehicle.model}\nYear: ${year}\nFuel category: ${catalog?.fuel ?? fuelCategory(vehicle.fuel_type)}\nContract length: Minimum ${contractWeeks(vehicle)} weeks\nMileage allowance: ${mileageAllowance(vehicle).toLocaleString("en-GB")} miles per month\nWeekly rate: ${price}\nIncluded: PCO license, car service fully done, insurance and maintenance\n\nAre you happy to proceed with these terms? Reply Yes to proceed or No.`;
 }
 
 function formatFleet(fleet: FleetVehicle[]): string {
@@ -1047,6 +1049,18 @@ export async function handleAgentWebhookRequest(request: Request) {
   });
   if (inboundError) return json({ ok: false, error: inboundError.message }, 500);
   const history = [...((oldHistory ?? []) as Turn[]), inbound];
+
+  if (isNewLead) {
+    await sendTelegramAlert({
+      name: leadName,
+      phone,
+      reason: `🆕 New Customer Alert: ${content.slice(0, 100)}`,
+      leadId,
+      history,
+      mediaUrl,
+      closed: false,
+    });
+  }
   const lastAgentMessage = [...history].reverse().find((turn) => turn.sender === "ai_agent")?.content ?? "";
   const { data: fleet } = await db
     .from("vehicles")
@@ -1057,7 +1071,8 @@ export async function handleAgentWebhookRequest(request: Request) {
   const accidentIdentityReply = Boolean(accidentIdentityCandidate?.registration || (extractReg(content) && /[A-Za-z]{2}\s?\d{2}\s?[A-Za-z]{3}/i.test(content)));
   const rawOption = compactEligibilityAnswer ? null : parseMenuOption(content) ?? (/^(?:book_car|enquire_about_a_car|enquire|emergency_breakdown|breakdown|report_accident|accident)$/i.test(content.trim()) ? (/(?:emergency|breakdown)/i.test(content) ? 2 : /(?:accident|report)/i.test(content) ? 3 : 1) : null);
 
-  if ((isNewLead || closed) && !isMenuReset(content) && !rawOption && !compactEligibilityAnswer) {
+  const isHelp = isHelpMessage(content);
+  if ((isNewLead || closed) && !isMenuReset(content) && !rawOption && !compactEligibilityAnswer && !isHelp) {
     const reply = getWelcomeMenuText();
     const outbound = await sendWelcomeMenu(phone ?? chatId);
     if (outbound.sent) {
@@ -1178,6 +1193,14 @@ export async function handleAgentWebhookRequest(request: Request) {
     const nextEligibility: CarEligibility = { ...carEligibility, ...incomingEligibility };
     nextEligibility.completed = eligibilityMissing(nextEligibility).length === 0;
     const missing = eligibilityMissing(nextEligibility);
+    if (nextEligibility.ageEligible === false) {
+      const reply = `⚠️ Warning: Renting with Virtual Car Hire is not possible if you are under 25 years old.\n\nThis conversation is now closed.`;
+      const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
+      if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, handoff: true, session_id: sessionId });
+      await db.from("whatsapp_leads").update({ car_enquiry_data: { ...nextEligibility, closed: true }, status: "closed", ai_paused: true, closed_at: new Date().toISOString(), ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+      const alert = await sendTelegramAlert({ name: leadName, phone, reason: "Car enquiry closed: under 25 years old", leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: true });
+      return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, eligibility: nextEligibility, telegram_alert: alert, needs_human: false });
+    }
     if (nextEligibility.pcoBadge === false) {
       const reply = `⚠️ Warning: A valid PCO badge is required to rent a vehicle with Virtual Car Hire. Since you do not possess a PCO badge, you cannot rent with us at this time.\n\nOur team will review this enquiry and contact you within 24 hours.`;
       const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
@@ -1380,29 +1403,34 @@ export async function handleAgentWebhookRequest(request: Request) {
       }
     }
 
-    if (!next.verified && next.driverName && next.driverReg) {
+    if (!next.verified) {
       const { data: drivers } = await db
         .from("driver_tracks")
-        .select("vehicle_id, reg, driver_name")
+        .select("vehicle_id, reg, driver_name, phone")
         .eq("user_id", userId)
         .eq("active", true)
         .limit(500);
-      const driver = (drivers ?? []).find((candidate: { vehicle_id?: string | null; reg?: string | null; driver_name?: string | null }) =>
-        normalizeReg(candidate.reg ?? "") === normalizeReg(next.driverReg ?? "") &&
-        normalizeDriverName(candidate.driver_name ?? "") === normalizeDriverName(next.driverName ?? ""),
+      const matchedByPhone = (drivers ?? []).find((d: { phone?: string | null }) => canonicalPhoneKey(d.phone) === canonicalPhoneKey(phone ?? chatId));
+      const matchedByNameReg = (drivers ?? []).find((d: { reg?: string | null; driver_name?: string | null }) =>
+        next.driverReg && next.driverName &&
+        normalizeReg(d.reg ?? "") === normalizeReg(next.driverReg) &&
+        normalizeDriverName(d.driver_name ?? "") === normalizeDriverName(next.driverName)
       );
+      const driver = matchedByPhone || matchedByNameReg;
       if (!driver) {
-        const reply = "🚨 I could not verify that driver name and registration against an active rental. Our team will review this request. Please check the spelling and registration.";
+        const reply = "⛔ Verification failed: You do not currently have an active car rental with Virtual Car Hire. Only active drivers can report an accident.";
         const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
         if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, handoff: true, session_id: sessionId });
-        await db.from("whatsapp_leads").update({ status: "needs_human", customer_type: "needs_human", ai_paused: true, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
-        const alert = await sendTelegramAlert({ name: leadName, phone, reason: "Accident driver and registration could not be verified against an active rental", leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
-        return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, telegram_alert: alert, needs_human: true });
+        await db.from("whatsapp_leads").update({ status: "closed", customer_type: "needs_human", ai_paused: true, closed_at: new Date().toISOString(), ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+        const alert = await sendTelegramAlert({ name: leadName, phone, reason: "Accident report denied: No active rental found in CRM", leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: true });
+        return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, telegram_alert: alert, needs_human: false });
       }
       next.verified = true;
+      next.driverName = driver.driver_name ?? next.driverName ?? leadName;
+      next.driverReg = driver.reg ?? next.driverReg ?? "";
       next.vehicleId = driver.vehicle_id ?? null;
       customerType = "existing_customer";
-      const reply = "✅ Your driver details have been verified in our CRM. Please now send the following information:\\n\\n1. The other driver’s full name\\n2. Their vehicle registration\\n3. Their insurance provider\\n4. The date and time of the accident\\n5. The place of the accident\\n6. A description of what happened\\n7. Photos and/or videos of the accident\\n\\nYou can send the details in separate messages. I will tell you if anything is still missing.";
+      const reply = `✅ Driver details verified in CRM (${next.driverName} - ${next.driverReg}).\n\nPlease send the required accident details:\n• The other driver’s full name\n• Their vehicle registration\n• Their insurance provider\n• The date and time of the accident\n• The place of the accident\n• A description of what happened\n• Photos and/or videos of the accident\n\nYou can send these details in separate messages.`;
       const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
       if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
       await db.from("whatsapp_leads").update({ accident_data: next, customer_type: customerType, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
@@ -1471,15 +1499,32 @@ export async function handleAgentWebhookRequest(request: Request) {
     return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, telegram_alert: alert, missing });
   }
 
-  if (!option && isTermsResponse(content) && lastAgentMessage.toLowerCase().includes("are you fully aware")) {
+  if (!option && isTermsResponse(content) && (lastAgentMessage.toLowerCase().includes("happy to proceed") || lastAgentMessage.toLowerCase().includes("are you fully aware"))) {
     const answer = content.trim();
-    const summary = formatCarHandoffSummary(carEligibility, answer);
-    const reply = HANDOFF_24H;
-    await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, handoff: true, session_id: sessionId });
-    await db.from("whatsapp_leads").update({ status: "needs_human", customer_type: "needs_human", ai_paused: true, intent: leadIntent ?? "book_car", ai_summary: summary, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
-    const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
-    const alert = await sendTelegramAlert({ name: leadName, phone, reason: outbound.sent ? summary : `WhatsApp Cloud API reply failed: ${outbound.reason}`, leadId, history: [{ sender: "ai_agent", content: summary }, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
-    return json({ ok: true, lead_id: leadId, reply, needs_human: true, telegram_alert: alert, outbound });
+    if (/^yes/i.test(answer)) {
+      const selected = carEligibility.selectedVehicle;
+      const vehicleDesc = selected
+        ? `${selected.make} ${selected.model} (${selected.year ?? "year to confirm"}) — ${selected.weeklyRate}, ${selected.mileage.toLocaleString("en-GB")} miles/month, ${selected.contractWeeks}-week contract.`
+        : "your selected vehicle request";
+      const reply = `Great! Here is a summary of your request:\n\n🚗 Vehicle: ${vehicleDesc}\n\nIs this everything? Reply Yes to confirm.`;
+      const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
+      if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
+      await db.from("whatsapp_leads").update({ ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+      return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound });
+    }
+  }
+
+  if (!option && isTermsResponse(content) && lastAgentMessage.toLowerCase().includes("is this everything")) {
+    const answer = content.trim();
+    if (/^yes/i.test(answer)) {
+      const summary = formatCarHandoffSummary(carEligibility, answer);
+      const reply = `Thank you! Your car enquiry has been submitted.\n\n${HANDOFF_24H}`;
+      await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, handoff: true, session_id: sessionId });
+      await db.from("whatsapp_leads").update({ status: "needs_human", customer_type: "needs_human", ai_paused: true, closed_at: new Date().toISOString(), intent: leadIntent ?? "book_car", ai_summary: summary, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+      const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
+      const alert = await sendTelegramAlert({ name: leadName, phone, reason: "🚨 Human handoff needed, please look at this", leadId, history: [{ sender: "ai_agent", content: summary }, { sender: "ai_agent", content: reply }], mediaUrl, closed: true });
+      return json({ ok: true, lead_id: leadId, reply, needs_human: true, telegram_alert: alert, outbound });
+    }
   }
 
   if (option === 3) {
