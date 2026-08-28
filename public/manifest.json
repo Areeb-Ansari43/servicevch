@@ -1,0 +1,23 @@
+{
+  "name": "Virtual Car Hire",
+  "short_name": "VCH",
+  "description": "Virtual Car Hire Fleet & PCO Car Hire Portal",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b0d12",
+  "theme_color": "#0b0d12",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "https://servicevch.pages.dev/whatsapp/virtual-car-hire-welcome.jpg?v=20260826-4",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ]
+}

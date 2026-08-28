@@ -122,6 +122,8 @@ export const Route = createFileRoute("/api/jobs/inactivity")({
             .select("id")
             .maybeSingle();
           if (!closureClaim?.data) continue;
+          await sendWhatsAppText({ phone: chatId, text: "This conversation has been closed due to inactivity. If you need further assistance, please reply to start a new chat." });
+          await db.from("messages").insert({ user_id: lead.user_id, lead_id: leadId, sender: "ai_agent", content: "This conversation has been closed due to inactivity. If you need further assistance, please reply to start a new chat." } as never);
           const alerted = await sendTelegramClosureAlert({ lead, transcript });
           if (alerted) closed += 1;
         }
