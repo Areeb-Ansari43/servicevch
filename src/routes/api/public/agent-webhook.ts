@@ -1456,35 +1456,58 @@ export async function handleAgentWebhookRequest(request: Request) {
     if (!next.verified) {
       const { data: drivers } = await db
         .from("driver_tracks")
-        .select("vehicle_id, reg, driver_name, phone")
+        .select("vehicle_id, reg, driver_name, phone, active")
         .eq("user_id", userId)
-        .eq("active", true)
-        .limit(500);
-      const matchedByPhone = (drivers ?? []).find((d: { phone?: string | null }) => canonicalPhoneKey(d.phone) === canonicalPhoneKey(phone ?? chatId));
-      const matchedByNameReg = (drivers ?? []).find((d: { reg?: string | null; driver_name?: string | null }) =>
-        next.driverReg && next.driverName &&
-        normalizeReg(d.reg ?? "") === normalizeReg(next.driverReg) &&
-        normalizeDriverName(d.driver_name ?? "") === normalizeDriverName(next.driverName)
-      );
-      const driver = matchedByPhone || matchedByNameReg;
+        .limit(1000);
+
+      const allDrivers = (drivers ?? []) as { vehicle_id?: string | null; reg?: string | null; driver_name?: string | null; phone?: string | null; active?: boolean | null }[];
+
+      const matchedByPhone = allDrivers.find((d) => canonicalPhoneKey(d.phone) === canonicalPhoneKey(phone ?? chatId));
+
+      const reqReg = normalizeReg(next.driverReg ?? "");
+      const reqName = normalizeDriverName(next.driverName ?? "");
+
+      const regMatches = allDrivers.filter((d) => normalizeReg(d.reg ?? "") === reqReg);
+      const nameMatches = allDrivers.filter((d) => {
+        const dName = normalizeDriverName(d.driver_name ?? "");
+        return dName && reqName && (dName.includes(reqName) || reqName.includes(dName));
+      });
+
+      const matchedByNameAndReg = allDrivers.find((d) => {
+        const dReg = normalizeReg(d.reg ?? "");
+        const dName = normalizeDriverName(d.driver_name ?? "");
+        const regOk = dReg === reqReg;
+        const nameOk = dName && reqName && (dName.includes(reqName) || reqName.includes(dName));
+        return regOk && nameOk;
+      });
+
+      const driver = matchedByPhone || matchedByNameAndReg || (regMatches.length > 0 && nameMatches.length > 0 ? regMatches[0] : null);
+
       if (!driver) {
-        const reply = "⛔ Verification failed: You do not currently have an active car rental with Virtual Car Hire. Only active drivers can report an accident.";
+        let reply = "";
+        if (regMatches.length > 0) {
+          reply = "Your name hasn't come in our database please try again";
+          next.driverName = undefined; // allow customer to retry entering name
+        } else {
+          reply = "The reg is not been recorded in our database please try again";
+          next.driverReg = undefined; // allow customer to retry entering reg
+        }
         const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
-        if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, handoff: true, session_id: sessionId });
-        await db.from("whatsapp_leads").update({ status: "closed", customer_type: "needs_human", ai_paused: true, closed_at: new Date().toISOString(), ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
-        const alert = await sendTelegramAlert({ name: leadName, phone, reason: "Accident report denied: No active rental found in CRM", leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: true });
-        return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, telegram_alert: alert, needs_human: false });
+        if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
+        await db.from("whatsapp_leads").update({ accident_data: next, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+        return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, needs_human: false });
       }
+
       next.verified = true;
       next.driverName = driver.driver_name ?? next.driverName ?? leadName;
       next.driverReg = driver.reg ?? next.driverReg ?? "";
       next.vehicleId = driver.vehicle_id ?? null;
       customerType = "existing_customer";
-      const reply = `✅ Driver details verified in CRM (${next.driverName} - ${next.driverReg}).\n\nPlease send the required accident details:\n• The other driver’s full name\n• Their vehicle registration\n• Their insurance provider\n• The date and time of the accident\n• The place of the accident\n• A description of what happened\n• Photos and/or videos of the accident\n\nYou can send these details in separate messages.`;
+      const reply = `Driver details verified in our Database\n\nPlease send the required accident details:\n• The other driver’s full name\n• Their vehicle registration\n• Their insurance provider\n• The date and time of the accident\n• The place of the accident\n• A description of what happened\n• Photos and/or videos of the accident\n\nYou can send these details in separate messages.`;
       const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
       if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
       await db.from("whatsapp_leads").update({ accident_data: next, customer_type: customerType, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
-      const alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
+      const alert = await sendTelegramAlert({ name: leadName, phone, reason: `Accident report started by verified driver ${next.driverName} (${next.driverReg})`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
       return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, telegram_alert: alert });
     }
 
