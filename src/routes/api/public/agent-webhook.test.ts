@@ -7,6 +7,7 @@ import {
   availableYears,
   isOutsideUKBusinessHours,
   getWelcomeMenuText,
+  simplifyVehicleName,
 } from "./agent-webhook";
 
 describe("Car Eligibility Parsing & Warnings", () => {
@@ -73,20 +74,29 @@ describe("Fleet Availability & Model Deduplication", () => {
     expect(isAvailable({ reg: "A5", make: "Mercedes", model: "E20", year: 2022, fuel_type: "Petrol", status: "off_road", next_mot_date: null, pco_expiry_date: null })).toBe(false);
   });
 
-  test("uniqueAvailableVehicles deduplicates identical or slightly varied models (e.g., E20 vs E-20)", () => {
+  test("simplifyVehicleName simplifies long raw vehicle names correctly", () => {
+    expect(simplifyVehicleName("MERCEDES-BENZ", "VITO 114 BLUETEC TOURER PRO")).toEqual({ make: "Mercedes", model: "Vito" });
+    expect(simplifyVehicleName("MERCEDES-BENZ", "E 220 D SE AUTO")).toEqual({ make: "Mercedes", model: "E220D" });
+    expect(simplifyVehicleName("TOYOTA", "AURIS HYBRID ESTATE")).toEqual({ make: "Toyota", model: "Auris Estate" });
+    expect(simplifyVehicleName("MG", "MG5 EV")).toEqual({ make: "MG", model: "5EV" });
+  });
+
+  test("uniqueAvailableVehicles deduplicates identical or slightly varied models with simplified names", () => {
     const fleet = [
-      { reg: "A1", make: "Mercedes", model: "E20", year: 2021, fuel_type: "Hybrid", status: "available", next_mot_date: null, pco_expiry_date: null },
-      { reg: "A2", make: "Mercedes", model: "E-20", year: 2022, fuel_type: "Hybrid", status: "available", next_mot_date: null, pco_expiry_date: null },
-      { reg: "A3", make: "Mercedes", model: "E20", year: 2023, fuel_type: "Hybrid", status: "rented", next_mot_date: null, pco_expiry_date: null },
+      { reg: "A1", make: "Mercedes-Benz", model: "E 220 D SE AUTO", year: 2018, fuel_type: "Petrol", status: "available", next_mot_date: null, pco_expiry_date: null },
+      { reg: "A2", make: "Mercedes-Benz", model: "E 220 D AMG LINE AUTO", year: 2019, fuel_type: "Petrol", status: "available", next_mot_date: null, pco_expiry_date: null },
+      { reg: "A3", make: "Mercedes-Benz", model: "Vito 114 Tourer", year: 2019, fuel_type: "Petrol", status: "available", next_mot_date: null, pco_expiry_date: null },
       { reg: "B1", make: "Toyota", model: "Prius", year: 2020, fuel_type: "Hybrid", status: "rented", next_mot_date: null, pco_expiry_date: null },
     ];
 
     const unique = uniqueAvailableVehicles(fleet);
-    expect(unique.length).toBe(1);
+    expect(unique.length).toBe(2);
     expect(unique[0].make).toBe("Mercedes");
-    expect(unique[0].model).toBe("E20");
+    expect(unique[0].model).toBe("E220D");
+    expect(unique[1].make).toBe("Mercedes");
+    expect(unique[1].model).toBe("Vito");
 
     const years = availableYears(fleet, unique[0]);
-    expect(years).toBe("2021, 2022");
+    expect(years).toBe("2018, 2019");
   });
 });
