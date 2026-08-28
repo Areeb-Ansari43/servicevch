@@ -1179,7 +1179,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     nextEligibility.completed = eligibilityMissing(nextEligibility).length === 0;
     const missing = eligibilityMissing(nextEligibility);
     if (nextEligibility.pcoBadge === false) {
-      const reply = `I’m sorry, you cannot rent a car with us because our vehicles are for PCO car drivers using them for taxi jobs. A valid PCO badge is required.\n\nOur team will review this enquiry and contact you within 24 hours.`;
+      const reply = `⚠️ Warning: A valid PCO badge is required to rent a vehicle with Virtual Car Hire. Since you do not possess a PCO badge, you cannot rent with us at this time.\n\nOur team will review this enquiry and contact you within 24 hours.`;
       const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
       if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, handoff: true, session_id: sessionId });
       await db.from("whatsapp_leads").update({ car_enquiry_data: { ...nextEligibility, closed: true }, status: "closed", ai_paused: true, closed_at: new Date().toISOString(), ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
@@ -1188,6 +1188,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     }
     if (missing.length || !nextEligibility.completed) {
       const warnings = [
+        nextEligibility.pcoBadge === false ? "⚠️ Warning: A valid PCO badge is required to rent a vehicle with Virtual Car Hire." : "",
         nextEligibility.ageEligible === false ? "It may be difficult to rent with us if your age is outside 25 to 65, as our insurance may not allow it. We will continue." : "",
         nextEligibility.points != null && nextEligibility.points > 6 ? "Sorry, you may be unable to rent with us as your points are too high, but we will continue." : "",
       ].filter(Boolean);
@@ -1198,6 +1199,7 @@ export async function handleAgentWebhookRequest(request: Request) {
       return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, eligibility: nextEligibility, needs_human: !outbound.sent });
     }
     const eligibilityWarnings = [
+      nextEligibility.pcoBadge === false ? "⚠️ Warning: A valid PCO badge is required to rent a vehicle with Virtual Car Hire." : "",
       nextEligibility.ageEligible === false ? "It may be difficult to rent with us if your age is outside 25 to 65, as our insurance may not allow it. We will continue." : "",
       nextEligibility.points != null && nextEligibility.points > 6 ? "Sorry, you may be unable to rent with us as your points are too high, but we will continue." : "",
     ].filter(Boolean);
