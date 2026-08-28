@@ -40,6 +40,22 @@ const CAR_ELIGIBILITY_PROMPT =
   "Before we look at available vehicles, please confirm three things:\n\n1. Are you aged between 25 and 65 years old?\n2. Do you possess a valid PCO badge?\n3. Do you have any penalty points? If you have more than 6 points, renting with us may be difficult.\n\nFor your answer, please reply simply: Yes, Yes, and specify your points. For example: 1. Yes 2. Yes 3. Yes - 3 points.";
 const HANDOFF_24H =
   "Our team will get back to you within 24 hours. Please do not contact this number — we will contact you first.";
+const OUT_OF_HOURS_MESSAGE =
+  "Virtual Car Hire is unable to connect you to an agent but our AI is always ready to help 9am to 6pm. Please chat with this bot to simplify the process and make it quicker to start renting with us.";
+
+export function isOutsideUKBusinessHours(date = new Date()): boolean {
+  const options: Intl.DateTimeFormatOptions = { timeZone: "Europe/London", hour: "numeric", hour12: false };
+  const hourStr = new Intl.DateTimeFormat("en-GB", options).format(date);
+  const hour = parseInt(hourStr, 10);
+  return hour < 9 || hour >= 18;
+}
+
+export function getWelcomeMenuText(date = new Date()): string {
+  if (isOutsideUKBusinessHours(date)) {
+    return `${WELCOME_MENU}\n\n${OUT_OF_HOURS_MESSAGE}`;
+  }
+  return WELCOME_MENU;
+}
 
 type Turn = { sender: string; content: string; media_url?: string | null };
 type FleetVehicle = {
@@ -409,8 +425,7 @@ export function parseCarEligibility(text: string, existing: CarEligibility = {})
 
 function eligibilityMissing(data: CarEligibility): string[] {
   const missing: string[] = [];
-  if (data.ageEligible !== true && (data.age === undefined || data.age === null)) missing.push("whether your age is between 25 and 65");
-  else if (!data.ageEligible && data.ageEligible !== undefined) missing.push("confirmation that your age is between 25 and 65");
+  if (data.ageEligible === undefined && (data.age === undefined || data.age === null)) missing.push("whether your age is between 25 and 65");
   if (data.pcoBadge === undefined) missing.push("whether you have a valid PCO badge");
   if (data.points === undefined || data.points === null) missing.push("the number of penalty points you have");
   return missing;
@@ -564,11 +579,13 @@ function formatFleet(fleet: FleetVehicle[]): string {
   return `Available vehicle choices (${available.length} unique make/model options; rented, in-service and off-road vehicles excluded):\n${grouped.join("\n")}\nOnly provide price, mileage allowance, contract length, and inclusions after the customer selects a vehicle.`;
 }
 
-async function sendWelcomeMenu(phone: unknown) {
-  const body =
+async function sendWelcomeMenu(phone: unknown, date = new Date()) {
+  const isOoh = isOutsideUKBusinessHours(date);
+  const baseBody =
     "👋 Hello, and welcome to Virtual Car Hire\n" +
     "🚘 London's number one PCO car hire company with 4.8 stars across Google and Trustpilot.\n\n" +
     "How can we assist you today? Please tap one of the options below to get started:";
+  const body = isOoh ? `${baseBody}\n\n${OUT_OF_HOURS_MESSAGE}` : baseBody;
   const buttons = [
     { id: "book_car", title: "Car enquiry" },
     { id: "emergency_breakdown", title: "Emergency Breakdown" },
@@ -577,7 +594,8 @@ async function sendWelcomeMenu(phone: unknown) {
   const interactive = await sendWhatsAppImageButtons({ phone, imageUrl: WELCOME_IMAGE_URL, body, buttons });
   if (interactive.sent) return interactive;
   console.warn("[agent-webhook] welcome interactive image failed; falling back to text menu", { reason: interactive.reason });
-  const fallback = await sendWhatsAppText({ phone, text: WELCOME_MENU });
+  const fallbackText = getWelcomeMenuText(date);
+  const fallback = await sendWhatsAppText({ phone, text: fallbackText });
   if (fallback.sent) return fallback;
   console.error("[agent-webhook] welcome delivery failed", { interactive: interactive.reason, fallback: fallback.reason });
   return { sent: false, reason: `welcome_delivery_failed: interactive=${interactive.reason}; fallback=${fallback.reason}` };
@@ -1040,7 +1058,7 @@ export async function handleAgentWebhookRequest(request: Request) {
   const rawOption = compactEligibilityAnswer ? null : parseMenuOption(content) ?? (/^(?:book_car|enquire_about_a_car|enquire|emergency_breakdown|breakdown|report_accident|accident)$/i.test(content.trim()) ? (/(?:emergency|breakdown)/i.test(content) ? 2 : /(?:accident|report)/i.test(content) ? 3 : 1) : null);
 
   if ((isNewLead || closed) && !isMenuReset(content) && !rawOption && !compactEligibilityAnswer) {
-    const reply = WELCOME_MENU;
+    const reply = getWelcomeMenuText();
     const outbound = await sendWelcomeMenu(phone ?? chatId);
     if (outbound.sent) {
       await db.from("whatsapp_leads").update({ status: "active", ai_paused: false, closed_at: null, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
@@ -1051,7 +1069,7 @@ export async function handleAgentWebhookRequest(request: Request) {
   }
 
   if (isMenuReset(content)) {
-    const reply = WELCOME_MENU;
+    const reply = getWelcomeMenuText();
     const outbound = await sendWelcomeMenu(phone ?? chatId);
     if (outbound.sent) {
       await db.from("whatsapp_leads").update({ status: "active", ai_paused: false, closed_at: null, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
@@ -1170,8 +1188,8 @@ export async function handleAgentWebhookRequest(request: Request) {
     }
     if (missing.length || !nextEligibility.completed) {
       const warnings = [
-        nextEligibility.ageEligible === false ? "It may be difficult to rent with us if you are between 18 and 25, as our insurance may not allow it. We will continue and a member of our team will contact you within 24 hours." : "",
-        nextEligibility.points != null && nextEligibility.points > 6 ? "Having more than 6 points may cause our insurance not to hire you. We will still continue and a member of our team will contact you within 24 hours." : "",
+        nextEligibility.ageEligible === false ? "It may be difficult to rent with us if your age is outside 25 to 65, as our insurance may not allow it. We will continue." : "",
+        nextEligibility.points != null && nextEligibility.points > 6 ? "Sorry, you may be unable to rent with us as your points are too high, but we will continue." : "",
       ].filter(Boolean);
       const reply = `${warnings.length ? `${warnings.join("\n\n")}\n\n` : ""}Thanks. I still need ${missing.join(", ")}. Please reply naturally—for example: I’m 30, I have a valid PCO badge, and I have 3 points.`;
       const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
@@ -1180,13 +1198,16 @@ export async function handleAgentWebhookRequest(request: Request) {
       return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, eligibility: nextEligibility, needs_human: !outbound.sent });
     }
     const eligibilityWarnings = [
-      nextEligibility.ageEligible === false ? "Please note: our insurance may not allow rentals outside the standard 25–65 age range." : "",
-      nextEligibility.points != null && nextEligibility.points > 6 ? "Please note: more than 6 points may make insurance approval difficult." : "",
+      nextEligibility.ageEligible === false ? "It may be difficult to rent with us if your age is outside 25 to 65, as our insurance may not allow it. We will continue." : "",
+      nextEligibility.points != null && nextEligibility.points > 6 ? "Sorry, you may be unable to rent with us as your points are too high, but we will continue." : "",
     ].filter(Boolean);
     const reply = `${eligibilityWarnings.length ? `${eligibilityWarnings.join("\n\n")}\n\n` : ""}${formatCustomerFleet((fleet ?? []) as FleetVehicle[])}`;
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
     if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
     await db.from("whatsapp_leads").update({ car_enquiry_data: nextEligibility, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+    if (nextEligibility.ageEligible === false) {
+      await sendTelegramAlert({ name: leadName, phone, reason: "Car enquiry: customer age outside 25-65 range (human follow-up needed)", leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
+    }
     if (!outbound.sent) console.error("[agent-webhook] completed car fleet reply failed", { leadId, reason: outbound.reason, content });
     return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, eligibility: nextEligibility, needs_human: !outbound.sent });
   }

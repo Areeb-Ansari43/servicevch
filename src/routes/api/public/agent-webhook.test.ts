@@ -5,12 +5,22 @@ import {
   uniqueAvailableVehicles,
   normalizeModelKey,
   availableYears,
+  isOutsideUKBusinessHours,
+  getWelcomeMenuText,
 } from "./agent-webhook";
 
 describe("Car Eligibility Parsing & Warnings", () => {
   test("answers 'No' to penalty points sets points = 0 (no warning/default answer)", () => {
     const res = parseCarEligibility("1. Yes 2. Yes 3. No");
     expect(res.ageEligible).toBe(true);
+    expect(res.pcoBadge).toBe(true);
+    expect(res.points).toBe(0);
+    expect(res.completed).toBe(true);
+  });
+
+  test("answers 'No' to age sets ageEligible = false and completed = true when all answered", () => {
+    const res = parseCarEligibility("1. No 2. Yes 3. 0 points");
+    expect(res.ageEligible).toBe(false);
     expect(res.pcoBadge).toBe(true);
     expect(res.points).toBe(0);
     expect(res.completed).toBe(true);
@@ -33,6 +43,24 @@ describe("Car Eligibility Parsing & Warnings", () => {
     expect(res.ageEligible).toBe(true);
     expect(res.pcoBadge).toBe(true);
     expect(res.points).toBe(3);
+
+    const highPoints = parseCarEligibility("1. Yes 2. Yes 3. 7 points");
+    expect(highPoints.points).toBe(7);
+  });
+});
+
+describe("Out-of-Hours Check", () => {
+  test("isOutsideUKBusinessHours returns correct status for given UK hours", () => {
+    const daytime = new Date("2025-08-28T14:00:00Z"); // 2pm UTC / BST
+    const nighttime = new Date("2025-08-28T22:00:00Z"); // 10pm UTC / BST
+    expect(isOutsideUKBusinessHours(daytime)).toBe(false);
+    expect(isOutsideUKBusinessHours(nighttime)).toBe(true);
+  });
+
+  test("getWelcomeMenuText appends out-of-hours message when outside 9am-6pm", () => {
+    const nighttime = new Date("2025-08-28T22:00:00Z");
+    const menu = getWelcomeMenuText(nighttime);
+    expect(menu).toContain("Virtual Car Hire is unable to connect you to an agent");
   });
 });
 
