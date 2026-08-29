@@ -369,14 +369,34 @@ export function useFleetData() {
     [refresh],
   );
 
-  const removeDriver = useCallback(
+  const editDriver = useCallback(
+    async (d: DriverTrack) => {
+      const payload: any = {
+        driver_name: d.driver_name,
+        phone: d.phone?.trim() || null,
+        vehicle_id: d.vehicle_id || null,
+        reg: d.registration,
+        allowance: d.allowance,
+        rate_pence: d.excess_rate,
+      };
+      const { error } = await supabase.from("driver_tracks").update(payload).eq("id", d.id);
+      if (error) throw new Error(error.message);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const deleteDriver = useCallback(
     async (id: string) => {
       const { data: track } = await supabase
         .from("driver_tracks")
         .select("vehicle_id")
         .eq("id", id)
         .maybeSingle();
-      await supabase.from("driver_tracks").update({ active: false }).eq("id", id);
+      const { error } = await supabase.from("driver_tracks").delete().eq("id", id);
+      if (error) {
+        await supabase.from("driver_tracks").update({ active: false }).eq("id", id);
+      }
       if (track?.vehicle_id) {
         await supabase
           .from("vehicles")
@@ -389,6 +409,8 @@ export function useFleetData() {
     [refresh],
   );
 
+  const removeDriver = deleteDriver;
+
   return {
     vehicles,
     services,
@@ -399,6 +421,8 @@ export function useFleetData() {
     addService,
     deleteService,
     addDriver,
+    editDriver,
+    deleteDriver,
     updateDriverMileage,
     closeMonth,
     removeDriver,

@@ -416,34 +416,123 @@ const Icon = {
       <path d="M3 17v-4l2-3h4" />
     </svg>
   ),
+  AirCan: (p: { className?: string }) => (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={p.className}
+    >
+      <rect x="7" y="7" width="10" height="14" rx="2" />
+      <path d="M10 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3" />
+      <path d="M12 3V1" />
+      <path d="M4 10h.01M2 13h.01M5 16h.01" />
+    </svg>
+  ),
+  Droplet: (p: { className?: string }) => (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={p.className}
+    >
+      <path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z" />
+    </svg>
+  ),
+  Battery: (p: { className?: string }) => (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={p.className}
+    >
+      <rect x="2" y="7" width="16" height="10" rx="2" />
+      <line x1="22" y1="11" x2="22" y2="13" />
+      <line x1="6" y1="12" x2="10" y2="12" />
+      <line x1="8" y1="10" x2="8" y2="14" />
+    </svg>
+  ),
+  Filter: (p: { className?: string }) => (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={p.className}
+    >
+      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+    </svg>
+  ),
+  Cog: (p: { className?: string }) => (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={p.className}
+    >
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  ),
+  Activity: (p: { className?: string }) => (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={p.className}
+    >
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+    </svg>
+  ),
 };
 
 function serviceStyle(type: string) {
   const t = type.toLowerCase();
+  if (t.includes("air con"))
+    return { cls: "border-sky-500/30 bg-sky-500/10 text-sky-300", I: Icon.AirCan };
+  if (t.includes("oil"))
+    return { cls: "border-amber-500/30 bg-amber-500/10 text-amber-300", I: Icon.Droplet };
+  if (t.includes("coolant"))
+    return { cls: "border-cyan-500/30 bg-cyan-500/10 text-cyan-300", I: Icon.Droplet };
+  if (t.includes("battery"))
+    return { cls: "border-violet-500/30 bg-violet-500/10 text-violet-300", I: Icon.Battery };
+  if (t.includes("filter"))
+    return { cls: "border-lime-500/30 bg-lime-500/10 text-lime-300", I: Icon.Filter };
+  if (t.includes("diagnostic"))
+    return { cls: "border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-300", I: Icon.Activity };
+  if (t.includes("transmission"))
+    return { cls: "border-purple-500/30 bg-purple-500/10 text-purple-300", I: Icon.Cog };
+  if (t.includes("electrical"))
+    return { cls: "border-yellow-500/30 bg-yellow-500/10 text-yellow-300", I: Icon.Bolt };
   if (t.includes("mot"))
     return { cls: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300", I: Icon.Calendar };
   if (t.includes("full service"))
     return { cls: "border-blue-500/30 bg-blue-500/10 text-blue-300", I: Icon.Wrench };
   if (t.includes("interim"))
-    return { cls: "border-cyan-500/30 bg-cyan-500/10 text-cyan-300", I: Icon.Wrench };
-  if (t.includes("oil"))
-    return { cls: "border-orange-500/30 bg-orange-500/10 text-orange-300", I: Icon.Gauge };
+    return { cls: "border-indigo-500/30 bg-indigo-500/10 text-indigo-300", I: Icon.Wrench };
   if (t.includes("tyre"))
-    return { cls: "border-amber-500/30 bg-amber-500/10 text-amber-300", I: Icon.Disc };
+    return { cls: "border-orange-500/30 bg-orange-500/10 text-orange-300", I: Icon.Disc };
   if (t.includes("brake"))
-    return { cls: "border-red-500/30 bg-red-500/10 text-red-300", I: Icon.Alert };
-  if (t.includes("battery"))
-    return { cls: "border-violet-500/30 bg-violet-500/10 text-violet-300", I: Icon.Gauge };
-  if (t.includes("filter"))
-    return { cls: "border-lime-500/30 bg-lime-500/10 text-lime-300", I: Icon.Disc };
-  if (t.includes("electrical"))
-    return { cls: "border-yellow-500/30 bg-yellow-500/10 text-yellow-300", I: Icon.Alert };
-  if (t.includes("diagnostic"))
-    return { cls: "border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-300", I: Icon.Info };
+    return { cls: "border-red-500/30 bg-red-500/10 text-red-300", I: Icon.Disc };
   if (t.includes("bodywork"))
     return { cls: "border-pink-500/30 bg-pink-500/10 text-pink-300", I: Icon.Car };
-  if (t.includes("coolant") || t.includes("transmission"))
-    return { cls: "border-sky-500/30 bg-sky-500/10 text-sky-300", I: Icon.Wrench };
   return { cls: "border-slate-500/30 bg-slate-500/10 text-slate-300", I: Icon.Info };
 }
 
@@ -659,6 +748,7 @@ export function FleetShell({ view }: { view: View }) {
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [apexOpen, setApexOpen] = useState(false);
 
   const data = useFleetData();
 
@@ -712,6 +802,7 @@ export function FleetShell({ view }: { view: View }) {
         account={account}
         mobileOpen={mobileNavOpen}
         onClose={() => setMobileNavOpen(false)}
+        onOpenApex={() => setApexOpen((prev) => !prev)}
       />
       <div className="relative z-10 ml-0 lg:ml-64">
         <Topbar
@@ -808,7 +899,13 @@ export function FleetShell({ view }: { view: View }) {
         </main>
       </div>
 
-      <ApexAssistant vehicles={data.vehicles} services={data.services} drivers={data.drivers} />
+      <ApexAssistant
+        vehicles={data.vehicles}
+        services={data.services}
+        drivers={data.drivers}
+        open={apexOpen}
+        onOpenChange={setApexOpen}
+      />
 
       {editingVehicle && (
         <EditVehicleModal
@@ -869,6 +966,7 @@ function Sidebar({
   account,
   mobileOpen,
   onClose,
+  onOpenApex,
 }: {
   view: View;
   setView: (v: View) => void;
@@ -876,6 +974,7 @@ function Sidebar({
   account: { email: string } | null;
   mobileOpen: boolean;
   onClose: () => void;
+  onOpenApex: () => void;
 }) {
   const items: {
     id: View;
@@ -971,6 +1070,27 @@ function Sidebar({
         </nav>
 
         <div className="border-t p-3" style={{ borderColor: T.border }}>
+          {/* Apex AI button directly above admin email box */}
+          <button
+            onClick={onOpenApex}
+            className="mb-2.5 flex w-full items-center gap-2.5 rounded-2xl border border-[#ff6a00]/30 bg-[#ff6a00]/10 px-3 py-2.5 text-xs font-semibold text-white shadow-md transition hover:bg-[#ff6a00]/20"
+          >
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-[#ff6a00] to-[#ff9d4d] text-white shadow-sm">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-3.5 w-3.5"
+              >
+                <path d="M12 3l1.8 4.9L19 9.7l-4.4 3 .5 5.3-3.1-2.5-3.1 2.5.5-5.3-4.4-3 5.2-1.8z" />
+              </svg>
+            </span>
+            <span>Apex AI Assistant</span>
+          </button>
+
           <div
             className="flex items-center gap-3 rounded-2xl border px-3 py-2.5"
             style={{ borderColor: T.borderSoft, background: T.panel2 }}
@@ -1078,19 +1198,6 @@ function Topbar({
             <Icon.Calendar className="h-4 w-4" />
           </button>
         </div>
-        <div
-          className="flex shrink-0 items-center gap-2 rounded-full border px-2 py-1 transition sm:px-3"
-          style={{ borderColor: T.border, background: T.panel }}
-        >
-          <img
-            src="/whatsapp/virtual-car-hire-welcome.jpg"
-            alt="Virtual Car Hire Logo"
-            className="h-7 w-7 rounded-full object-cover border border-[#ff6a00]/50 shadow-sm"
-          />
-          <span className="hidden text-xs font-bold text-white md:inline">
-            Virtual Car Hire
-          </span>
-        </div>
       </div>
     </header>
   );
@@ -1108,7 +1215,9 @@ function GlobalSearch({
   goto: (v: View) => void;
 }) {
   const [query, setQuery] = useState("");
+  const navigate = useNavigate();
   const q = query.trim().toLowerCase();
+
   const results = q
     ? [
         ...vehicles
@@ -1117,6 +1226,7 @@ function GlobalSearch({
           .map((v) => ({
             label: `${v.make} ${v.model}`,
             meta: v.registration,
+            searchKey: v.registration,
             view: "vehicles" as View,
           })),
         ...drivers
@@ -1125,6 +1235,7 @@ function GlobalSearch({
           .map((d) => ({
             label: d.driver_name,
             meta: `${d.phone || "No phone"} · ${d.registration}`,
+            searchKey: d.driver_name,
             view: "drivers" as View,
           })),
         ...services
@@ -1135,6 +1246,7 @@ function GlobalSearch({
           .map((s) => ({
             label: s.service_type,
             meta: `${s.registration} · ${s.description || "Service record"}`,
+            searchKey: s.registration,
             view: "services" as View,
           })),
         ...(q.includes("lead") || q.includes("whatsapp")
@@ -1142,24 +1254,41 @@ function GlobalSearch({
               {
                 label: "WhatsApp Leads",
                 meta: "Open customer conversations",
+                searchKey: "lead",
                 view: "leads" as View,
               },
             ]
           : []),
         ...(q.includes("accident") || q.includes("crash")
-          ? [{ label: "Accident Cases", meta: "Open accident reports", view: "accidents" as View }]
+          ? [
+              {
+                label: "Accident Cases",
+                meta: "Open accident reports",
+                searchKey: "accident",
+                view: "accidents" as View,
+              },
+            ]
           : []),
         ...(q.includes("generation") || q.includes("contract") || q.includes("permission")
           ? [
               {
                 label: "Generations",
                 meta: "Permission letters and contracts",
+                searchKey: "generation",
                 view: "generations" as View,
               },
             ]
           : []),
       ].slice(0, 8)
     : [];
+
+  const handleSelect = (r: { view: View; searchKey: string }) => {
+    const basePath = VIEW_PATH[r.view];
+    const targetUrl = `${basePath}?q=${encodeURIComponent(r.searchKey)}`;
+    navigate({ to: targetUrl });
+    setQuery("");
+  };
+
   return (
     <div className="relative min-w-0 flex-1">
       <div
@@ -1170,7 +1299,7 @@ function GlobalSearch({
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search anything…"
+          placeholder="Search vehicles, drivers, services..."
           className="min-w-0 flex-1 appearance-none bg-transparent text-sm text-white outline-none placeholder:text-[#6b7488] focus:outline-none focus:ring-0"
           aria-label="Search CRM"
         />
@@ -1193,13 +1322,10 @@ function GlobalSearch({
           {results.map((r, i) => (
             <button
               key={`${r.label}-${i}`}
-              onClick={() => {
-                goto(r.view);
-                setQuery("");
-              }}
+              onClick={() => handleSelect(r)}
               className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left hover:bg-white/[0.08]"
             >
-              <span className="truncate text-sm text-white">{r.label}</span>
+              <span className="truncate text-sm font-semibold text-white">{r.label}</span>
               <span className="ml-3 truncate text-xs text-[#8b95a8]">{r.meta}</span>
             </button>
           ))}
@@ -1247,8 +1373,8 @@ function Dashboard({
   });
   const monthly = Array.from(monthlyMap.entries()).sort().slice(-6);
 
-  // End of month reminders: fires on the due date (start_date + 1 month) and stays
-  // until the driver's mileage is updated (closeMonth resets start_date).
+  // End of month reminders: fires 1 day before the due date (start_date + 1 month)
+  // and stays until the driver's mileage is updated (closeMonth resets start_date).
   const now = Date.now();
   const eomReminders = drivers
     .map((d) => {
@@ -1258,7 +1384,7 @@ function Dashboard({
       const days = Math.ceil((dueDate.getTime() - now) / 86400000);
       return { d, dueDate, days };
     })
-    .filter((x) => x.days <= 0)
+    .filter((x) => x.days <= 1)
     .sort((a, b) => a.days - b.days);
 
   // Expiry alerts: MOT & PCO expiring within 30 days or expired
@@ -1327,17 +1453,24 @@ function Dashboard({
               >
                 <UKPlate reg={d.registration} size="sm" />
                 <div className="flex-1 text-sm">
-                  Ask <span className="font-bold">{d.driver_name}</span> to send a photo of the
-                  current mileage for <span className="font-semibold">{d.registration}</span>.
+                  <span className="font-bold text-[#ff8a3d]">Please update driver mileage:</span> Ask{" "}
+                  <span className="font-bold">{d.driver_name}</span> to send a photo of the current
+                  mileage for <span className="font-semibold">{d.registration}</span>.
                   <div className="text-xs text-[#8b95a8]">
                     Due {dueDate.toLocaleDateString("en-GB")} · Dismisses when you log End of Month
                     mileage
                   </div>
                 </div>
                 <span
-                  className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${days < 0 ? "bg-red-500/20 text-red-300" : "bg-red-500/20 text-red-300"}`}
+                  className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                    days < 0
+                      ? "bg-red-500/20 text-red-300"
+                      : days === 1
+                        ? "bg-amber-500/20 text-amber-300"
+                        : "bg-red-500/20 text-red-300"
+                  }`}
                 >
-                  {days < 0 ? `${Math.abs(days)}d overdue` : "Due today"}
+                  {days < 0 ? `${Math.abs(days)}d overdue` : days === 1 ? "Due tomorrow" : "Due today"}
                 </span>
               </button>
             ))}
@@ -1790,7 +1923,9 @@ function VehiclesList({
   onAdd: () => void;
   onOpen: (v: Vehicle) => void;
 }) {
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(() =>
+    typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("q") ?? "" : "",
+  );
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const filtered = vehicles.filter((v) => {
     const matchQ = [v.registration, v.make, v.model].some((s) =>
@@ -2666,7 +2801,9 @@ function ServicesList({
   onAdd: () => void;
   onDelete: (id: string) => void;
 }) {
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(() =>
+    typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("q") ?? "" : "",
+  );
   const [category, setCategory] = useState<ServiceCategory | "All">("All");
   const [selected, setSelected] = useState<ServiceRecord | null>(null);
   const categories: (ServiceCategory | "All")[] = [
@@ -2931,134 +3068,277 @@ function DriversView({
   data: ReturnType<typeof useFleetData>;
   toast: (m: string, t?: Toast["type"]) => void;
 }) {
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [vehicleId, setVehicleId] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState(() =>
+    typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("q") ?? "" : "",
+  );
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [editingDriver, setEditingDriver] = useState<DriverTrack | null>(null);
   const [previewDriver, setPreviewDriver] = useState<DriverTrack | null>(null);
-  const selected = vehicles.find((vehicle) => vehicle.id === vehicleId);
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!name.trim() || !phone.trim() || !selected) {
-      toast("Enter the driver name, phone number, and vehicle.", "error");
-      return;
-    }
-    setSaving(true);
-    try {
-      await data.addDriver({
-        driver_name: name.trim(),
-        phone: phone.trim(),
-        vehicle_id: selected.id,
-        registration: selected.registration,
-        start_mileage: selected.current_mileage,
-        current_mileage: selected.current_mileage,
-        allowance: 5000,
-        excess_rate: 20,
-        start_date: new Date().toISOString().slice(0, 10),
-      });
-      toast(`${name.trim()} linked to ${selected.registration}`);
-      setName("");
-      setPhone("");
-      setVehicleId("");
-    } catch (error: any) {
-      toast(error?.message ?? "Could not save driver", "error");
-    } finally {
-      setSaving(false);
+
+  const totalDrivers = drivers.length;
+  const activeDrivers = drivers.length; // Active driver tracks
+  const inactiveDrivers = 0;
+  const pendingActionDrivers = drivers.filter((d) => !d.phone || !d.vehicle_id).length;
+
+  const filteredDrivers = drivers.filter((d) => {
+    const q = searchQuery.trim().toLowerCase();
+    const matchesQ =
+      !q ||
+      d.driver_name.toLowerCase().includes(q) ||
+      (d.phone && d.phone.toLowerCase().includes(q)) ||
+      d.registration.toLowerCase().includes(q);
+    const matchesS =
+      statusFilter === "all" ||
+      (statusFilter === "active" && true) ||
+      (statusFilter === "pending" && (!d.phone || !d.vehicle_id));
+    return matchesQ && matchesS;
+  });
+
+  const handleDelete = async (driver: DriverTrack) => {
+    if (confirm(`Are you sure you want to delete driver "${driver.driver_name}"?`)) {
+      try {
+        await data.deleteDriver(driver.id);
+        toast(`Driver ${driver.driver_name} deleted`, "info");
+      } catch (err: any) {
+        toast(err?.message ?? "Failed to delete driver", "error");
+      }
     }
   };
+
   return (
-    <div className="space-y-5">
-      <div>
-        <h2 className="text-2xl font-bold">Drivers</h2>
-        <p className="text-sm text-[#8b95a8]">
-          Save client contact details and link each driver to a vehicle.
-        </p>
+    <div className="space-y-4 text-xs sm:text-sm">
+      {/* Page Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-extrabold tracking-tight sm:text-2xl">Drivers</h2>
+          <p className="mt-0.5 text-xs text-[#8b95a8]">
+            Manage client drivers, contact details, and vehicle assignments.
+          </p>
+        </div>
+        <button
+          onClick={() => setAddModalOpen(true)}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-[#ff6a00] px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-[#e05d00]"
+        >
+          <Icon.Plus className="h-4 w-4" /> Add Driver
+        </button>
       </div>
-      <form
-        onSubmit={submit}
-        className="rounded-xl border p-5"
+
+      {/* Stat Cards (Slightly smaller, compact design) */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div
+          className="rounded-xl border p-3.5 shadow-sm"
+          style={{ borderColor: T.border, background: T.panel }}
+        >
+          <div className="text-[10px] font-bold uppercase tracking-wider text-[#8b95a8]">
+            Total Drivers
+          </div>
+          <div className="mt-1 text-2xl font-extrabold text-white">{totalDrivers}</div>
+        </div>
+        <div
+          className="rounded-xl border p-3.5 shadow-sm"
+          style={{ borderColor: T.border, background: T.panel }}
+        >
+          <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+            Active
+          </div>
+          <div className="mt-1 text-2xl font-extrabold text-emerald-300">{activeDrivers}</div>
+        </div>
+        <div
+          className="rounded-xl border p-3.5 shadow-sm"
+          style={{ borderColor: T.border, background: T.panel }}
+        >
+          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            Inactive
+          </div>
+          <div className="mt-1 text-2xl font-extrabold text-slate-300">{inactiveDrivers}</div>
+        </div>
+        <div
+          className="rounded-xl border p-3.5 shadow-sm"
+          style={{ borderColor: T.border, background: T.panel }}
+        >
+          <div className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
+            Pending Action
+          </div>
+          <div className="mt-1 text-2xl font-extrabold text-amber-300">
+            {pendingActionDrivers}
+          </div>
+        </div>
+      </div>
+
+      {/* Controls Bar */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative min-w-[220px] flex-1">
+          <Icon.Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#5b6478]" />
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search driver by name, phone or vehicle..."
+            className="w-full rounded-lg border py-2 pl-8 pr-3 text-xs text-white placeholder:text-[#5b6478] focus:border-[#ff6a00] focus:outline-none"
+            style={{ borderColor: T.border, background: T.panel }}
+          />
+        </div>
+        <DarkSelect
+          value={statusFilter}
+          onChange={setStatusFilter}
+          options={[
+            { value: "all", label: "All Statuses" },
+            { value: "active", label: "Active" },
+            { value: "pending", label: "Pending Action" },
+          ]}
+          className="min-w-[150px] rounded-lg border px-2.5 py-2 text-xs text-white"
+        />
+      </div>
+
+      {/* Drivers Data Table */}
+      <div
+        className="overflow-hidden rounded-xl border"
         style={{ borderColor: T.border, background: T.panel }}
       >
-        <h3 className="mb-4 text-base font-semibold">Add Driver</h3>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <Field label="Full name">
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              className={inputCls}
-              placeholder="Areeb Ansari"
-            />
-          </Field>
-          <Field label="Client phone number">
-            <input
-              value={phone}
-              onChange={(event) => setPhone(event.target.value)}
-              className={inputCls}
-              placeholder="+44 7721 502779"
-            />
-          </Field>
-          <Field label="Linked vehicle">
-            <DarkSelect
-              value={vehicleId}
-              onChange={setVehicleId}
-              placeholder="Choose a vehicle…"
-              options={vehicles.map((vehicle) => ({
-                value: vehicle.id,
-                label: `${vehicle.registration} — ${vehicle.make} ${vehicle.model}`,
-              }))}
-            />
-          </Field>
-        </div>
-        <div className="mt-4 flex justify-end">
-          <button
-            disabled={saving}
-            className="rounded-lg bg-[#ff6a00] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-          >
-            {saving ? "Saving…" : "Save Driver"}
-          </button>
-        </div>
-      </form>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {drivers.map((driver) => {
-          const vehicle = vehicles.find((item) => item.id === driver.vehicle_id);
-          return (
-            <button
-              type="button"
-              key={driver.id}
-              onClick={() => setPreviewDriver(driver)}
-              className="rounded-xl border p-5 text-left transition hover:-translate-y-0.5 hover:border-[#ff6a00]/60 hover:shadow-lg hover:shadow-orange-500/10"
-              style={{ borderColor: T.border, background: T.panel }}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead
+              className="border-b text-[10px] uppercase tracking-wider text-[#8b95a8]"
+              style={{ borderColor: T.borderSoft, background: "rgba(255,255,255,0.03)" }}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="font-semibold">{driver.driver_name}</h3>
-                  <p className="mt-1 text-sm text-[#8b95a8]">{driver.phone || "No phone saved"}</p>
-                </div>
-                <span className="rounded-full border border-sky-400/30 bg-sky-400/10 px-2 py-1 text-[11px] text-sky-200">
-                  Active
-                </span>
-              </div>
-              <div
-                className="mt-4 flex items-center gap-3 border-t pt-3"
-                style={{ borderColor: T.borderSoft }}
-              >
-                <UKPlate reg={vehicle?.registration ?? driver.registration} size="sm" />
-                <span className="text-sm text-[#c5ccda]">
-                  {vehicle ? `${vehicle.make} ${vehicle.model}` : "Vehicle not found"}
-                </span>
-              </div>
-            </button>
-          );
-        })}
-        {drivers.length === 0 && (
-          <div
-            className="rounded-xl border border-dashed p-10 text-center text-sm text-[#8b95a8] md:col-span-2 xl:col-span-3"
-            style={{ borderColor: T.border }}
-          >
-            No drivers saved yet.
-          </div>
-        )}
+              <tr>
+                <th className="px-4 py-3 font-bold">Driver</th>
+                <th className="px-4 py-3 font-bold">Contact</th>
+                <th className="px-4 py-3 font-bold">Vehicle</th>
+                <th className="px-4 py-3 font-bold">Start Date</th>
+                <th className="px-4 py-3 font-bold">Status</th>
+                <th className="px-4 py-3 text-right font-bold">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/[0.06]">
+              {filteredDrivers.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-[#8b95a8]">
+                    No drivers match your search.
+                  </td>
+                </tr>
+              ) : (
+                filteredDrivers.map((driver) => {
+                  const vehicle = vehicles.find((v) => v.id === driver.vehicle_id);
+                  const initials = driver.driver_name
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase();
+                  return (
+                    <tr
+                      key={driver.id}
+                      className="transition-colors hover:bg-white/[0.04]"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#ff6a00] to-[#ff9d4d] text-xs font-bold text-white shadow-sm">
+                            {initials}
+                          </div>
+                          <div>
+                            <div className="font-bold text-white">{driver.driver_name}</div>
+                            <div className="text-[10px] text-[#8b95a8]">
+                              Allowance: {driver.allowance.toLocaleString()} mi
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 font-medium text-[#c5ccda]">
+                        {driver.phone || "No phone saved"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <UKPlate
+                            reg={vehicle?.registration ?? driver.registration}
+                            size="sm"
+                          />
+                          <span className="text-xs text-[#aeb8c9]">
+                            {vehicle ? `${vehicle.make} ${vehicle.model}` : "Unassigned"}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-[#9aa5b8]">{driver.start_date || "—"}</td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+                          Active
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setPreviewDriver(driver)}
+                            title="View WhatsApp Chat History"
+                            className="rounded-md border p-1.5 text-[#8b95a8] hover:bg-white/10 hover:text-white"
+                            style={{ borderColor: T.borderSoft }}
+                          >
+                            <Icon.Chat className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingDriver(driver)}
+                            title="Edit Driver"
+                            className="rounded-md border p-1.5 text-[#8b95a8] hover:bg-white/10 hover:text-white"
+                            style={{ borderColor: T.borderSoft }}
+                          >
+                            <Icon.Wrench className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(driver)}
+                            title="Delete Driver"
+                            className="rounded-md border border-red-500/30 bg-red-500/10 p-1.5 text-red-400 hover:bg-red-500/20 hover:text-red-300"
+                          >
+                            <Icon.X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
+
+      {/* Add Driver Modal */}
+      {addModalOpen && (
+        <AddDriverModal
+          vehicles={vehicles}
+          onClose={() => setAddModalOpen(false)}
+          onSave={async (newDriver) => {
+            try {
+              await data.addDriver(newDriver);
+              toast(`Driver ${newDriver.driver_name} saved`);
+              setAddModalOpen(false);
+            } catch (err: any) {
+              toast(err?.message ?? "Failed to save driver", "error");
+            }
+          }}
+        />
+      )}
+
+      {/* Edit Driver Modal */}
+      {editingDriver && (
+        <EditDriverModal
+          driver={editingDriver}
+          vehicles={vehicles}
+          onClose={() => setEditingDriver(null)}
+          onSave={async (updatedDriver) => {
+            try {
+              await data.editDriver(updatedDriver);
+              toast(`Driver ${updatedDriver.driver_name} updated`);
+              setEditingDriver(null);
+            } catch (err: any) {
+              toast(err?.message ?? "Failed to update driver", "error");
+            }
+          }}
+        />
+      )}
+
+      {/* Driver WhatsApp History Preview Modal */}
       {previewDriver && (
         <DriverPreviewModal
           driver={previewDriver}
@@ -3066,6 +3346,248 @@ function DriversView({
           onClose={() => setPreviewDriver(null)}
         />
       )}
+    </div>
+  );
+}
+
+function AddDriverModal({
+  vehicles,
+  onClose,
+  onSave,
+}: {
+  vehicles: Vehicle[];
+  onClose: () => void;
+  onSave: (driver: Omit<DriverTrack, "id" | "monthly_logs">) => Promise<void>;
+}) {
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [vehicleId, setVehicleId] = useState("");
+  const [allowance, setAllowance] = useState("5000");
+  const [excessRate, setExcessRate] = useState("20");
+  const [saving, setSaving] = useState(false);
+
+  const selectedVehicle = vehicles.find((v) => v.id === vehicleId);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !selectedVehicle) return;
+    setSaving(true);
+    await onSave({
+      driver_name: name.trim(),
+      phone: phone.trim(),
+      vehicle_id: selectedVehicle.id,
+      registration: selectedVehicle.registration,
+      start_mileage: selectedVehicle.current_mileage,
+      current_mileage: selectedVehicle.current_mileage,
+      allowance: parseInt(allowance) || 5000,
+      excess_rate: parseInt(excessRate) || 20,
+      start_date: new Date().toISOString().slice(0, 10),
+    });
+    setSaving(false);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-lg rounded-2xl border p-5 shadow-2xl"
+        style={{ borderColor: T.border, background: "#10141d" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-base font-bold text-white">Add New Driver</h3>
+          <button onClick={onClose} className="text-[#8b95a8] hover:text-white">
+            <Icon.X className="h-5 w-5" />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-3 text-xs">
+          <Field label="Full Name *">
+            <input
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className={inputCls}
+              placeholder="e.g. John Smith"
+            />
+          </Field>
+          <Field label="Phone Number *">
+            <input
+              required
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className={inputCls}
+              placeholder="e.g. +44 7721 502779"
+            />
+          </Field>
+          <Field label="Linked Vehicle *">
+            <DarkSelect
+              value={vehicleId}
+              onChange={setVehicleId}
+              placeholder="Choose a vehicle…"
+              options={vehicles.map((v) => ({
+                value: v.id,
+                label: `${v.registration} — ${v.make} ${v.model}`,
+              }))}
+            />
+          </Field>
+          <Grid2>
+            <Field label="Monthly Allowance (mi)">
+              <input
+                type="number"
+                value={allowance}
+                onChange={(e) => setAllowance(e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Excess Rate (p/mi)">
+              <input
+                type="number"
+                value={excessRate}
+                onChange={(e) => setExcessRate(e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+          </Grid2>
+          <div className="flex justify-end gap-2 border-t pt-3" style={{ borderColor: T.border }}>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border px-4 py-2 hover:bg-white/10"
+              style={{ borderColor: T.border }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving || !name.trim() || !vehicleId}
+              className="rounded-lg bg-[#ff6a00] px-4 py-2 font-semibold text-white hover:bg-[#e05d00] disabled:opacity-50"
+            >
+              {saving ? "Saving…" : "Save Driver"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function EditDriverModal({
+  driver,
+  vehicles,
+  onClose,
+  onSave,
+}: {
+  driver: DriverTrack;
+  vehicles: Vehicle[];
+  onClose: () => void;
+  onSave: (driver: DriverTrack) => Promise<void>;
+}) {
+  const [name, setName] = useState(driver.driver_name);
+  const [phone, setPhone] = useState(driver.phone || "");
+  const [vehicleId, setVehicleId] = useState(driver.vehicle_id);
+  const [allowance, setAllowance] = useState(String(driver.allowance));
+  const [excessRate, setExcessRate] = useState(String(driver.excess_rate));
+  const [saving, setSaving] = useState(false);
+
+  const selectedVehicle = vehicles.find((v) => v.id === vehicleId);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setSaving(true);
+    await onSave({
+      ...driver,
+      driver_name: name.trim(),
+      phone: phone.trim(),
+      vehicle_id: selectedVehicle ? selectedVehicle.id : driver.vehicle_id,
+      registration: selectedVehicle ? selectedVehicle.registration : driver.registration,
+      allowance: parseInt(allowance) || 5000,
+      excess_rate: parseInt(excessRate) || 20,
+    });
+    setSaving(false);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-lg rounded-2xl border p-5 shadow-2xl"
+        style={{ borderColor: T.border, background: "#10141d" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-base font-bold text-white">Edit Driver Details</h3>
+          <button onClick={onClose} className="text-[#8b95a8] hover:text-white">
+            <Icon.X className="h-5 w-5" />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-3 text-xs">
+          <Field label="Full Name *">
+            <input
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Phone Number">
+            <input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Linked Vehicle">
+            <DarkSelect
+              value={vehicleId}
+              onChange={setVehicleId}
+              options={vehicles.map((v) => ({
+                value: v.id,
+                label: `${v.registration} — ${v.make} ${v.model}`,
+              }))}
+            />
+          </Field>
+          <Grid2>
+            <Field label="Monthly Allowance (mi)">
+              <input
+                type="number"
+                value={allowance}
+                onChange={(e) => setAllowance(e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Excess Rate (p/mi)">
+              <input
+                type="number"
+                value={excessRate}
+                onChange={(e) => setExcessRate(e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+          </Grid2>
+          <div className="flex justify-end gap-2 border-t pt-3" style={{ borderColor: T.border }}>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border px-4 py-2 hover:bg-white/10"
+              style={{ borderColor: T.border }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving || !name.trim()}
+              className="rounded-lg bg-[#ff6a00] px-4 py-2 font-semibold text-white hover:bg-[#e05d00] disabled:opacity-50"
+            >
+              {saving ? "Saving…" : "Save Changes"}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
