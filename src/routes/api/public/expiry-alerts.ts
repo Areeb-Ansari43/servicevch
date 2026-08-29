@@ -19,17 +19,27 @@ export const Route = createFileRoute("/api/public/expiry-alerts")({
 async function runExpiryScan() {
   const resendKey = getRuntimeEnv("RESEND_API_KEY");
   if (!resendKey) {
-    return new Response(JSON.stringify({ ok: false, error: "Email not configured: RESEND_API_KEY missing" }), { status: 500 });
+    return new Response(
+      JSON.stringify({ ok: false, error: "Email not configured: RESEND_API_KEY missing" }),
+      { status: 500 },
+    );
   }
 
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data: vehicles, error } = await supabaseAdmin
-    .from("vehicles")
-    .select("*");
-  if (error) return new Response(JSON.stringify({ ok: false, error: error.message }), { status: 500 });
+  const { data: vehicles, error } = await supabaseAdmin.from("vehicles").select("*");
+  if (error)
+    return new Response(JSON.stringify({ ok: false, error: error.message }), { status: 500 });
 
   const now = Date.now();
-  type Item = { reg: string; make: string; model: string; type: "MOT" | "PCO License"; date: string; days: number; expired: boolean };
+  type Item = {
+    reg: string;
+    make: string;
+    model: string;
+    type: "MOT" | "PCO License";
+    date: string;
+    days: number;
+    expired: boolean;
+  };
   const items: Item[] = [];
   for (const v of vehicles ?? []) {
     const check = (type: Item["type"], date: string | null, reminderDays: number) => {
@@ -39,7 +49,15 @@ async function runExpiryScan() {
       const days = Math.ceil((t - now) / 86400000);
       // Reminder any time within N days of expiry, and warning on/after expiry day
       if (days <= reminderDays) {
-        items.push({ reg: v.reg, make: v.make, model: v.model, type, date, days, expired: days <= 0 });
+        items.push({
+          reg: v.reg,
+          make: v.make,
+          model: v.model,
+          type,
+          date,
+          days,
+          expired: days <= 0,
+        });
       }
     };
     check("MOT", getNextMotDate(v), 7);
@@ -57,11 +75,12 @@ async function runExpiryScan() {
 
   const rows = items
     .map((i) => {
-      const status = i.days <= 0
-        ? (i.days === 0
+      const status =
+        i.days <= 0
+          ? i.days === 0
             ? `<span style="color:#ff7a7a;font-weight:700">EXPIRES TODAY</span>`
-            : `<span style="color:#ff7a7a;font-weight:700">EXPIRED — ${Math.abs(i.days)}d ago</span>`)
-        : `<span style="color:#ffab3d;font-weight:700">${i.days}d left</span>`;
+            : `<span style="color:#ff7a7a;font-weight:700">EXPIRED — ${Math.abs(i.days)}d ago</span>`
+          : `<span style="color:#ffab3d;font-weight:700">${i.days}d left</span>`;
       return `<tr>
         <td style="padding:12px;border-bottom:1px solid rgba(255,255,255,.07);font-family:ui-monospace,monospace;font-weight:700;color:#ffffff">${i.reg}</td>
         <td style="padding:12px;border-bottom:1px solid rgba(255,255,255,.07);color:#d6d6de">${i.make} ${i.model}</td>
@@ -72,15 +91,20 @@ async function runExpiryScan() {
     })
     .join("");
 
-  const heading = expiredItems.length > 0 && reminderItems.length === 0
-    ? "Fleet expiry warnings"
-    : expiredItems.length > 0
-      ? "Fleet expiry alerts & warnings"
-      : "Fleet expiry reminders";
+  const heading =
+    expiredItems.length > 0 && reminderItems.length === 0
+      ? "Fleet expiry warnings"
+      : expiredItems.length > 0
+        ? "Fleet expiry alerts & warnings"
+        : "Fleet expiry reminders";
   const summary = [
-    reminderItems.length > 0 ? `${reminderItems.length} upcoming (MOT 7 days / PCO License 10 days before expiry)` : null,
+    reminderItems.length > 0
+      ? `${reminderItems.length} upcoming (MOT 7 days / PCO License 10 days before expiry)`
+      : null,
     expiredItems.length > 0 ? `${expiredItems.length} expired` : null,
-  ].filter(Boolean).join(" • ");
+  ]
+    .filter(Boolean)
+    .join(" • ");
 
   const html = `
     <div style="background:#07070b;padding:32px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
@@ -102,11 +126,12 @@ async function runExpiryScan() {
       </div>
     </div>`;
 
-  const subject = expiredItems.length > 0 && reminderItems.length === 0
-    ? `⚠️ Fleet expiry warning — ${expiredItems.length} expired`
-    : expiredItems.length > 0
-      ? `⚠️ Fleet expiry — ${expiredItems.length} expired, ${reminderItems.length} upcoming`
-      : `Fleet expiry reminder — ${reminderItems.length} upcoming`;
+  const subject =
+    expiredItems.length > 0 && reminderItems.length === 0
+      ? `⚠️ Fleet expiry warning — ${expiredItems.length} expired`
+      : expiredItems.length > 0
+        ? `⚠️ Fleet expiry — ${expiredItems.length} expired, ${reminderItems.length} upcoming`
+        : `Fleet expiry reminder — ${reminderItems.length} upcoming`;
 
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -120,13 +145,14 @@ async function runExpiryScan() {
       subject,
       html,
     }),
-
   });
-
 
   if (!res.ok) {
     const txt = await res.text();
-    return new Response(JSON.stringify({ ok: false, error: `Email send failed: ${res.status} ${txt}` }), { status: 500 });
+    return new Response(
+      JSON.stringify({ ok: false, error: `Email send failed: ${res.status} ${txt}` }),
+      { status: 500 },
+    );
   }
   return new Response(JSON.stringify({ ok: true, sent: true, count: items.length }));
 }

@@ -13,14 +13,19 @@ const SUGGESTIONS = [
   "Total service spend this month?",
 ];
 
-export function ApexAssistant(_props: { vehicles?: unknown; services?: unknown; drivers?: unknown }) {
+export function ApexAssistant(_props: {
+  vehicles?: unknown;
+  services?: unknown;
+  drivers?: unknown;
+}) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([
     {
       role: "assistant",
-      content: "Hi, I'm Apex. Ask me anything about your fleet — MOTs, PCO licences, mileage, service costs or new leads.",
+      content:
+        "Hi, I'm Apex. Ask me anything about your fleet — MOTs, PCO licences, mileage, service costs or new leads.",
     },
   ]);
   const ask = useServerFn(askApex);
@@ -42,7 +47,10 @@ export function ApexAssistant(_props: { vehicles?: unknown; services?: unknown; 
       setMessages((m) => [...m, { role: "assistant", content: res.answer }]);
     } catch (err) {
       console.error("[Apex] request failed", err);
-      setMessages((m) => [...m, { role: "assistant", content: "Sorry — I couldn't answer that just now." }]);
+      setMessages((m) => [
+        ...m,
+        { role: "assistant", content: "Sorry — I couldn't answer that just now." },
+      ]);
     } finally {
       setBusy(false);
     }
@@ -59,7 +67,15 @@ export function ApexAssistant(_props: { vehicles?: unknown; services?: unknown; 
           className="group flex items-center gap-2.5 rounded-full border border-white/15 bg-white/[0.08] py-3 pl-3 pr-5 text-sm font-semibold text-white shadow-2xl backdrop-blur-xl transition-all hover:bg-white/[0.14]"
         >
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-[#ff6a00] to-[#ff9d4d] text-white shadow-lg shadow-orange-500/40">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-4 w-4"
+            >
               <path d="M12 3l1.8 4.9L19 9.7l-4.4 3 .5 5.3-3.1-2.5-3.1 2.5.5-5.3-4.4-3 5.2-1.8z" />
             </svg>
           </span>
@@ -74,7 +90,15 @@ export function ApexAssistant(_props: { vehicles?: unknown; services?: unknown; 
       >
         <div className="flex items-center gap-3 border-b border-white/10 bg-white/[0.04] px-5 py-4">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#ff6a00] to-[#ff9d4d] text-white">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-4 w-4"
+            >
               <path d="M12 3l1.8 4.9L19 9.7l-4.4 3 .5 5.3-3.1-2.5-3.1 2.5.5-5.3-4.4-3 5.2-1.8z" />
             </svg>
           </span>
@@ -82,8 +106,20 @@ export function ApexAssistant(_props: { vehicles?: unknown; services?: unknown; 
             <div className="text-sm font-semibold text-white">Apex AI</div>
             <div className="text-[11px] text-[#8b95a8]">Answers from your live fleet data</div>
           </div>
-          <button onClick={() => setOpen(false)} className="ml-auto rounded-full p-1.5 text-[#8b95a8] hover:bg-white/10 hover:text-white" aria-label="Close Apex">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          <button
+            onClick={() => setOpen(false)}
+            className="ml-auto rounded-full p-1.5 text-[#8b95a8] hover:bg-white/10 hover:text-white"
+            aria-label="Close Apex"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              className="h-4 w-4"
+            >
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
           </button>
         </div>
 
@@ -123,7 +159,10 @@ export function ApexAssistant(_props: { vehicles?: unknown; services?: unknown; 
             ))}
           </div>
           <form
-            onSubmit={(e) => { e.preventDefault(); send(input); }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              send(input);
+            }}
             className="flex items-center gap-2"
           >
             <input

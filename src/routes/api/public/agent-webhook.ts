@@ -6,9 +6,12 @@ import { sendWhatsAppText, sendWhatsAppImageButtons } from "@/lib/meta-whatsapp.
 
 const CRM_BASE = "https://servicevch.pages.dev";
 const VCH_WEBSITE = "https://virtualcarhire.pages.dev/our-fleet";
-const WELCOME_IMAGE_URL = "https://servicevch.pages.dev/whatsapp/virtual-car-hire-welcome.jpg?v=20260826-4";
-const AUTO_SURGEON_ADDRESS = "The Auto Surgeon, Unit 3 Squirrels Trading Estate, Viveash Close, Hayes UB3 4RZ";
-const AUTO_SURGEON_MAP = "https://www.google.com/maps/search/?api=1&query=The+Auto+Surgeon+Unit+3+Squirrels+Trading+Estate+Viveash+Close+Hayes+UB3+4RZ";
+const WELCOME_IMAGE_URL =
+  "https://servicevch.pages.dev/whatsapp/virtual-car-hire-welcome.jpg?v=20260826-4";
+const AUTO_SURGEON_ADDRESS =
+  "The Auto Surgeon, Unit 3 Squirrels Trading Estate, Viveash Close, Hayes UB3 4RZ";
+const AUTO_SURGEON_MAP =
+  "https://www.google.com/maps/search/?api=1&query=The+Auto+Surgeon+Unit+3+Squirrels+Trading+Estate+Viveash+Close+Hayes+UB3+4RZ";
 const WELCOME_MENU =
   "👋 Hello, and welcome to Virtual Car Hire\n" +
   "🚘 London's number one PCO car hire company with 4.8 stars across Google and Trustpilot.\n\n" +
@@ -23,16 +26,46 @@ const WEBSITE_CATALOG = [
   { make: "Mercedes", model: "EQS", fuel: "Electric", price: "£500/week", year: "2022–24" },
   { make: "Mercedes", model: "E220", fuel: "Petrol", price: "£310/week", year: "2020–24" },
   { make: "Mercedes", model: "EQE", fuel: "Electric", price: "£440/week", year: "2023–24" },
-  { make: "Toyota", model: "Corolla Estate", fuel: "Plug-in-Hybrid", price: "£220/week", year: "2021–24" },
-  { make: "Toyota", model: "Auris Estate", fuel: "Plug-in-Hybrid", price: "£210/week", year: "2019–22" },
+  {
+    make: "Toyota",
+    model: "Corolla Estate",
+    fuel: "Plug-in-Hybrid",
+    price: "£220/week",
+    year: "2021–24",
+  },
+  {
+    make: "Toyota",
+    model: "Auris Estate",
+    fuel: "Plug-in-Hybrid",
+    price: "£210/week",
+    year: "2019–22",
+  },
   { make: "Toyota", model: "Prius", fuel: "Plug-in-Hybrid", price: "£200/week", year: "2020–24" },
   { make: "Tesla", model: "Model 3", fuel: "Electric", price: "£260/week", year: "2021–24" },
   { make: "Jaguar", model: "I-Pace", fuel: "Electric", price: "£330/week", year: "2020–24" },
   { make: "Hyundai", model: "IONIQ", fuel: "Plug-in-Hybrid", price: "£220/week", year: "2020–23" },
   { make: "MG", model: "MG5 EV", fuel: "Electric", price: "£200/week", year: "2022–24" },
-  { make: "Ford", model: "Tourneo Custom", fuel: "Plug-in-Hybrid", price: "£410/week", year: "2021–24" },
-  { make: "MG", model: "MG S9 PHEV SUV", fuel: "Plug-in-Hybrid", price: "£350/week", year: "2024–25" },
-  { make: "Volkswagen", model: "Multivan PHEV", fuel: "Plug-in-Hybrid", price: "£350/week", year: "2024–25" },
+  {
+    make: "Ford",
+    model: "Tourneo Custom",
+    fuel: "Plug-in-Hybrid",
+    price: "£410/week",
+    year: "2021–24",
+  },
+  {
+    make: "MG",
+    model: "MG S9 PHEV SUV",
+    fuel: "Plug-in-Hybrid",
+    price: "£350/week",
+    year: "2024–25",
+  },
+  {
+    make: "Volkswagen",
+    model: "Multivan PHEV",
+    fuel: "Plug-in-Hybrid",
+    price: "£350/week",
+    year: "2024–25",
+  },
 ];
 const STANDARD_TERMS =
   "Minimum 6-week contract; 5,000 miles per month for all vehicles except Mercedes EQE and EQS, which have 4,000 miles per month; insurance and servicing included.";
@@ -44,7 +77,11 @@ const OUT_OF_HOURS_MESSAGE =
   "Virtual Car Hire is unable to connect you to an agent but our AI is always ready to help 9am to 6pm. Please chat with this bot to simplify the process and make it quicker to start renting with us.";
 
 export function isOutsideUKBusinessHours(date = new Date()): boolean {
-  const options: Intl.DateTimeFormatOptions = { timeZone: "Europe/London", hour: "numeric", hour12: false };
+  const options: Intl.DateTimeFormatOptions = {
+    timeZone: "Europe/London",
+    hour: "numeric",
+    hour12: false,
+  };
   const hourStr = new Intl.DateTimeFormat("en-GB", options).format(date);
   const hour = parseInt(hourStr, 10);
   return hour < 9 || hour >= 18;
@@ -139,7 +176,7 @@ type AccidentData = {
 const bodySchema = z.object({
   phone: z.string().trim().min(3).max(40).optional(),
   chat_id: z.string().trim().min(3).max(160).optional(),
-    name: z.string().trim().max(120).optional(),
+  name: z.string().trim().max(120).optional(),
   content: z.string().trim().min(1).max(5000),
   media_url: z.string().trim().url().max(2000).optional(),
   media_meta_id: z.string().trim().max(300).optional(),
@@ -158,9 +195,16 @@ const json = (body: unknown, status = 200) =>
 const escapeHtml = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
+function displayPhone(val: string | null | undefined): string {
+  if (!val) return "No phone";
+  return val.replace(/@c\.us|@s\.whatsapp\.net/gi, "");
+}
+
 function isMissingColumn(error: unknown, column: string): boolean {
   const text = error instanceof Error ? error.message : JSON.stringify(error);
-  return new RegExp(`${column}["']?\\s+column|column\\s+["']?${column}|schema cache`, "i").test(text ?? "");
+  return new RegExp(`${column}["']?\\s+column|column\\s+["']?${column}|schema cache`, "i").test(
+    text ?? "",
+  );
 }
 
 async function insertWithSessionFallback(
@@ -175,8 +219,16 @@ async function insertWithSessionFallback(
   };
   let currentRow = { ...row };
   let result = await runInsert(currentRow);
-  for (const column of ["session_id", "handoff", "meta_message_id", "media_type", "media_mime_type", "media_meta_id"]) {
-    if (!result.error || !(column in currentRow) || !isMissingColumn(result.error, column)) continue;
+  for (const column of [
+    "session_id",
+    "handoff",
+    "meta_message_id",
+    "media_type",
+    "media_mime_type",
+    "media_meta_id",
+  ]) {
+    if (!result.error || !(column in currentRow) || !isMissingColumn(result.error, column))
+      continue;
     const { [column]: _removed, ...compatibleRow } = currentRow;
     currentRow = compatibleRow;
     console.warn(`[agent-webhook] ${table} has no ${column}; retrying with compatible schema`);
@@ -197,21 +249,47 @@ function isAbusiveMessage(text: string): boolean {
     .replace(/[7]/g, "t")
     .replace(/[^a-z0-9]+/g, " ");
   const abusiveTerms = [
-    "fuck", "fucking", "fucker", "motherfucker", "shit", "bullshit", "bitch",
-    "bastard", "dickhead", "asshole", "arsehole", "wanker", "twat", "cunt",
-    "prick", "slut", "whore", "piss off", "go to hell",
+    "fuck",
+    "fucking",
+    "fucker",
+    "motherfucker",
+    "shit",
+    "bullshit",
+    "bitch",
+    "bastard",
+    "dickhead",
+    "asshole",
+    "arsehole",
+    "wanker",
+    "twat",
+    "cunt",
+    "prick",
+    "slut",
+    "whore",
+    "piss off",
+    "go to hell",
   ];
-  return abusiveTerms.some((term) => new RegExp(`(?:^|\\s)${term.replace(/ /g, "\\s+")}(?:$|\\s)`, "i").test(normalized));
+  return abusiveTerms.some((term) =>
+    new RegExp(`(?:^|\\s)${term.replace(/ /g, "\\s+")}(?:$|\\s)`, "i").test(normalized),
+  );
 }
 
 function isMenuReset(text: string): boolean {
   const normalized = text.trim().replace(/^[\s,!.:;-]+|[\s,!.:;-]+$/g, "");
-  return /^(?:menu|main menu|restart|start again|start over|reset|hello|hi|hey|hiya|howdy|greetings|welcome|good morning|good afternoon|good evening|good day|morning|afternoon|evening)(?:[\s,!.:;-].*)?$/i.test(normalized)
-    || /\b(?:hello|hi|hey|hiya|howdy|greetings|welcome|good morning|good afternoon|good evening|good day)\b/i.test(normalized);
+  return (
+    /^(?:menu|main menu|restart|start again|start over|reset|hello|hi|hey|hiya|howdy|greetings|welcome|good morning|good afternoon|good evening|good day|morning|afternoon|evening)(?:[\s,!.:;-].*)?$/i.test(
+      normalized,
+    ) ||
+    /\b(?:hello|hi|hey|hiya|howdy|greetings|welcome|good morning|good afternoon|good evening|good day)\b/i.test(
+      normalized,
+    )
+  );
 }
 
 function isCarRequest(text: string): boolean {
-  return /\b(?:car|cars|vehicle|vehicles|available|availability|fleet|hire|rent|rental|mercedes|toyota|tesla|eqe|corolla|auris|prius|e300|e220|vito|eqs|ioniq|jaguar|mg5|tourneo|multivan)\b/i.test(text);
+  return /\b(?:car|cars|vehicle|vehicles|available|availability|fleet|hire|rent|rental|mercedes|toyota|tesla|eqe|corolla|auris|prius|e300|e220|vito|eqs|ioniq|jaguar|mg5|tourneo|multivan)\b/i.test(
+    text,
+  );
 }
 
 function isAccidentRequest(text: string): boolean {
@@ -219,7 +297,9 @@ function isAccidentRequest(text: string): boolean {
 }
 
 function isHelpMessage(text: string): boolean {
-  return /\b(?:help|assist|assistance|support|question|query|need info|information|how do i|can you|tell me)\b/i.test(text);
+  return /\b(?:help|assist|assistance|support|question|query|need info|information|how do i|can you|tell me)\b/i.test(
+    text,
+  );
 }
 
 function normalizeReg(value: string): string {
@@ -235,7 +315,9 @@ function canonicalPhoneKey(value: string | null | undefined): string | null {
 }
 
 function extractReg(value: string): string | null {
-  const match = value.toUpperCase().match(/\b[A-Z]{1,3}\s*\d{1,4}\s*[A-Z]{1,3}\b|\b[A-Z]{2}\d{2}\s?[A-Z]{3}\b/);
+  const match = value
+    .toUpperCase()
+    .match(/\b[A-Z]{1,3}\s*\d{1,4}\s*[A-Z]{1,3}\b|\b[A-Z]{2}\d{2}\s?[A-Z]{3}\b/);
   return match ? normalizeReg(match[0]) : null;
 }
 
@@ -262,7 +344,10 @@ function labeledValue(text: string, labels: string[]): string | null {
 }
 
 function normalizeDriverName(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
 
 function accidentMissing(data: AccidentData): string[] {
@@ -298,31 +383,85 @@ function formatAccidentSummary(data: AccidentData): string {
 
 function isLikelyFullName(text: string): boolean {
   const value = text.trim();
-  return value.length >= 3 && value.length <= 90 && !isCarRequest(value) && /^[A-Za-z][A-Za-z .'-]+$/.test(value);
+  return (
+    value.length >= 3 &&
+    value.length <= 90 &&
+    !isCarRequest(value) &&
+    /^[A-Za-z][A-Za-z .'-]+$/.test(value)
+  );
 }
 
 function parseAccidentIdentity(text: string): { name: string; registration: string } | null {
   const value = text.trim().replace(/\s+/g, " ");
   const match = value.match(/\b([A-Z]{2}\d{2}\s?[A-Z]{3})\b/i);
   if (!match) return null;
-  const name = value.slice(0, match.index ?? 0).replace(/[,:;|/-]+\s*$/, "").trim();
-  return name.length >= 3 ? { name, registration: match[1].toUpperCase().replace(/\s+/g, " ") } : null;
+  const name = value
+    .slice(0, match.index ?? 0)
+    .replace(/[,:;|/-]+\s*$/, "")
+    .trim();
+  return name.length >= 3
+    ? { name, registration: match[1].toUpperCase().replace(/\s+/g, " ") }
+    : null;
 }
 
 function parseMenuOption(text: string): 1 | 2 | 3 | null {
-  const normalized = text.trim().toLowerCase().replace(/[.!]+$/g, "");
-  if (/^(?:option\s*)?\[?1\]?$/.test(normalized) || /^(?:car enquiry|enquire about a car|book a car)$/.test(normalized)) return 1;
-  if (/^(?:option\s*)?\[?2\]?$/.test(normalized) || /^(?:emergency breakdown|breakdown|emergency)$/.test(normalized)) return 2;
-  if (/^(?:option\s*)?\[?3\]?$/.test(normalized) || /^(?:report accident|accident)$/.test(normalized)) return 3;
+  const normalized = text
+    .trim()
+    .toLowerCase()
+    .replace(/[.!]+$/g, "");
+  if (
+    /^(?:option\s*)?\[?1\]?$/.test(normalized) ||
+    /^(?:car enquiry|enquire about a car|book a car)$/.test(normalized)
+  )
+    return 1;
+  if (
+    /^(?:option\s*)?\[?2\]?$/.test(normalized) ||
+    /^(?:emergency breakdown|breakdown|emergency)$/.test(normalized)
+  )
+    return 2;
+  if (
+    /^(?:option\s*)?\[?3\]?$/.test(normalized) ||
+    /^(?:report accident|accident)$/.test(normalized)
+  )
+    return 3;
   return null;
 }
 
 function isBreakdownRequest(text: string): boolean {
-  return /\b(?:breakdown|broken down|broke down|vehicle won't start|car won't start|stranded|recovery)\b/i.test(text);
+  return /\b(?:breakdown|broken down|broke down|vehicle won't start|car won't start|stranded|recovery)\b/i.test(
+    text,
+  );
+}
+
+export function isPositiveConfirmation(text: string): boolean {
+  const normalized = text
+    .trim()
+    .toLowerCase()
+    .replace(/[.,!:]+$/g, "");
+  return (
+    /^(?:yes|yeah|yep|yup|correct|confirm|confirmed|yes correct|yes it is|yes that'?s correct|yes please|1|true|ok|okay|sure)$/i.test(
+      normalized,
+    ) || /^(?:yes|yeah|yep|yup)\b/i.test(normalized)
+  );
+}
+
+export function isNegativeConfirmation(text: string): boolean {
+  const normalized = text
+    .trim()
+    .toLowerCase()
+    .replace(/[.,!:]+$/g, "");
+  return (
+    /^(?:no|nope|not correct|incorrect|cancel|stop|0|false)$/i.test(normalized) ||
+    /^(?:no|nope)\b/i.test(normalized)
+  );
 }
 
 function isTermsResponse(text: string): boolean {
-  return /^(?:yes|no|yeah|nope|yep|not yet|i(?:'m| am) not sure)[.!\s]*$/i.test(text.trim());
+  return (
+    isPositiveConfirmation(text) ||
+    isNegativeConfirmation(text) ||
+    /^(?:not yet|i(?:'m| am) not sure)[.!\s]*$/i.test(text.trim())
+  );
 }
 
 export function parseCarEligibility(text: string, existing: CarEligibility = {}): CarEligibility {
@@ -338,7 +477,9 @@ export function parseCarEligibility(text: string, existing: CarEligibility = {})
   const numbered2 = lower.match(/(?:^|[\s,;|/])2\s*[.)-]?\s*(yes|yeah|yep|no|nope)\b/i);
   if (numbered2) result.pcoBadge = /^(?:yes|yeah|yep)$/i.test(numbered2[1]);
 
-  const numbered3 = lower.match(/(?:^|[\s,;|/])3\s*[.)-]?\s*(yes|yeah|yep|no|nope|none|zero|\d{1,2})?(?:\s*[-:=]?\s*(\d{1,2}|\bno\b|\bnone\b|\bzero\b))?\b/i);
+  const numbered3 = lower.match(
+    /(?:^|[\s,;|/])3\s*[.)-]?\s*(yes|yeah|yep|no|nope|none|zero|\d{1,2})?(?:\s*[-:=]?\s*(\d{1,2}|\bno\b|\bnone\b|\bzero\b))?\b/i,
+  );
   if (numbered3) {
     const val = (numbered3[2] || numbered3[1] || "").toLowerCase();
     if (val === "no" || val === "none" || val === "zero" || val === "0") {
@@ -349,11 +490,19 @@ export function parseCarEligibility(text: string, existing: CarEligibility = {})
   }
 
   // 2) Compact 3-part or 2-part answer extraction
-  if (result.ageEligible === undefined || result.pcoBadge === undefined || result.points === undefined) {
-    const compactMatch = cleanedText.match(/^\s*(yes|yeah|yep|no|nope)\s*(?:[\n,;|/]+\s*|\s+)(yes|yeah|yep|no|nope)\s*(?:[\n,;|/]+\s*|\s+)(?:(\d{1,2}|yes|yeah|yep|no|nope|none|zero)\s*(?:points?)?|(\d{1,2}))\s*$/i);
+  if (
+    result.ageEligible === undefined ||
+    result.pcoBadge === undefined ||
+    result.points === undefined
+  ) {
+    const compactMatch = cleanedText.match(
+      /^\s*(yes|yeah|yep|no|nope)\s*(?:[\n,;|/]+\s*|\s+)(yes|yeah|yep|no|nope)\s*(?:[\n,;|/]+\s*|\s+)(?:(\d{1,2}|yes|yeah|yep|no|nope|none|zero)\s*(?:points?)?|(\d{1,2}))\s*$/i,
+    );
     if (compactMatch) {
-      if (result.ageEligible === undefined) result.ageEligible = /^(?:yes|yeah|yep)$/i.test(compactMatch[1]);
-      if (result.pcoBadge === undefined) result.pcoBadge = /^(?:yes|yeah|yep)$/i.test(compactMatch[2]);
+      if (result.ageEligible === undefined)
+        result.ageEligible = /^(?:yes|yeah|yep)$/i.test(compactMatch[1]);
+      if (result.pcoBadge === undefined)
+        result.pcoBadge = /^(?:yes|yeah|yep)$/i.test(compactMatch[2]);
       if (result.points === undefined) {
         const ptsVal = compactMatch[3] || compactMatch[4];
         if (/^(?:no|nope|none|zero)$/i.test(ptsVal)) result.points = 0;
@@ -364,7 +513,9 @@ export function parseCarEligibility(text: string, existing: CarEligibility = {})
 
   // 3) Age detection
   if (result.ageEligible === undefined) {
-    const labelledAge = lower.match(/(?:\b(?:age|aged)\b|\b(?:i\s*am|i'm|im)\b)\s*(?:is|:)?\s*(\d{2})/i);
+    const labelledAge = lower.match(
+      /(?:\b(?:age|aged)\b|\b(?:i\s*am|i'm|im)\b)\s*(?:is|:)?\s*(\d{2})/i,
+    );
     const anyAge = lower.match(/\b(\d{2})\s*(?:years?\s*old)?\b/);
     const ageVal = Number(labelledAge?.[1] ?? anyAge?.[1]);
     if (Number.isFinite(ageVal) && ageVal >= 18 && ageVal <= 99) {
@@ -375,9 +526,18 @@ export function parseCarEligibility(text: string, existing: CarEligibility = {})
 
   // 4) PCO Badge detection (only if not already set by numbered/compact answer)
   if (result.pcoBadge === undefined) {
-    const badgeNegative = /\b(?:no|not|don't|do not|never|can't|cannot|without)\b[^.\n]{0,35}\b(?:have|hold|possess|get|pc[o0])\b[^.\n]{0,20}\b(?:pc[o0]\s*)?(?:badge|licen[cs]e|card|permit)\b|\bno\s+(?:valid\s+)?pc[o0]\s+badge\b/i.test(lower);
-    const badgeMentioned = /\b(?:valid\s+)?pc[o0]\s+(?:badge|licen[cs]e|card|permit)\b|\bpc[o0]\s+approved\b|\bpc[o0]\b/i.test(lower);
-    const positiveBadge = /\b(?:valid|current|active|approved|full)\b[^.\n]{0,25}\b(?:pc[o0]|badge|permit|card)\b|\b(?:yes|yeah|yep|i\s+(?:do|have|hold|possess))\b[^.\n]{0,20}\b(?:it|one|badge|pc[o0])\b/i.test(lower);
+    const badgeNegative =
+      /\b(?:no|not|don't|do not|never|can't|cannot|without)\b[^.\n]{0,35}\b(?:have|hold|possess|get|pc[o0])\b[^.\n]{0,20}\b(?:pc[o0]\s*)?(?:badge|licen[cs]e|card|permit)\b|\bno\s+(?:valid\s+)?pc[o0]\s+badge\b/i.test(
+        lower,
+      );
+    const badgeMentioned =
+      /\b(?:valid\s+)?pc[o0]\s+(?:badge|licen[cs]e|card|permit)\b|\bpc[o0]\s+approved\b|\bpc[o0]\b/i.test(
+        lower,
+      );
+    const positiveBadge =
+      /\b(?:valid|current|active|approved|full)\b[^.\n]{0,25}\b(?:pc[o0]|badge|permit|card)\b|\b(?:yes|yeah|yep|i\s+(?:do|have|hold|possess))\b[^.\n]{0,20}\b(?:it|one|badge|pc[o0])\b/i.test(
+        lower,
+      );
     if (badgeNegative) {
       result.pcoBadge = false;
     } else if (positiveBadge || (badgeMentioned && !badgeNegative)) {
@@ -387,17 +547,29 @@ export function parseCarEligibility(text: string, existing: CarEligibility = {})
 
   // 5) Penalty points detection
   if (result.points === undefined) {
-    if (/\b(?:no|zero|none|nil|clean)\s+(?:penalty\s+)?points?\b|\bno\s+points\b|\bclean\s+licen[cs]e\b/i.test(lower)) {
+    if (
+      /\b(?:no|zero|none|nil|clean)\s+(?:penalty\s+)?points?\b|\bno\s+points\b|\bclean\s+licen[cs]e\b/i.test(
+        lower,
+      )
+    ) {
       result.points = 0;
     } else {
-      const pointsMatch = lower.match(/(?:points?|penalty\s+points?)\s*(?:are|is|:|=)?\s*(\d{1,2})|\b(\d{1,2})\s*(?:penalty\s+)?points?\b/i);
+      const pointsMatch = lower.match(
+        /(?:points?|penalty\s+points?)\s*(?:are|is|:|=)?\s*(\d{1,2})|\b(\d{1,2})\s*(?:penalty\s+)?points?\b/i,
+      );
       if (pointsMatch) result.points = Number(pointsMatch[1] ?? pointsMatch[2]);
     }
   }
 
   // 6) Sequential simple answers ("Yes", "No", "0")
-  if (result.ageEligible === undefined || result.pcoBadge === undefined || result.points === undefined) {
-    const simpleAnswer = lower.match(/^\s*(yes|yeah|yep|no|nope|none|zero)(?:\s+(\d{1,2}))?\s*[.!]?\s*$/i);
+  if (
+    result.ageEligible === undefined ||
+    result.pcoBadge === undefined ||
+    result.points === undefined
+  ) {
+    const simpleAnswer = lower.match(
+      /^\s*(yes|yeah|yep|no|nope|none|zero)(?:\s+(\d{1,2}))?\s*[.!]?\s*$/i,
+    );
     if (simpleAnswer) {
       const word = simpleAnswer[1].toLowerCase();
       const affirmative = /^(?:yes|yeah|yep)$/i.test(word);
@@ -427,9 +599,11 @@ export function parseCarEligibility(text: string, existing: CarEligibility = {})
 
 function eligibilityMissing(data: CarEligibility): string[] {
   const missing: string[] = [];
-  if (data.ageEligible === undefined && (data.age === undefined || data.age === null)) missing.push("whether your age is between 25 and 65");
+  if (data.ageEligible === undefined && (data.age === undefined || data.age === null))
+    missing.push("whether your age is between 25 and 65");
   if (data.pcoBadge === undefined) missing.push("whether you have a valid PCO badge");
-  if (data.points === undefined || data.points === null) missing.push("the number of penalty points you have");
+  if (data.points === undefined || data.points === null)
+    missing.push("the number of penalty points you have");
   return missing;
 }
 
@@ -443,8 +617,14 @@ function includesClosureQuestion(text: string): boolean {
   return /is that all for today\??/i.test(text);
 }
 
-function parseAiReply(content: string): Pick<AiResult, "reply" | "needs_human" | "reason" | "asks_closure"> {
-  const cleaned = content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+function parseAiReply(
+  content: string,
+): Pick<AiResult, "reply" | "needs_human" | "reason" | "asks_closure"> {
+  const cleaned = content
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
   try {
     const parsed = JSON.parse(cleaned) as Record<string, unknown>;
     const reply = typeof parsed.reply === "string" ? parsed.reply.trim() : "";
@@ -459,7 +639,12 @@ function parseAiReply(content: string): Pick<AiResult, "reply" | "needs_human" |
   } catch {
     // Some compatible gateways return normal text even when JSON was requested.
   }
-  return { reply: cleaned, needs_human: false, reason: "", asks_closure: includesClosureQuestion(cleaned) };
+  return {
+    reply: cleaned,
+    needs_human: false,
+    reason: "",
+    asks_closure: includesClosureQuestion(cleaned),
+  };
 }
 
 function fuelCategory(value: string | null): "Electric" | "Plug-in-Hybrid" | "Petrol" {
@@ -474,16 +659,19 @@ export function isAvailable(vehicle: FleetVehicle): boolean {
   const status = (vehicle.status ?? "").toLowerCase().replace(/[\s_-]/g, "");
   // Strictly available: "available" or "active" (which maps from DB available status in fleet-data).
   // Strictly exclude unavailable: "rented", "inservice", "offroad", "maintenance", "assigned".
-  if (status.includes("rent") || status.includes("service") || status.includes("off") || status.includes("maint")) {
+  if (
+    status.includes("rent") ||
+    status.includes("service") ||
+    status.includes("off") ||
+    status.includes("maint")
+  ) {
     return false;
   }
   return status === "available" || status === "active" || status === "instock";
 }
 
 export function normalizeModelKey(model: string): string {
-  return model
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
+  return model.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 function websiteMatch(vehicle: FleetVehicle): (typeof WEBSITE_CATALOG)[number] | undefined {
@@ -491,36 +679,86 @@ function websiteMatch(vehicle: FleetVehicle): (typeof WEBSITE_CATALOG)[number] |
   const model = normalizeModelKey(vehicle.model);
   return WEBSITE_CATALOG.find((item) => {
     const itemModel = normalizeModelKey(item.model);
-    return item.make.toLowerCase() === make && (itemModel.includes(model.replace(/ estate$/i, "")) || model.includes(itemModel.replace(/ ev$/i, "")));
+    return (
+      item.make.toLowerCase() === make &&
+      (itemModel.includes(model.replace(/ estate$/i, "")) ||
+        model.includes(itemModel.replace(/ ev$/i, "")))
+    );
   });
 }
 
 export function simplifyVehicleName(make: string, model: string): { make: string; model: string } {
-  const combined = `${make} ${model}`.toUpperCase().replace(/\s+/g, " ");
+  const rawMake = (make ?? "").trim();
+  const rawModel = (model ?? "").trim();
+  const combined = `${rawMake} ${rawModel}`.toUpperCase().replace(/\s+/g, " ");
 
-  if (combined.includes("MERCEDES") || combined.includes("BENZ")) {
-    if (combined.includes("E220") || combined.includes("E 220")) return { make: "Mercedes", model: "E220D" };
-    if (combined.includes("E300") || combined.includes("E 300")) return { make: "Mercedes", model: "E300" };
-    if (combined.includes("EQE")) return { make: "Mercedes", model: "EQE" };
-    if (combined.includes("EQS")) return { make: "Mercedes", model: "EQS" };
-    if (combined.includes("VITO")) return { make: "Mercedes", model: "Vito" };
-    if (combined.includes("V-CLASS") || combined.includes("V CLASS") || combined.includes("V250") || combined.includes("V 250")) return { make: "Mercedes", model: "V-Class" };
-    return { make: "Mercedes", model: model.replace(/MERCEDES-BENZ|MERCEDES|BENZ/gi, "").trim() || model };
+  let cleanMake = rawMake;
+  if (/MERCEDES|BENZ/i.test(combined)) cleanMake = "Mercedes-Benz";
+  else if (/TESLA/i.test(combined)) cleanMake = "Tesla";
+  else if (/TOYOTA/i.test(combined)) cleanMake = "Toyota";
+  else if (/JAGUAR/i.test(combined)) cleanMake = "Jaguar";
+  else if (/HYUNDAI/i.test(combined)) cleanMake = "Hyundai";
+  else if (/\bMG\b/i.test(combined)) cleanMake = "MG";
+  else if (/FORD/i.test(combined)) cleanMake = "Ford";
+  else if (/VOLKSWAGEN|VW/i.test(combined)) cleanMake = "Volkswagen";
+
+  if (/MERCEDES|BENZ/i.test(combined)) {
+    if (/E\s*220/i.test(combined)) return { make: "Mercedes-Benz", model: "E220d" };
+    if (/E\s*300/i.test(combined)) return { make: "Mercedes-Benz", model: "E300" };
+    if (/EQE/i.test(combined)) return { make: "Mercedes-Benz", model: "EQE" };
+    if (/EQS/i.test(combined)) return { make: "Mercedes-Benz", model: "EQS" };
+    if (/VITO/i.test(combined)) return { make: "Mercedes-Benz", model: "Vito" };
+    if (/V-CLASS|V\s*CLASS|V250|V\s*250/i.test(combined))
+      return { make: "Mercedes-Benz", model: "V-Class" };
   }
 
-  if (combined.includes("TOYOTA")) {
-    if (combined.includes("AURIS")) return { make: "Toyota", model: "Auris Estate" };
-    if (combined.includes("COROLLA")) return { make: "Toyota", model: "Corolla" };
-    if (combined.includes("PRIUS")) return { make: "Toyota", model: "Prius" };
-    return { make: "Toyota", model: model.replace(/TOYOTA/gi, "").trim() || model };
+  if (/TESLA/i.test(combined)) {
+    if (/MODEL\s*3/i.test(combined)) return { make: "Tesla", model: "Model 3" };
+    if (/MODEL\s*Y/i.test(combined)) return { make: "Tesla", model: "Model Y" };
+    if (/MODEL\s*S/i.test(combined)) return { make: "Tesla", model: "Model S" };
+    if (/MODEL\s*X/i.test(combined)) return { make: "Tesla", model: "Model X" };
   }
 
-  if (combined.includes("MG")) {
-    if (combined.includes("MG5") || combined.includes("MG 5")) return { make: "MG", model: "5EV" };
-    return { make: "MG", model: model.replace(/MG/gi, "").trim() || model };
+  if (/TOYOTA/i.test(combined)) {
+    if (/AURIS/i.test(combined)) return { make: "Toyota", model: "Auris Estate" };
+    if (/COROLLA/i.test(combined)) return { make: "Toyota", model: "Corolla Estate" };
+    if (/PRIUS/i.test(combined)) return { make: "Toyota", model: "Prius" };
   }
 
-  return { make: make.trim(), model: model.trim() };
+  if (/\bMG\b/i.test(combined)) {
+    if (/MG\s*5|5\s*EV/i.test(combined)) return { make: "MG", model: "MG5 EV" };
+  }
+
+  if (/JAGUAR/i.test(combined)) {
+    if (/I-PACE|IPACE/i.test(combined)) return { make: "Jaguar", model: "I-Pace" };
+  }
+
+  if (/HYUNDAI/i.test(combined)) {
+    if (/IONIQ/i.test(combined)) return { make: "Hyundai", model: "Ioniq" };
+  }
+
+  if (/FORD/i.test(combined)) {
+    if (/TOURNEO/i.test(combined)) return { make: "Ford", model: "Tourneo Custom" };
+  }
+
+  if (/VOLKSWAGEN|VW/i.test(combined)) {
+    if (/MULTIVAN/i.test(combined)) return { make: "Volkswagen", model: "Multivan" };
+  }
+
+  let cleanModel = rawModel
+    .replace(
+      /\b(MERCEDES-BENZ|MERCEDES|BENZ|TESLA|TOYOTA|JAGUAR|HYUNDAI|MG|FORD|VOLKSWAGEN|VW)\b/gi,
+      "",
+    )
+    .replace(
+      /\b(AMG\s*LINE|SPORT\s*EDITION|PREMIUM|EXECUTIVE|EXCLUSIVE|EXCITE|ICON|TECH|TITANIUM|ZTEC|ACTIVE|SELECT|PRO|TOURER|B-TEC|EV400|DE|PHEV|S-A|CVT|VVT-I|HEV|LONG\s*RANGE|PERFORMANCE|AWD|ALL-WHEEL\s*DRIVE|4MATIC|BLUETEC|AUTO|AUTOMATIC|ESTATE|340|300|350\+?|114|119|EV|S)\b/gi,
+      "",
+    )
+    .replace(/\(\d{4}[,\s–-]*\d{0,4}\)/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return { make: cleanMake, model: cleanModel || rawModel };
 }
 
 export function uniqueAvailableVehicles(fleet: FleetVehicle[]): FleetVehicle[] {
@@ -537,28 +775,31 @@ export function uniqueAvailableVehicles(fleet: FleetVehicle[]): FleetVehicle[] {
 
 export function availableYears(fleet: FleetVehicle[], vehicle: FleetVehicle): string {
   const simplifiedVehicle = simplifyVehicleName(vehicle.make, vehicle.model);
-  const years = [...new Set(
-    fleet
-      .filter((candidate) => {
-        if (!isAvailable(candidate)) return false;
-        const candidateSimp = simplifyVehicleName(candidate.make, candidate.model);
-        return (
-          candidateSimp.make.toLowerCase() === simplifiedVehicle.make.toLowerCase() &&
-          normalizeModelKey(candidateSimp.model) === normalizeModelKey(simplifiedVehicle.model)
-        );
-      })
-      .map((candidate) => candidate.year)
-      .filter((year): year is number => year != null)
-  )].sort();
+  const years = [
+    ...new Set(
+      fleet
+        .filter((candidate) => {
+          if (!isAvailable(candidate)) return false;
+          const candidateSimp = simplifyVehicleName(candidate.make, candidate.model);
+          return (
+            candidateSimp.make.toLowerCase() === simplifiedVehicle.make.toLowerCase() &&
+            normalizeModelKey(candidateSimp.model) === normalizeModelKey(simplifiedVehicle.model)
+          );
+        })
+        .map((candidate) => candidate.year)
+        .filter((year): year is number => year != null),
+    ),
+  ].sort();
   return years.length ? years.join(", ") : "year to confirm";
 }
 
 function formatCustomerFleet(fleet: FleetVehicle[]): string {
   const available = uniqueAvailableVehicles(fleet);
-  if (!available.length) return `I’m sorry, there are no vehicles currently marked available.\n\n${HANDOFF_24H}`;
-  const lines = available.map((vehicle, index) => {
+  if (!available.length)
+    return `I’m sorry, there are no vehicles currently marked available.\n\n${HANDOFF_24H}`;
+  const lines = available.map((vehicle) => {
     const simplified = simplifyVehicleName(vehicle.make, vehicle.model);
-    return `${index + 1}. ${simplified.make} ${simplified.model} (${availableYears(fleet, vehicle)})`;
+    return `• ${simplified.make} ${simplified.model}`;
   });
   return `Thank you for your interest in our PCO fleet. These vehicle options are currently available:\n\n${lines.join("\n")}\n\nPlease reply with the make and model you would like, and I will send its price, mileage allowance, contract length, and included services.`;
 }
@@ -574,11 +815,15 @@ function findSelectedVehicle(text: string, fleet: FleetVehicle[]): FleetVehicle 
     const compactMake = make.replace(/[^a-z0-9]/g, "");
     const compactModel = model.replace(/[^a-z0-9]/g, "");
     const modelQuery = compactValue.replace(compactMake, "");
-    return value.includes(reg) ||
+    return (
+      value.includes(reg) ||
       (value.includes(make) && value.includes(model)) ||
       value.includes(model) ||
       (modelQuery.length >= 3 && compactModel.includes(modelQuery)) ||
-      (value.includes(make) && /\b(?:300|350|220)\b/.test(value) && model.includes(value.match(/\b(?:300|350|220)\b/)?.[0] ?? ""));
+      (value.includes(make) &&
+        /\b(?:300|350|220)\b/.test(value) &&
+        model.includes(value.match(/\b(?:300|350|220)\b/)?.[0] ?? ""))
+    );
   });
 }
 
@@ -602,7 +847,10 @@ function formatCarHandoffSummary(data: CarEligibility, answer: string): string {
 function formatVehicleDetails(vehicle: FleetVehicle): string {
   const simplified = simplifyVehicleName(vehicle.make, vehicle.model);
   const catalog = websiteMatch(vehicle);
-  const price = vehicle.weekly_price != null ? `£${vehicle.weekly_price}/week` : catalog?.price ?? "Price to confirm";
+  const price =
+    vehicle.weekly_price != null
+      ? `£${vehicle.weekly_price}/week`
+      : (catalog?.price ?? "Price to confirm");
   const year = vehicle.year ?? catalog?.year ?? "Year to confirm";
   return `Thank you for choosing the ${simplified.make} ${simplified.model}.\n\nVehicle: ${simplified.make} ${simplified.model}\nYear: ${year}\nFuel category: ${catalog?.fuel ?? fuelCategory(vehicle.fuel_type)}\nContract length: Minimum ${contractWeeks(vehicle)} weeks\nMileage allowance: ${mileageAllowance(vehicle).toLocaleString("en-GB")} miles per month\nWeekly rate: ${price}\nIncluded: PCO license, car service fully done, insurance and maintenance\n\nAre you happy to proceed with these terms? Reply Yes to proceed or No.`;
 }
@@ -634,14 +882,27 @@ async function sendWelcomeMenu(phone: unknown, date = new Date()) {
     { id: "emergency_breakdown", title: "Emergency Breakdown" },
     { id: "report_accident", title: "Report Accident" },
   ];
-  const interactive = await sendWhatsAppImageButtons({ phone, imageUrl: WELCOME_IMAGE_URL, body, buttons });
+  const interactive = await sendWhatsAppImageButtons({
+    phone,
+    imageUrl: WELCOME_IMAGE_URL,
+    body,
+    buttons,
+  });
   if (interactive.sent) return interactive;
-  console.warn("[agent-webhook] welcome interactive image failed; falling back to text menu", { reason: interactive.reason });
+  console.warn("[agent-webhook] welcome interactive image failed; falling back to text menu", {
+    reason: interactive.reason,
+  });
   const fallbackText = getWelcomeMenuText(date);
   const fallback = await sendWhatsAppText({ phone, text: fallbackText });
   if (fallback.sent) return fallback;
-  console.error("[agent-webhook] welcome delivery failed", { interactive: interactive.reason, fallback: fallback.reason });
-  return { sent: false, reason: `welcome_delivery_failed: interactive=${interactive.reason}; fallback=${fallback.reason}` };
+  console.error("[agent-webhook] welcome delivery failed", {
+    interactive: interactive.reason,
+    fallback: fallback.reason,
+  });
+  return {
+    sent: false,
+    reason: `welcome_delivery_failed: interactive=${interactive.reason}; fallback=${fallback.reason}`,
+  };
 }
 
 async function generateReply(
@@ -699,7 +960,10 @@ async function generateReply(
       geminiKeyBinding: geminiKeyBinding ?? null,
     });
     if (!geminiKey) {
-      console.error("[agent-webhook] AI generation skipped: no supported Gemini API key binding is configured", { supportedBindings: geminiKeyBindings });
+      console.error(
+        "[agent-webhook] AI generation skipped: no supported Gemini API key binding is configured",
+        { supportedBindings: geminiKeyBindings },
+      );
       return { ...fallback, reason: "gemini_api_key_missing" };
     }
     const responseSchema = {
@@ -717,14 +981,20 @@ async function generateReply(
       contents: [{ role: "user", parts: [{ text: userText }] }],
       generationConfig: { responseMimeType: "application/json", responseSchema, temperature: 0.2 },
     };
-    const requestHeaders = { "Content-Type": "application/json", "x-goog-api-key": geminiKey.trim() };
+    const requestHeaders = {
+      "Content-Type": "application/json",
+      "x-goog-api-key": geminiKey.trim(),
+    };
     type GeminiGeneration = { response: Response; body: string; model: string; apiVersion: string };
     const callModel = async (apiVersion: string, model: string): Promise<GeminiGeneration> => {
-      const response = await fetch(`https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent`, {
-        method: "POST",
-        headers: requestHeaders,
-        body: JSON.stringify(requestBody),
-      });
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent`,
+        {
+          method: "POST",
+          headers: requestHeaders,
+          body: JSON.stringify(requestBody),
+        },
+      );
       return { response, body: await response.text(), model, apiVersion };
     };
     // Use one stable low-latency model request. Do not turn a model 404 into a
@@ -744,14 +1014,28 @@ async function generateReply(
       candidates?: { content?: { parts?: { text?: string }[] } }[];
       promptFeedback?: { blockReason?: string };
     };
-    const contentText = data.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim() ?? "";
+    const contentText =
+      data.candidates?.[0]?.content?.parts
+        ?.map((part) => part.text ?? "")
+        .join("")
+        .trim() ?? "";
     if (!contentText) {
-      console.error("[agent-webhook] Gemini returned no text", { promptFeedback: data.promptFeedback });
-      return { ...fallback, reason: data.promptFeedback?.blockReason ? `gemini_blocked_${data.promptFeedback.blockReason}` : "gemini_empty_response" };
+      console.error("[agent-webhook] Gemini returned no text", {
+        promptFeedback: data.promptFeedback,
+      });
+      return {
+        ...fallback,
+        reason: data.promptFeedback?.blockReason
+          ? `gemini_blocked_${data.promptFeedback.blockReason}`
+          : "gemini_empty_response",
+      };
     }
     const parsed = parseAiReply(contentText);
     if (!parsed.reply) return fallback;
-    console.info("[agent-webhook] AI generation complete", { replyLength: parsed.reply.length, needsHuman: parsed.needs_human });
+    console.info("[agent-webhook] AI generation complete", {
+      replyLength: parsed.reply.length,
+      needsHuman: parsed.needs_human,
+    });
     return parsed;
   } catch (error) {
     console.error("[agent-webhook] AI failure", error);
@@ -759,42 +1043,90 @@ async function generateReply(
   }
 }
 
-async function verifyImageEvidence(mediaUrl: string, mimeType = "image/jpeg", evidencePrompt = "Inspect this breakdown key photo. Return JSON only with status exactly verified, unclear, or rejected; confidence from 0 to 1; and a short reason. Mark verified only when a vehicle key is clearly visible inside or immediately at a letter box. Do not identify or infer any person. If the key, letter box, or placement is not clear, use unclear."): Promise<BreakdownVerification> {
+async function verifyImageEvidence(
+  mediaUrl: string,
+  mimeType = "image/jpeg",
+  evidencePrompt = "Inspect this breakdown key photo. Return JSON only with status exactly verified, unclear, or rejected; confidence from 0 to 1; and a short reason. Mark verified only when a vehicle key is clearly visible inside or immediately at a letter box. Do not identify or infer any person. If the key, letter box, or placement is not clear, use unclear.",
+): Promise<BreakdownVerification> {
   const checkedAt = new Date().toISOString();
   const apiKey = (getRuntimeEnv("GEMINI_API_KEY") ?? getRuntimeEnv("GOOGLE_API_KEY") ?? "").trim();
-  if (!apiKey) return { status: "error", reason: "Photo received but vision verification is not configured.", checkedAt };
+  if (!apiKey)
+    return {
+      status: "error",
+      reason: "Photo received but vision verification is not configured.",
+      checkedAt,
+    };
   try {
     const mediaResponse = await fetch(mediaUrl);
     if (!mediaResponse.ok) throw new Error(`media_http_${mediaResponse.status}`);
     const contentType = mediaResponse.headers.get("content-type")?.split(";")[0] || mimeType;
-    if (!contentType.startsWith("image/")) return { status: "unclear", reason: "The uploaded file is not an image. Please send a clear photo of the key in the letter box.", checkedAt };
+    if (!contentType.startsWith("image/"))
+      return {
+        status: "unclear",
+        reason:
+          "The uploaded file is not an image. Please send a clear photo of the key in the letter box.",
+        checkedAt,
+      };
     const bytes = new Uint8Array(await mediaResponse.arrayBuffer());
-    if (bytes.byteLength > 8 * 1024 * 1024) return { status: "unclear", reason: "The photo is too large to verify reliably. Please send a smaller clear photo.", checkedAt };
+    if (bytes.byteLength > 8 * 1024 * 1024)
+      return {
+        status: "unclear",
+        reason: "The photo is too large to verify reliably. Please send a smaller clear photo.",
+        checkedAt,
+      };
     let binary = "";
     const chunkSize = 0x8000;
-    for (let i = 0; i < bytes.length; i += chunkSize) binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+    for (let i = 0; i < bytes.length; i += chunkSize)
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
     const encoded = btoa(binary);
-    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [
-          { text: evidencePrompt },
-          { inline_data: { mime_type: contentType, data: encoded } },
-        ] }],
-        generationConfig: { responseMimeType: "application/json", temperature: 0 },
-      }),
-    });
+    const response = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [
+                { text: evidencePrompt },
+                { inline_data: { mime_type: contentType, data: encoded } },
+              ],
+            },
+          ],
+          generationConfig: { responseMimeType: "application/json", temperature: 0 },
+        }),
+      },
+    );
     const responseText = await response.text();
     if (!response.ok) throw new Error(`vision_http_${response.status}`);
-    const payload = JSON.parse(responseText) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
-    const raw = payload.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim() ?? "";
+    const payload = JSON.parse(responseText) as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    };
+    const raw =
+      payload.candidates?.[0]?.content?.parts
+        ?.map((part) => part.text ?? "")
+        .join("")
+        .trim() ?? "";
     const parsed = JSON.parse(raw) as { status?: string; confidence?: number; reason?: string };
-    const status = parsed.status === "verified" || parsed.status === "rejected" ? parsed.status : "unclear";
-    return { status, confidence: Math.max(0, Math.min(1, Number(parsed.confidence) || 0)), reason: parsed.reason?.slice(0, 300) || "The photo could not be verified clearly.", checkedAt };
+    const status =
+      parsed.status === "verified" || parsed.status === "rejected" ? parsed.status : "unclear";
+    return {
+      status,
+      confidence: Math.max(0, Math.min(1, Number(parsed.confidence) || 0)),
+      reason: parsed.reason?.slice(0, 300) || "The photo could not be verified clearly.",
+      checkedAt,
+    };
   } catch (error) {
-    console.error("[agent-webhook] breakdown photo verification failed", { error: error instanceof Error ? error.message : String(error) });
-    return { status: "error", reason: "Photo received but verification is temporarily unavailable. Please send a clear photo showing the key in the letter box.", checkedAt };
+    console.error("[agent-webhook] breakdown photo verification failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return {
+      status: "error",
+      reason:
+        "Photo received but verification is temporarily unavailable. Please send a clear photo showing the key in the letter box.",
+      checkedAt,
+    };
   }
 }
 
@@ -811,34 +1143,51 @@ async function persistMetaMedia(params: {
   if (!params.metaMediaId) return { mediaUrl: params.caption ? null : null, storagePath: null };
   const accessToken = getRuntimeEnv("META_ACCESS_TOKEN")?.trim();
   if (!accessToken) throw new Error("META_ACCESS_TOKEN is not configured for media download");
-  const mediaInfoResponse = await fetch(`https://graph.facebook.com/v26.0/${encodeURIComponent(params.metaMediaId)}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  const mediaInfoResponse = await fetch(
+    `https://graph.facebook.com/v26.0/${encodeURIComponent(params.metaMediaId)}`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    },
+  );
   const mediaInfoText = await mediaInfoResponse.text();
-  if (!mediaInfoResponse.ok) throw new Error(`Meta media metadata failed (${mediaInfoResponse.status}): ${mediaInfoText.slice(0, 300)}`);
+  if (!mediaInfoResponse.ok)
+    throw new Error(
+      `Meta media metadata failed (${mediaInfoResponse.status}): ${mediaInfoText.slice(0, 300)}`,
+    );
   const mediaInfo = JSON.parse(mediaInfoText) as { url?: string; mime_type?: string };
   if (!mediaInfo.url) throw new Error("Meta media metadata did not include a download URL");
-  const mediaResponse = await fetch(mediaInfo.url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  const mediaResponse = await fetch(mediaInfo.url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
   if (!mediaResponse.ok) throw new Error(`Meta media download failed (${mediaResponse.status})`);
   const bytes = new Uint8Array(await mediaResponse.arrayBuffer());
-  const extension = (mediaInfo.mime_type ?? params.mimeType ?? "application/octet-stream").split("/")[1]?.split(";")[0] ?? "bin";
+  const extension =
+    (mediaInfo.mime_type ?? params.mimeType ?? "application/octet-stream")
+      .split("/")[1]
+      ?.split(";")[0] ?? "bin";
   const storagePath = `${params.userId}/${params.leadId}/${params.metaMediaId}.${extension}`;
   const bucket = params.db.storage.from("whatsapp-media");
-  const upload = await bucket.upload(storagePath, bytes, { contentType: mediaInfo.mime_type ?? params.mimeType ?? "application/octet-stream", upsert: false });
+  const upload = await bucket.upload(storagePath, bytes, {
+    contentType: mediaInfo.mime_type ?? params.mimeType ?? "application/octet-stream",
+    upsert: false,
+  });
   if (upload.error && !/already exists/i.test(upload.error.message)) throw upload.error;
   const signed = await bucket.createSignedUrl(storagePath, 60 * 60 * 24 * 7);
   if (signed.error) throw signed.error;
-  const { error: mediaRowError } = await params.db.from("whatsapp_media").upsert({
-    user_id: params.userId,
-    lead_id: params.leadId,
-    message_id: null,
-    meta_media_id: params.metaMediaId,
-    media_type: params.mediaType ?? "media",
-    mime_type: mediaInfo.mime_type ?? params.mimeType ?? null,
-    storage_bucket: "whatsapp-media",
-    storage_path: storagePath,
-    caption: params.caption ?? null,
-  }, { onConflict: "meta_media_id" });
+  const { error: mediaRowError } = await params.db.from("whatsapp_media").upsert(
+    {
+      user_id: params.userId,
+      lead_id: params.leadId,
+      message_id: null,
+      meta_media_id: params.metaMediaId,
+      media_type: params.mediaType ?? "media",
+      mime_type: mediaInfo.mime_type ?? params.mimeType ?? null,
+      storage_bucket: "whatsapp-media",
+      storage_path: storagePath,
+      caption: params.caption ?? null,
+    },
+    { onConflict: "meta_media_id" },
+  );
   if (mediaRowError) throw mediaRowError;
   return { mediaUrl: signed.data?.signedUrl ?? null, storagePath };
 }
@@ -943,7 +1292,9 @@ export async function handleAgentWebhookRequest(request: Request) {
   const canonicalPhone = identityPhone && !/@lid$/i.test(identityPhone) ? identityPhone : null;
   if (canonicalPhone) {
     const { data: existing } = await (db.from("whatsapp_leads") as any)
-      .select("id, contact_name, ai_paused, status, closed_at, intent, accident_data, breakdown_data, car_enquiry_data, customer_type")
+      .select(
+        "id, contact_name, ai_paused, status, closed_at, intent, accident_data, breakdown_data, car_enquiry_data, customer_type",
+      )
       .eq("user_id", userId)
       .eq("phone", canonicalPhone)
       .order("last_message_at", { ascending: false })
@@ -952,7 +1303,10 @@ export async function handleAgentWebhookRequest(request: Request) {
     leadId = existing?.id ?? null;
     aiPaused = Boolean(existing?.ai_paused);
     closed = Boolean(existing?.closed_at) || existing?.status === "closed";
-    leadName = existing?.contact_name && existing.contact_name !== "Unknown" ? existing.contact_name : leadName;
+    leadName =
+      existing?.contact_name && existing.contact_name !== "Unknown"
+        ? existing.contact_name
+        : leadName;
     leadIntent = existing?.intent ?? null;
     customerType = existing?.customer_type ?? customerType;
     accidentData = (existing?.accident_data ?? {}) as AccidentData;
@@ -961,25 +1315,38 @@ export async function handleAgentWebhookRequest(request: Request) {
   }
   if (!leadId && canonicalPhone) {
     const { data: candidates } = await (db.from("whatsapp_leads") as any)
-      .select("id, contact_name, phone, ai_paused, status, closed_at, intent, accident_data, breakdown_data, car_enquiry_data, customer_type")
+      .select(
+        "id, contact_name, phone, ai_paused, status, closed_at, intent, accident_data, breakdown_data, car_enquiry_data, customer_type",
+      )
       .eq("user_id", userId)
       .order("last_message_at", { ascending: false })
       .limit(500);
     const matchingCandidates = (candidates ?? [])
-      .filter((candidate: { phone?: string | null }) => canonicalPhoneKey(candidate.phone) === canonicalPhoneKey(canonicalPhone))
-      .sort((a: { intent?: string | null; status?: string | null; last_message_at?: string | null }, b: { intent?: string | null; status?: string | null; last_message_at?: string | null }) => {
-        const intentScore = Number(Boolean(b.intent)) - Number(Boolean(a.intent));
-        if (intentScore) return intentScore;
-        const activeScore = Number(b.status !== "closed") - Number(a.status !== "closed");
-        if (activeScore) return activeScore;
-        return String(b.last_message_at ?? "").localeCompare(String(a.last_message_at ?? ""));
-      });
+      .filter(
+        (candidate: { phone?: string | null }) =>
+          canonicalPhoneKey(candidate.phone) === canonicalPhoneKey(canonicalPhone),
+      )
+      .sort(
+        (
+          a: { intent?: string | null; status?: string | null; last_message_at?: string | null },
+          b: { intent?: string | null; status?: string | null; last_message_at?: string | null },
+        ) => {
+          const intentScore = Number(Boolean(b.intent)) - Number(Boolean(a.intent));
+          if (intentScore) return intentScore;
+          const activeScore = Number(b.status !== "closed") - Number(a.status !== "closed");
+          if (activeScore) return activeScore;
+          return String(b.last_message_at ?? "").localeCompare(String(a.last_message_at ?? ""));
+        },
+      );
     const existing = matchingCandidates[0];
     if (existing) {
       leadId = existing.id;
       aiPaused = Boolean(existing.ai_paused);
       closed = Boolean(existing.closed_at) || existing.status === "closed";
-      leadName = existing.contact_name && existing.contact_name !== "Unknown" ? existing.contact_name : leadName;
+      leadName =
+        existing.contact_name && existing.contact_name !== "Unknown"
+          ? existing.contact_name
+          : leadName;
       leadIntent = existing.intent ?? null;
       customerType = existing.customer_type ?? customerType;
       accidentData = (existing.accident_data ?? {}) as AccidentData;
@@ -989,7 +1356,9 @@ export async function handleAgentWebhookRequest(request: Request) {
   }
   if (!leadId && sessionId) {
     const { data: existing } = await (db.from("whatsapp_leads") as any)
-      .select("id, contact_name, ai_paused, status, closed_at, intent, accident_data, breakdown_data, car_enquiry_data, customer_type")
+      .select(
+        "id, contact_name, ai_paused, status, closed_at, intent, accident_data, breakdown_data, car_enquiry_data, customer_type",
+      )
       .eq("user_id", userId)
       .eq("session_id", sessionId)
       .order("last_message_at", { ascending: false })
@@ -998,7 +1367,10 @@ export async function handleAgentWebhookRequest(request: Request) {
     leadId = existing?.id ?? null;
     aiPaused = Boolean(existing?.ai_paused);
     closed = Boolean(existing?.closed_at) || existing?.status === "closed";
-    leadName = existing?.contact_name && existing.contact_name !== "Unknown" ? existing.contact_name : leadName;
+    leadName =
+      existing?.contact_name && existing.contact_name !== "Unknown"
+        ? existing.contact_name
+        : leadName;
     leadIntent = existing?.intent ?? null;
     customerType = existing?.customer_type ?? customerType;
     accidentData = (existing?.accident_data ?? {}) as AccidentData;
@@ -1006,7 +1378,9 @@ export async function handleAgentWebhookRequest(request: Request) {
     carEligibility = (existing?.car_enquiry_data ?? {}) as CarEligibility;
   } else if (!leadId && phone) {
     const { data: existing } = await (db.from("whatsapp_leads") as any)
-      .select("id, contact_name, ai_paused, status, closed_at, intent, accident_data, breakdown_data, car_enquiry_data, customer_type")
+      .select(
+        "id, contact_name, ai_paused, status, closed_at, intent, accident_data, breakdown_data, car_enquiry_data, customer_type",
+      )
       .eq("user_id", userId)
       .eq("phone", phone)
       .order("last_message_at", { ascending: false })
@@ -1015,7 +1389,10 @@ export async function handleAgentWebhookRequest(request: Request) {
     leadId = existing?.id ?? null;
     aiPaused = Boolean(existing?.ai_paused);
     closed = Boolean(existing?.closed_at) || existing?.status === "closed";
-    leadName = existing?.contact_name && existing.contact_name !== "Unknown" ? existing.contact_name : leadName;
+    leadName =
+      existing?.contact_name && existing.contact_name !== "Unknown"
+        ? existing.contact_name
+        : leadName;
     leadIntent = existing?.intent ?? null;
     customerType = existing?.customer_type ?? customerType;
     accidentData = (existing?.accident_data ?? {}) as AccidentData;
@@ -1025,15 +1402,20 @@ export async function handleAgentWebhookRequest(request: Request) {
 
   if (!leadId) {
     isNewLead = true;
-    const { data: created, error } = await insertWithSessionFallback(db, "whatsapp_leads", {
-      user_id: userId,
+    const { data: created, error } = await insertWithSessionFallback(
+      db,
+      "whatsapp_leads",
+      {
+        user_id: userId,
         contact_name: name,
         phone: canonicalPhone ?? phone,
-      message: content,
-      media_url: mediaUrl,
-      status: "new",
-      session_id: sessionId,
-    }, "id");
+        message: content,
+        media_url: mediaUrl,
+        status: "new",
+        session_id: sessionId,
+      },
+      "id",
+    );
     if (error) return json({ ok: false, error: error.message }, 500);
     leadId = created.id;
   } else {
@@ -1056,16 +1438,32 @@ export async function handleAgentWebhookRequest(request: Request) {
   if (!leadId) return json({ ok: false, error: "Lead could not be created" }, 500);
 
   if (metaMessageId) {
-    const { data: duplicateMessage } = await (db.from("messages") as any).select("id").eq("meta_message_id", metaMessageId).maybeSingle();
+    const { data: duplicateMessage } = await (db.from("messages") as any)
+      .select("id")
+      .eq("meta_message_id", metaMessageId)
+      .maybeSingle();
     if (duplicateMessage) return json({ ok: true, duplicate: true, lead_id: leadId });
   }
 
   if (mediaMetaId) {
     try {
-      const stored = await persistMetaMedia({ db, leadId, messageId: metaMessageId, userId, metaMediaId: mediaMetaId, mediaType: mediaType ?? undefined, mimeType: mediaMimeType ?? undefined, caption: content });
+      const stored = await persistMetaMedia({
+        db,
+        leadId,
+        messageId: metaMessageId,
+        userId,
+        metaMediaId: mediaMetaId,
+        mediaType: mediaType ?? undefined,
+        mimeType: mediaMimeType ?? undefined,
+        caption: content,
+      });
       mediaUrl = stored.mediaUrl ?? mediaUrl;
     } catch (error) {
-      console.error("[agent-webhook] Meta media persistence failed", { leadId, metaMediaId: mediaMetaId, error: error instanceof Error ? error.message : String(error) });
+      console.error("[agent-webhook] Meta media persistence failed", {
+        leadId,
+        metaMediaId: mediaMetaId,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -1094,45 +1492,135 @@ export async function handleAgentWebhookRequest(request: Request) {
   if (isNewLead) {
     await sendTelegramAlert({
       name: leadName,
-      phone,
-      reason: `🆕 New Customer Alert: ${content.slice(0, 100)}`,
+      phone: phone ?? chatId,
+      reason: `👋 New conversation started by ${leadName} (${displayPhone(phone ?? chatId)})`,
       leadId,
       history,
       mediaUrl,
       closed: false,
     });
   }
-  const lastAgentMessage = [...history].reverse().find((turn) => turn.sender === "ai_agent")?.content ?? "";
+  const lastAgentMessage =
+    [...history].reverse().find((turn) => turn.sender === "ai_agent")?.content ?? "";
   const { data: fleet } = await db
     .from("vehicles")
     .select("reg, make, model, year, fuel_type, status, next_mot_date, pco_expiry_date");
 
-  const compactEligibilityAnswer = /^\s*(?:(?:yes|yeah|yep|no|nope)[\s,;|/]+){1,2}(?:yes|yeah|yep|no|nope)(?:\s*(?:[-–—:=\s]+)\s*\d{1,2}\s*(?:points?)?)?\s*$/i.test(content);
+  const compactEligibilityAnswer =
+    /^\s*(?:(?:yes|yeah|yep|no|nope)[\s,;|/]+){1,2}(?:yes|yeah|yep|no|nope)(?:\s*(?:[-–—:=\s]+)\s*\d{1,2}\s*(?:points?)?)?\s*$/i.test(
+      content,
+    );
   const accidentIdentityCandidate = parseAccidentIdentity(content);
-  const accidentIdentityReply = Boolean(accidentIdentityCandidate?.registration || (extractReg(content) && /[A-Za-z]{2}\s?\d{2}\s?[A-Za-z]{3}/i.test(content)));
-  const rawOption = compactEligibilityAnswer ? null : parseMenuOption(content) ?? (/^(?:book_car|enquire_about_a_car|enquire|emergency_breakdown|breakdown|report_accident|accident)$/i.test(content.trim()) ? (/(?:emergency|breakdown)/i.test(content) ? 2 : /(?:accident|report)/i.test(content) ? 3 : 1) : null);
+  const accidentIdentityReply = Boolean(
+    accidentIdentityCandidate?.registration ||
+    (extractReg(content) && /[A-Za-z]{2}\s?\d{2}\s?[A-Za-z]{3}/i.test(content)),
+  );
+  const rawOption = compactEligibilityAnswer
+    ? null
+    : (parseMenuOption(content) ??
+      (/^(?:book_car|enquire_about_a_car|enquire|emergency_breakdown|breakdown|report_accident|accident)$/i.test(
+        content.trim(),
+      )
+        ? /(?:emergency|breakdown)/i.test(content)
+          ? 2
+          : /(?:accident|report)/i.test(content)
+            ? 3
+            : 1
+        : null));
 
   const isHelp = isHelpMessage(content);
-  if ((isNewLead || closed) && !isMenuReset(content) && !rawOption && !compactEligibilityAnswer && !isHelp) {
+  if (
+    (isNewLead || closed) &&
+    !isMenuReset(content) &&
+    !rawOption &&
+    !compactEligibilityAnswer &&
+    !isHelp
+  ) {
     const reply = getWelcomeMenuText();
     const outbound = await sendWelcomeMenu(phone ?? chatId);
     if (outbound.sent) {
-      await db.from("whatsapp_leads").update({ status: "active", ai_paused: false, closed_at: null, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
-      await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
+      await db
+        .from("whatsapp_leads")
+        .update({
+          status: "active",
+          ai_paused: false,
+          closed_at: null,
+          ai_summary: reply,
+          last_message_at: new Date().toISOString(),
+        } as never)
+        .eq("id", leadId);
+      await insertWithSessionFallback(db, "messages", {
+        user_id: userId,
+        lead_id: leadId,
+        sender: "ai_agent",
+        content: reply,
+        session_id: sessionId,
+      });
     }
-    const telegram_alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`, leadId, history, mediaUrl, closed: false });
-    return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, welcome_menu: outbound.sent, needs_human: !outbound.sent, telegram_alert, outbound });
+    const telegram_alert = outbound.sent
+      ? { sent: false, reason: "not_needed" }
+      : await sendTelegramAlert({
+          name: leadName,
+          phone,
+          reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`,
+          leadId,
+          history,
+          mediaUrl,
+          closed: false,
+        });
+    return json({
+      ok: true,
+      lead_id: leadId,
+      reply: outbound.sent ? reply : null,
+      welcome_menu: outbound.sent,
+      needs_human: !outbound.sent,
+      telegram_alert,
+      outbound,
+    });
   }
 
   if (isMenuReset(content)) {
     const reply = getWelcomeMenuText();
     const outbound = await sendWelcomeMenu(phone ?? chatId);
     if (outbound.sent) {
-      await db.from("whatsapp_leads").update({ status: "active", ai_paused: false, closed_at: null, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
-      await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
+      await db
+        .from("whatsapp_leads")
+        .update({
+          status: "active",
+          ai_paused: false,
+          closed_at: null,
+          ai_summary: reply,
+          last_message_at: new Date().toISOString(),
+        } as never)
+        .eq("id", leadId);
+      await insertWithSessionFallback(db, "messages", {
+        user_id: userId,
+        lead_id: leadId,
+        sender: "ai_agent",
+        content: reply,
+        session_id: sessionId,
+      });
     }
-    const telegram_alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`, leadId, history, mediaUrl, closed: false });
-    return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, welcome_menu: outbound.sent, needs_human: !outbound.sent, telegram_alert, outbound });
+    const telegram_alert = outbound.sent
+      ? { sent: false, reason: "not_needed" }
+      : await sendTelegramAlert({
+          name: leadName,
+          phone,
+          reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`,
+          leadId,
+          history,
+          mediaUrl,
+          closed: false,
+        });
+    return json({
+      ok: true,
+      lead_id: leadId,
+      reply: outbound.sent ? reply : null,
+      welcome_menu: outbound.sent,
+      needs_human: !outbound.sent,
+      telegram_alert,
+      outbound,
+    });
   }
 
   if (isAbusiveMessage(content)) {
@@ -1145,7 +1633,15 @@ export async function handleAgentWebhookRequest(request: Request) {
       handoff: true,
       session_id: sessionId,
     });
-    await db.from("whatsapp_leads").update({ status: "needs_human", ai_paused: true, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+    await db
+      .from("whatsapp_leads")
+      .update({
+        status: "needs_human",
+        ai_paused: true,
+        ai_summary: reply,
+        last_message_at: new Date().toISOString(),
+      } as never)
+      .eq("id", leadId);
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
     const alert = await sendTelegramAlert({
       name: leadName,
@@ -1156,7 +1652,15 @@ export async function handleAgentWebhookRequest(request: Request) {
       mediaUrl,
       closed: false,
     });
-    return json({ ok: true, lead_id: leadId, reply, needs_human: true, ai_paused: true, telegram_alert: alert, outbound });
+    return json({
+      ok: true,
+      lead_id: leadId,
+      reply,
+      needs_human: true,
+      ai_paused: true,
+      telegram_alert: alert,
+      outbound,
+    });
   }
 
   // A fresh menu tap is an explicit new session. Reopen the lead and let the
@@ -1175,16 +1679,29 @@ export async function handleAgentWebhookRequest(request: Request) {
     aiPaused = false;
   }
 
-  const option = rawOption ??
-    (!leadIntent && isBreakdownRequest(content) ? 2 : !leadIntent && isAccidentRequest(content) ? 3 : !leadIntent && isCarRequest(content) ? 1 : null);
+  const option =
+    rawOption ??
+    (!leadIntent && isBreakdownRequest(content)
+      ? 2
+      : !leadIntent && isAccidentRequest(content)
+        ? 3
+        : !leadIntent && isCarRequest(content)
+          ? 1
+          : null);
 
   const recentAgentMessages = history
     .filter((turn) => turn.sender === "ai_agent")
     .slice(-6)
     .map((turn) => turn.content)
     .join("\n");
-  const carEligibilityPromptActive = /before we look at available vehicles|are you aged between 25 and 65|valid pco badge|pc[o0] badge|penalty points|please reply simply: yes, yes/i.test(recentAgentMessages);
-  const accidentPromptActive = /accident support|accident verification|your full name and the vehicle registration|other driver|accident report/i.test(recentAgentMessages);
+  const carEligibilityPromptActive =
+    /before we look at available vehicles|are you aged between 25 and 65|valid pco badge|pc[o0] badge|penalty points|please reply simply: yes, yes/i.test(
+      recentAgentMessages,
+    );
+  const accidentPromptActive =
+    /accident support|accident verification|your full name and the vehicle registration|other driver|accident report/i.test(
+      recentAgentMessages,
+    );
   const lastCarPromptIndex = Math.max(
     recentAgentMessages.lastIndexOf("before we look at available vehicles"),
     recentAgentMessages.lastIndexOf("please reply simply: yes, yes"),
@@ -1195,17 +1712,37 @@ export async function handleAgentWebhookRequest(request: Request) {
     recentAgentMessages.lastIndexOf("accident verification"),
   );
   const carPromptIsMostRecent = lastCarPromptIndex > lastAccidentPromptIndex;
-  const accidentActive = !compactEligibilityAnswer && (accidentIdentityReply || (!carPromptIsMostRecent && (leadIntent === "report_accident" || accidentPromptActive)));
+  const accidentActive =
+    !compactEligibilityAnswer &&
+    (accidentIdentityReply ||
+      (!carPromptIsMostRecent && (leadIntent === "report_accident" || accidentPromptActive)));
   const carEligibilityActive =
-    !accidentActive && (
-      compactEligibilityAnswer ||
+    !accidentActive &&
+    (compactEligibilityAnswer ||
       leadIntent === "book_car" ||
       carEligibilityPromptActive ||
-      (!carEligibility.completed && Object.keys(carEligibility).length > 0)
-    );
-  const matchedVehicle = !option && !accidentIdentityReply ? findSelectedVehicle(content, (fleet ?? []) as FleetVehicle[]) : undefined;
-  const selectedVehicleRequest = !option && Boolean(matchedVehicle) && carEligibility.pcoBadge !== false && (/(which vehicle|which car|available|fleet|vehicles currently marked|make and model)/i.test(lastAgentMessage) || leadIntent === "book_car" || carEligibility.completed || carEligibility.ageEligible !== undefined);
-  if (matchedVehicle) console.info("[agent-webhook] vehicle selection candidate", { leadId, content, matchedVehicle: `${matchedVehicle.make} ${matchedVehicle.model}`, selectedVehicleRequest });
+      (!carEligibility.completed && Object.keys(carEligibility).length > 0));
+  const matchedVehicle =
+    !option && !accidentIdentityReply
+      ? findSelectedVehicle(content, (fleet ?? []) as FleetVehicle[])
+      : undefined;
+  const selectedVehicleRequest =
+    !option &&
+    Boolean(matchedVehicle) &&
+    carEligibility.pcoBadge !== false &&
+    (/(which vehicle|which car|available|fleet|vehicles currently marked|make and model)/i.test(
+      lastAgentMessage,
+    ) ||
+      leadIntent === "book_car" ||
+      carEligibility.completed ||
+      carEligibility.ageEligible !== undefined);
+  if (matchedVehicle)
+    console.info("[agent-webhook] vehicle selection candidate", {
+      leadId,
+      content,
+      matchedVehicle: `${matchedVehicle.make} ${matchedVehicle.model}`,
+      selectedVehicleRequest,
+    });
   if (selectedVehicleRequest) {
     const selected = matchedVehicle;
     if (selected) {
@@ -1214,18 +1751,55 @@ export async function handleAgentWebhookRequest(request: Request) {
         make: selected.make,
         model: selected.model,
         year: selected.year ?? websiteMatch(selected)?.year ?? null,
-        weeklyRate: selected.weekly_price != null ? `£${selected.weekly_price}/week` : websiteMatch(selected)?.price ?? "Price to confirm",
+        weeklyRate:
+          selected.weekly_price != null
+            ? `£${selected.weekly_price}/week`
+            : (websiteMatch(selected)?.price ?? "Price to confirm"),
         mileage: mileageAllowance(selected),
         contractWeeks: contractWeeks(selected),
       };
-      const nextEligibility: CarEligibility = { ...carEligibility, completed: true, selectedVehicle };
+      const nextEligibility: CarEligibility = {
+        ...carEligibility,
+        completed: true,
+        selectedVehicle,
+      };
       const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
       if (outbound.sent) {
-        await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
-        await db.from("whatsapp_leads").update({ car_enquiry_data: nextEligibility, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+        await insertWithSessionFallback(db, "messages", {
+          user_id: userId,
+          lead_id: leadId,
+          sender: "ai_agent",
+          content: reply,
+          session_id: sessionId,
+        });
+        await db
+          .from("whatsapp_leads")
+          .update({
+            car_enquiry_data: nextEligibility,
+            ai_summary: reply,
+            last_message_at: new Date().toISOString(),
+          } as never)
+          .eq("id", leadId);
       }
-      const alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
-      return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, needs_human: !outbound.sent, telegram_alert: alert });
+      const alert = outbound.sent
+        ? { sent: false, reason: "not_needed" }
+        : await sendTelegramAlert({
+            name: leadName,
+            phone,
+            reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`,
+            leadId,
+            history: [...history, { sender: "ai_agent", content: reply }],
+            mediaUrl,
+            closed: false,
+          });
+      return json({
+        ok: true,
+        lead_id: leadId,
+        reply: outbound.sent ? reply : null,
+        outbound,
+        needs_human: !outbound.sent,
+        telegram_alert: alert,
+      });
     }
   }
 
@@ -1237,35 +1811,136 @@ export async function handleAgentWebhookRequest(request: Request) {
     if (nextEligibility.ageEligible === false) {
       const reply = `⚠️ Warning: Renting with Virtual Car Hire is not possible if you are under 25 years old.\n\nThis conversation is now closed.`;
       const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
-      if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, handoff: true, session_id: sessionId });
-      await db.from("whatsapp_leads").update({ car_enquiry_data: { ...nextEligibility, closed: true }, status: "closed", ai_paused: true, closed_at: new Date().toISOString(), ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
-      const alert = await sendTelegramAlert({ name: leadName, phone, reason: "Car enquiry closed: under 25 years old", leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: true });
-      return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, eligibility: nextEligibility, telegram_alert: alert, needs_human: false });
+      if (outbound.sent)
+        await insertWithSessionFallback(db, "messages", {
+          user_id: userId,
+          lead_id: leadId,
+          sender: "ai_agent",
+          content: reply,
+          handoff: true,
+          session_id: sessionId,
+        });
+      await db
+        .from("whatsapp_leads")
+        .update({
+          car_enquiry_data: { ...nextEligibility, closed: true },
+          status: "closed",
+          ai_paused: true,
+          closed_at: new Date().toISOString(),
+          ai_summary: reply,
+          last_message_at: new Date().toISOString(),
+        } as never)
+        .eq("id", leadId);
+      const alert = await sendTelegramAlert({
+        name: leadName,
+        phone,
+        reason: "Car enquiry closed: under 25 years old",
+        leadId,
+        history: [...history, { sender: "ai_agent", content: reply }],
+        mediaUrl,
+        closed: true,
+      });
+      return json({
+        ok: true,
+        lead_id: leadId,
+        reply: outbound.sent ? reply : null,
+        outbound,
+        eligibility: nextEligibility,
+        telegram_alert: alert,
+        needs_human: false,
+      });
     }
     if (nextEligibility.pcoBadge === false) {
       const reply = `⚠️ Warning: A valid PCO badge is required to rent a vehicle with Virtual Car Hire. Since you do not possess a PCO badge, you cannot rent with us at this time.\n\nOur team will review this enquiry and contact you within 24 hours.`;
       const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
-      if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, handoff: true, session_id: sessionId });
-      await db.from("whatsapp_leads").update({ car_enquiry_data: { ...nextEligibility, closed: true }, status: "closed", ai_paused: true, closed_at: new Date().toISOString(), ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
-      const alert = await sendTelegramAlert({ name: leadName, phone, reason: "Car enquiry closed: no valid PCO badge", leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: true });
-      return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, eligibility: nextEligibility, telegram_alert: alert, needs_human: false });
+      if (outbound.sent)
+        await insertWithSessionFallback(db, "messages", {
+          user_id: userId,
+          lead_id: leadId,
+          sender: "ai_agent",
+          content: reply,
+          handoff: true,
+          session_id: sessionId,
+        });
+      await db
+        .from("whatsapp_leads")
+        .update({
+          car_enquiry_data: { ...nextEligibility, closed: true },
+          status: "closed",
+          ai_paused: true,
+          closed_at: new Date().toISOString(),
+          ai_summary: reply,
+          last_message_at: new Date().toISOString(),
+        } as never)
+        .eq("id", leadId);
+      const alert = await sendTelegramAlert({
+        name: leadName,
+        phone,
+        reason: "Car enquiry closed: no valid PCO badge",
+        leadId,
+        history: [...history, { sender: "ai_agent", content: reply }],
+        mediaUrl,
+        closed: true,
+      });
+      return json({
+        ok: true,
+        lead_id: leadId,
+        reply: outbound.sent ? reply : null,
+        outbound,
+        eligibility: nextEligibility,
+        telegram_alert: alert,
+        needs_human: false,
+      });
     }
     if (missing.length || !nextEligibility.completed) {
       const warnings = [
-        nextEligibility.pcoBadge === false ? "⚠️ Warning: A valid PCO badge is required to rent a vehicle with Virtual Car Hire." : "",
-        nextEligibility.ageEligible === false ? "It may be difficult to rent with us if your age is outside 25 to 65, as our insurance may not allow it. We will continue." : "",
-        nextEligibility.points != null && nextEligibility.points > 6 ? "Sorry, you may be unable to rent with us as your points are too high, but we will continue." : "",
+        nextEligibility.pcoBadge === false
+          ? "⚠️ Warning: A valid PCO badge is required to rent a vehicle with Virtual Car Hire."
+          : "",
+        nextEligibility.ageEligible === false
+          ? "It may be difficult to rent with us if your age is outside 25 to 65, as our insurance may not allow it. We will continue."
+          : "",
+        nextEligibility.points != null && nextEligibility.points > 6
+          ? "Sorry, you may be unable to rent with us as your points are too high, but we will continue."
+          : "",
       ].filter(Boolean);
       const reply = `${warnings.length ? `${warnings.join("\n\n")}\n\n` : ""}Thanks. I still need ${missing.join(", ")}. Please reply naturally—for example: I’m 30, I have a valid PCO badge, and I have 3 points.`;
       const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
-      if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
-      await db.from("whatsapp_leads").update({ car_enquiry_data: nextEligibility, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
-      return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, eligibility: nextEligibility, needs_human: !outbound.sent });
+      if (outbound.sent)
+        await insertWithSessionFallback(db, "messages", {
+          user_id: userId,
+          lead_id: leadId,
+          sender: "ai_agent",
+          content: reply,
+          session_id: sessionId,
+        });
+      await db
+        .from("whatsapp_leads")
+        .update({
+          car_enquiry_data: nextEligibility,
+          ai_summary: reply,
+          last_message_at: new Date().toISOString(),
+        } as never)
+        .eq("id", leadId);
+      return json({
+        ok: true,
+        lead_id: leadId,
+        reply: outbound.sent ? reply : null,
+        outbound,
+        eligibility: nextEligibility,
+        needs_human: !outbound.sent,
+      });
     }
     const eligibilityWarnings = [
-      nextEligibility.pcoBadge === false ? "⚠️ Warning: A valid PCO badge is required to rent a vehicle with Virtual Car Hire." : "",
-      nextEligibility.ageEligible === false ? "It may be difficult to rent with us if your age is outside 25 to 65, as our insurance may not allow it. We will continue." : "",
-      nextEligibility.points != null && nextEligibility.points > 6 ? "Sorry, you may be unable to rent with us as your points are too high, but we will continue." : "",
+      nextEligibility.pcoBadge === false
+        ? "⚠️ Warning: A valid PCO badge is required to rent a vehicle with Virtual Car Hire."
+        : "",
+      nextEligibility.ageEligible === false
+        ? "It may be difficult to rent with us if your age is outside 25 to 65, as our insurance may not allow it. We will continue."
+        : "",
+      nextEligibility.points != null && nextEligibility.points > 6
+        ? "Sorry, you may be unable to rent with us as your points are too high, but we will continue."
+        : "",
     ].filter(Boolean);
 
     let reply = "";
@@ -1278,25 +1953,84 @@ export async function handleAgentWebhookRequest(request: Request) {
     }
 
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
-    if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
-    await db.from("whatsapp_leads").update({ car_enquiry_data: nextEligibility, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+    if (outbound.sent)
+      await insertWithSessionFallback(db, "messages", {
+        user_id: userId,
+        lead_id: leadId,
+        sender: "ai_agent",
+        content: reply,
+        session_id: sessionId,
+      });
+    await db
+      .from("whatsapp_leads")
+      .update({
+        car_enquiry_data: nextEligibility,
+        ai_summary: reply,
+        last_message_at: new Date().toISOString(),
+      } as never)
+      .eq("id", leadId);
     if (nextEligibility.ageEligible === false) {
-      await sendTelegramAlert({ name: leadName, phone, reason: "Car enquiry: customer age outside 25-65 range (human follow-up needed)", leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
+      await sendTelegramAlert({
+        name: leadName,
+        phone,
+        reason: "Car enquiry: customer age outside 25-65 range (human follow-up needed)",
+        leadId,
+        history: [...history, { sender: "ai_agent", content: reply }],
+        mediaUrl,
+        closed: false,
+      });
     }
-    if (!outbound.sent) console.error("[agent-webhook] completed car fleet reply failed", { leadId, reason: outbound.reason, content });
-    return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, eligibility: nextEligibility, needs_human: !outbound.sent });
+    if (!outbound.sent)
+      console.error("[agent-webhook] completed car fleet reply failed", {
+        leadId,
+        reason: outbound.reason,
+        content,
+      });
+    return json({
+      ok: true,
+      lead_id: leadId,
+      reply: outbound.sent ? reply : null,
+      outbound,
+      eligibility: nextEligibility,
+      needs_human: !outbound.sent,
+    });
   }
 
-  if (!option && leadIntent === "book_car" && carEligibility.pcoBadge !== false && lastAgentMessage.toLowerCase().includes("full name") && isLikelyFullName(content)) {
+  if (
+    !option &&
+    leadIntent === "book_car" &&
+    carEligibility.pcoBadge !== false &&
+    lastAgentMessage.toLowerCase().includes("full name") &&
+    isLikelyFullName(content)
+  ) {
     const customerName = content.trim();
     const reply = formatCustomerFleet((fleet ?? []) as FleetVehicle[]);
-    await db.from("whatsapp_leads").update({ contact_name: customerName, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
-    await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
+    await db
+      .from("whatsapp_leads")
+      .update({
+        contact_name: customerName,
+        ai_summary: reply,
+        last_message_at: new Date().toISOString(),
+      } as never)
+      .eq("id", leadId);
+    await insertWithSessionFallback(db, "messages", {
+      user_id: userId,
+      lead_id: leadId,
+      sender: "ai_agent",
+      content: reply,
+      session_id: sessionId,
+    });
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
     return json({ ok: true, lead_id: leadId, reply, outbound, needs_human: !outbound.sent });
   }
 
-  if (!option && leadIntent === "book_car" && carEligibility.pcoBadge !== false && findSelectedVehicle(content, (fleet ?? []) as FleetVehicle[]) && /(which vehicle|which car|available|fleet|vehicles currently marked)/i.test(lastAgentMessage)) {
+  if (
+    !option &&
+    leadIntent === "book_car" &&
+    carEligibility.pcoBadge !== false &&
+    findSelectedVehicle(content, (fleet ?? []) as FleetVehicle[]) &&
+    /(which vehicle|which car|available|fleet|vehicles currently marked)/i.test(lastAgentMessage)
+  ) {
     const selected = findSelectedVehicle(content, (fleet ?? []) as FleetVehicle[]);
     if (selected) {
       const reply = formatVehicleDetails(selected);
@@ -1304,41 +2038,103 @@ export async function handleAgentWebhookRequest(request: Request) {
         make: selected.make,
         model: selected.model,
         year: selected.year ?? websiteMatch(selected)?.year ?? null,
-        weeklyRate: selected.weekly_price != null ? `£${selected.weekly_price}/week` : websiteMatch(selected)?.price ?? "Price to confirm",
+        weeklyRate:
+          selected.weekly_price != null
+            ? `£${selected.weekly_price}/week`
+            : (websiteMatch(selected)?.price ?? "Price to confirm"),
         mileage: mileageAllowance(selected),
         contractWeeks: contractWeeks(selected),
       };
       const nextEligibility: CarEligibility = { ...carEligibility, selectedVehicle };
       const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
       if (outbound.sent) {
-        await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
-        await db.from("whatsapp_leads").update({ car_enquiry_data: nextEligibility, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+        await insertWithSessionFallback(db, "messages", {
+          user_id: userId,
+          lead_id: leadId,
+          sender: "ai_agent",
+          content: reply,
+          session_id: sessionId,
+        });
+        await db
+          .from("whatsapp_leads")
+          .update({
+            car_enquiry_data: nextEligibility,
+            ai_summary: reply,
+            last_message_at: new Date().toISOString(),
+          } as never)
+          .eq("id", leadId);
       }
-      const alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
-      return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, needs_human: !outbound.sent, telegram_alert: alert });
+      const alert = outbound.sent
+        ? { sent: false, reason: "not_needed" }
+        : await sendTelegramAlert({
+            name: leadName,
+            phone,
+            reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`,
+            leadId,
+            history: [...history, { sender: "ai_agent", content: reply }],
+            mediaUrl,
+            closed: false,
+          });
+      return json({
+        ok: true,
+        lead_id: leadId,
+        reply: outbound.sent ? reply : null,
+        outbound,
+        needs_human: !outbound.sent,
+        telegram_alert: alert,
+      });
     }
   }
 
   const accidentIdentity = parseAccidentIdentity(content);
-  if (!option && accidentActive && /full name|provide your full name|vehicle registration/i.test(lastAgentMessage) && (accidentIdentity || isLikelyFullName(content))) {
+  if (
+    !option &&
+    accidentActive &&
+    /full name|provide your full name|vehicle registration/i.test(lastAgentMessage) &&
+    (accidentIdentity || isLikelyFullName(content))
+  ) {
     const customerName = accidentIdentity?.name ?? content.trim();
     const suppliedRegistration = accidentIdentity?.registration ?? "";
     const reply = suppliedRegistration
       ? `Accident Support\n\nThank you, ${customerName}. I have recorded vehicle registration ${suppliedRegistration}. I am checking these details against our driver records now. If verified, I will collect the accident details next.`
       : `Accident Support\n\nThank you, ${customerName}. Please now send the vehicle registration, incident date, location, a short description of what happened, and any photos.`;
-    await db.from("whatsapp_leads").update({ contact_name: customerName, vehicle_registration: suppliedRegistration || undefined, intent: "report_accident", ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
-    await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
+    await db
+      .from("whatsapp_leads")
+      .update({
+        contact_name: customerName,
+        vehicle_registration: suppliedRegistration || undefined,
+        intent: "report_accident",
+        ai_summary: reply,
+        last_message_at: new Date().toISOString(),
+      } as never)
+      .eq("id", leadId);
+    await insertWithSessionFallback(db, "messages", {
+      user_id: userId,
+      lead_id: leadId,
+      sender: "ai_agent",
+      content: reply,
+      session_id: sessionId,
+    });
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
-    return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, needs_human: !outbound.sent, accident_identity: accidentIdentity });
+    return json({
+      ok: true,
+      lead_id: leadId,
+      reply: outbound.sent ? reply : null,
+      outbound,
+      needs_human: !outbound.sent,
+      accident_identity: accidentIdentity,
+    });
   }
 
   if (option === 1 || option === 2 || option === 3) {
-    const reply = option === 1
-      ? `Car Enquiry\n\n${CAR_ELIGIBILITY_PROMPT}`
-      : option === 2
-        ? `🛠️ Emergency Breakdown\n\nPlease arrange for the vehicle to be dropped off at our garage:\n\n${AUTO_SURGEON_ADDRESS}\n\n📍 Clickable map: ${AUTO_SURGEON_MAP}\n\nOnce the address has been sent, contact your own breakdown recovery provider, such as a local recovery company or RAC. Virtual Car Hire does not provide the recovery vehicle.\n\nPlease park the vehicle in front of The Auto Surgeon and send:\n1. One clear photo of the vehicle parked in front of the garage.\n2. Either a photo or video showing the key being placed in the letter box.\n\nI will check both pieces of evidence before we close the case.`
-        : "🚨 Accident Support\n\nWe are sorry to hear you have been in an accident. We are here to help guide you through the next steps safely.\n\nTo get started, please provide your full name and vehicle registration number together. We will cross-check both against our active CRM records before collecting the accident details.";
-    const intent = option === 1 ? "book_car" : option === 2 ? "emergency_breakdown" : "report_accident";
+    const reply =
+      option === 1
+        ? `Car Enquiry\n\n${CAR_ELIGIBILITY_PROMPT}`
+        : option === 2
+          ? `🛠️ Emergency Breakdown\n\nPlease arrange for the vehicle to be dropped off at our garage:\n\n${AUTO_SURGEON_ADDRESS}\n\n📍 Clickable map: ${AUTO_SURGEON_MAP}\n\nOnce the address has been sent, contact your own breakdown recovery provider, such as a local recovery company or RAC. Virtual Car Hire does not provide the recovery vehicle.\n\nPlease park the vehicle in front of The Auto Surgeon and send:\n1. One clear photo of the vehicle parked in front of the garage.\n2. Either a photo or video showing the key being placed in the letter box.\n\nI will check both pieces of evidence before we close the case.`
+          : "🚨 Accident Support\n\nWe are sorry to hear you have been in an accident. We are here to help guide you through the next steps safely.\n\nTo get started, please provide your full name and vehicle registration number together. We will cross-check both against our active CRM records before collecting the accident details.";
+    const intent =
+      option === 1 ? "book_car" : option === 2 ? "emergency_breakdown" : "report_accident";
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
     if (outbound.sent) {
       await insertWithSessionFallback(db, "messages", {
@@ -1348,28 +2144,66 @@ export async function handleAgentWebhookRequest(request: Request) {
         content: reply,
         session_id: sessionId,
       });
-      await db.from("whatsapp_leads").update({ intent, ai_summary: reply, ai_paused: false, closed_at: null, car_enquiry_data: option === 1 || option === 3 ? {} : carEligibility, breakdown_data: option === 2 ? { ...breakdownData, garageInstructionsSent: true } : breakdownData, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+      await db
+        .from("whatsapp_leads")
+        .update({
+          intent,
+          ai_summary: reply,
+          ai_paused: false,
+          closed_at: null,
+          car_enquiry_data: option === 1 || option === 3 ? {} : carEligibility,
+          breakdown_data:
+            option === 2 ? { ...breakdownData, garageInstructionsSent: true } : breakdownData,
+          last_message_at: new Date().toISOString(),
+        } as never)
+        .eq("id", leadId);
     }
     let alert: { sent: boolean; reason?: string } = { sent: false, reason: "not_needed" };
     if (!outbound.sent) {
-      alert = await sendTelegramAlert({ name: leadName, phone, reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
+      alert = await sendTelegramAlert({
+        name: leadName,
+        phone,
+        reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`,
+        leadId,
+        history: [...history, { sender: "ai_agent", content: reply }],
+        mediaUrl,
+        closed: false,
+      });
     }
-    return json({ ok: true, lead_id: leadId, reply, needs_human: !outbound.sent, ai_paused: !outbound.sent, telegram_alert: alert, outbound });
+    return json({
+      ok: true,
+      lead_id: leadId,
+      reply,
+      needs_human: !outbound.sent,
+      ai_paused: !outbound.sent,
+      telegram_alert: alert,
+      outbound,
+    });
   }
 
   if (!option && leadIntent === "emergency_breakdown") {
     const next: BreakdownData = { ...breakdownData };
     const normalizedMediaType = (mediaType ?? "").toLowerCase();
-    const vehicleEvidencePrompt = "Inspect this photo for a vehicle parked in front of The Auto Surgeon garage. Return JSON only with status exactly verified, unclear, or rejected; confidence from 0 to 1; and a short reason. Mark verified only when a real vehicle is clearly visible and reasonably parked at the garage frontage. Do not identify or infer any person.";
-    const keyEvidencePrompt = "Inspect this photo for a vehicle key clearly placed inside or immediately at a letter box. Return JSON only with status exactly verified, unclear, or rejected; confidence from 0 to 1; and a short reason. Mark verified only when both the key and letter box placement are clear. Do not identify or infer any person.";
+    const vehicleEvidencePrompt =
+      "Inspect this photo for a vehicle parked in front of The Auto Surgeon garage. Return JSON only with status exactly verified, unclear, or rejected; confidence from 0 to 1; and a short reason. Mark verified only when a real vehicle is clearly visible and reasonably parked at the garage frontage. Do not identify or infer any person.";
+    const keyEvidencePrompt =
+      "Inspect this photo for a vehicle key clearly placed inside or immediately at a letter box. Return JSON only with status exactly verified, unclear, or rejected; confidence from 0 to 1; and a short reason. Mark verified only when both the key and letter box placement are clear. Do not identify or infer any person.";
     if (mediaUrl && normalizedMediaType === "image") {
       if (!next.vehiclePhotoUrl) {
         next.vehiclePhotoUrl = mediaUrl;
-        next.vehiclePhotoVerification = await verifyImageEvidence(mediaUrl, mediaMimeType ?? "image/jpeg", vehicleEvidencePrompt);
+        next.vehiclePhotoVerification = await verifyImageEvidence(
+          mediaUrl,
+          mediaMimeType ?? "image/jpeg",
+          vehicleEvidencePrompt,
+        );
       } else {
         next.keyPhotoUrl = next.keyPhotoUrl ?? mediaUrl;
         next.keyEvidenceUrl = next.keyEvidenceUrl ?? mediaUrl;
-        next.keyPhotoVerification = await verifyImageEvidence(mediaUrl, mediaMimeType ?? "image/jpeg", keyEvidencePrompt);
+        next.keyPhotoVerification = await verifyImageEvidence(
+          mediaUrl,
+          mediaMimeType ?? "image/jpeg",
+          keyEvidencePrompt,
+        );
         next.keyEvidenceVerification = next.keyPhotoVerification;
       }
     }
@@ -1384,9 +2218,18 @@ export async function handleAgentWebhookRequest(request: Request) {
       next.keyEvidenceVerification = next.keyVideoVerification;
     }
     const vehicleVerified = next.vehiclePhotoVerification?.status === "verified";
-    const keyEvidenceVerified = next.keyEvidenceVerification?.status === "verified" || next.keyVideoVerification?.status === "received_pending_review";
-    const mediaComplete = Boolean(next.vehiclePhotoUrl && vehicleVerified && next.keyEvidenceUrl && keyEvidenceVerified);
-    if (mediaComplete && next.keyMediaChecked && isPositiveClosure(content) && lastAgentMessage.toLowerCase().includes("is that all for today")) {
+    const keyEvidenceVerified =
+      next.keyEvidenceVerification?.status === "verified" ||
+      next.keyVideoVerification?.status === "received_pending_review";
+    const mediaComplete = Boolean(
+      next.vehiclePhotoUrl && vehicleVerified && next.keyEvidenceUrl && keyEvidenceVerified,
+    );
+    if (
+      mediaComplete &&
+      next.keyMediaChecked &&
+      isPositiveClosure(content) &&
+      lastAgentMessage.toLowerCase().includes("is that all for today")
+    ) {
       const summary = `Emergency breakdown case\n\nGarage: ${AUTO_SURGEON_ADDRESS}\nMap: ${AUTO_SURGEON_MAP}\nVehicle photo: Verified\nKey evidence: ${next.keyVideoUrl ? "Video received" : "Photo verified"}`;
       const { error: caseError } = await db.from("accident_cases").insert({
         user_id: userId,
@@ -1403,99 +2246,260 @@ export async function handleAgentWebhookRequest(request: Request) {
         severity: "minor",
         status: "open",
       } as never);
-      if (caseError) console.error("[agent-webhook] breakdown case insert failed", { leadId, error: caseError.message });
-      const reply = "✅ Thank you. The breakdown case and key media have been saved for our team. This conversation is now closed.";
+      if (caseError)
+        console.error("[agent-webhook] breakdown case insert failed", {
+          leadId,
+          error: caseError.message,
+        });
+      const reply =
+        "✅ Thank you. The breakdown case and key media have been saved for our team. This conversation is now closed.";
       const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
-      if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, handoff: true, session_id: sessionId });
-      await db.from("whatsapp_leads").update({ breakdown_data: { ...next, closed: true }, status: "closed", ai_paused: true, closed_at: new Date().toISOString(), ai_summary: summary, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
-      const alert = await sendTelegramAlert({ name: leadName, phone, reason: caseError ? "Breakdown case requires manual CRM review" : "Breakdown media verified and customer confirmed closure", leadId, history: [...history, { sender: "ai_agent", content: summary }, { sender: "ai_agent", content: reply }], mediaUrl, closed: true });
-      return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, telegram_alert: alert, breakdown_case_saved: !caseError });
+      if (outbound.sent)
+        await insertWithSessionFallback(db, "messages", {
+          user_id: userId,
+          lead_id: leadId,
+          sender: "ai_agent",
+          content: reply,
+          handoff: true,
+          session_id: sessionId,
+        });
+      await db
+        .from("whatsapp_leads")
+        .update({
+          breakdown_data: { ...next, closed: true },
+          status: "closed",
+          ai_paused: true,
+          closed_at: new Date().toISOString(),
+          ai_summary: summary,
+          last_message_at: new Date().toISOString(),
+        } as never)
+        .eq("id", leadId);
+      const alert = await sendTelegramAlert({
+        name: leadName,
+        phone,
+        reason: caseError
+          ? "Breakdown case requires manual CRM review"
+          : "Breakdown media verified and customer confirmed closure",
+        leadId,
+        history: [
+          ...history,
+          { sender: "ai_agent", content: summary },
+          { sender: "ai_agent", content: reply },
+        ],
+        mediaUrl,
+        closed: true,
+      });
+      return json({
+        ok: true,
+        lead_id: leadId,
+        reply: outbound.sent ? reply : null,
+        outbound,
+        telegram_alert: alert,
+        breakdown_case_saved: !caseError,
+      });
     }
     next.keyMediaChecked = mediaComplete;
-    const currentVerification = normalizedMediaType === "image"
-      ? (next.vehiclePhotoUrl === mediaUrl ? next.vehiclePhotoVerification : next.keyEvidenceVerification)
-      : next.keyVideoVerification;
-    const reply = currentVerification && currentVerification.status !== "verified" && currentVerification.status !== "received_pending_review"
-      ? `📷 Evidence received. ${currentVerification.reason}\n\nPlease resend a clear image showing ${next.vehiclePhotoUrl === mediaUrl ? "the vehicle reasonably parked in front of The Auto Surgeon" : "the key being placed in the letter box"}. I will check it again before continuing.`
-      : mediaComplete
-        ? "✅ I have checked the vehicle photo and received the key photo/video. Both pieces of evidence are saved. Is that all for today? Reply Yes or No."
-        : `🛠️ Emergency Breakdown\n\nI still need ${!next.vehiclePhotoUrl ? "one clear photo of the vehicle parked in front of The Auto Surgeon" : !next.keyEvidenceUrl ? "a photo or video showing the key being placed in the letter box" : "a clearer piece of evidence"}. Please send the missing file here.`;
+    const currentVerification =
+      normalizedMediaType === "image"
+        ? next.vehiclePhotoUrl === mediaUrl
+          ? next.vehiclePhotoVerification
+          : next.keyEvidenceVerification
+        : next.keyVideoVerification;
+    const reply =
+      currentVerification &&
+      currentVerification.status !== "verified" &&
+      currentVerification.status !== "received_pending_review"
+        ? `📷 Evidence received. ${currentVerification.reason}\n\nPlease resend a clear image showing ${next.vehiclePhotoUrl === mediaUrl ? "the vehicle reasonably parked in front of The Auto Surgeon" : "the key being placed in the letter box"}. I will check it again before continuing.`
+        : mediaComplete
+          ? "✅ I have checked the vehicle photo and received the key photo/video. Both pieces of evidence are saved. Is that all for today? Reply Yes or No."
+          : `🛠️ Emergency Breakdown\n\nI still need ${!next.vehiclePhotoUrl ? "one clear photo of the vehicle parked in front of The Auto Surgeon" : !next.keyEvidenceUrl ? "a photo or video showing the key being placed in the letter box" : "a clearer piece of evidence"}. Please send the missing file here.`;
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
-    if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
-    await db.from("whatsapp_leads").update({ breakdown_data: next, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
-    const alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
-    return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, telegram_alert: alert, breakdown_media_complete: mediaComplete });
+    if (outbound.sent)
+      await insertWithSessionFallback(db, "messages", {
+        user_id: userId,
+        lead_id: leadId,
+        sender: "ai_agent",
+        content: reply,
+        session_id: sessionId,
+      });
+    await db
+      .from("whatsapp_leads")
+      .update({
+        breakdown_data: next,
+        ai_summary: reply,
+        last_message_at: new Date().toISOString(),
+      } as never)
+      .eq("id", leadId);
+    const alert = outbound.sent
+      ? { sent: false, reason: "not_needed" }
+      : await sendTelegramAlert({
+          name: leadName,
+          phone,
+          reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`,
+          leadId,
+          history: [...history, { sender: "ai_agent", content: reply }],
+          mediaUrl,
+          closed: false,
+        });
+    return json({
+      ok: true,
+      lead_id: leadId,
+      reply: outbound.sent ? reply : null,
+      outbound,
+      telegram_alert: alert,
+      breakdown_media_complete: mediaComplete,
+    });
   }
 
   // Accident prompt precedence is authoritative. A lead may carry stale
   // book_car intent from an earlier conversation, so the latest accident
   // prompt must still route the next customer reply into verification.
   if (!option && (leadIntent === "report_accident" || accidentActive)) {
-    const next: AccidentData = { ...accidentData, evidenceUrls: [...(accidentData.evidenceUrls ?? [])] };
+    const next: AccidentData = {
+      ...accidentData,
+      evidenceUrls: [...(accidentData.evidenceUrls ?? [])],
+    };
     const lowerLast = lastAgentMessage.toLowerCase();
 
     if (!next.driverName || !next.driverReg) {
       const reg = extractReg(content);
       if (reg) {
         next.driverReg = next.driverReg ?? reg;
-        const possibleName = content.replace(reg, "").replace(/^[\\s,;:-]+|[\\s,;:-]+$/g, "").trim();
-        if (possibleName && isLikelyFullName(possibleName)) next.driverName = next.driverName ?? possibleName;
+        const possibleName = content
+          .replace(reg, "")
+          .replace(/^[\\s,;:-]+|[\\s,;:-]+$/g, "")
+          .trim();
+        if (possibleName && isLikelyFullName(possibleName))
+          next.driverName = next.driverName ?? possibleName;
       } else if (!next.driverName && isLikelyFullName(content)) {
         next.driverName = content.trim();
       }
       if (!next.driverName || !next.driverReg) {
         const reply = `🚨 Accident verification\\n\\nPlease send the missing detail: ${!next.driverName ? "your full name" : "your vehicle registration"}.`;
         const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
-        if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
-        await db.from("whatsapp_leads").update({ accident_data: next, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
-        const alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
-        return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, telegram_alert: alert });
+        if (outbound.sent)
+          await insertWithSessionFallback(db, "messages", {
+            user_id: userId,
+            lead_id: leadId,
+            sender: "ai_agent",
+            content: reply,
+            session_id: sessionId,
+          });
+        await db
+          .from("whatsapp_leads")
+          .update({ accident_data: next, last_message_at: new Date().toISOString() } as never)
+          .eq("id", leadId);
+        const alert = outbound.sent
+          ? { sent: false, reason: "not_needed" }
+          : await sendTelegramAlert({
+              name: leadName,
+              phone,
+              reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`,
+              leadId,
+              history: [...history, { sender: "ai_agent", content: reply }],
+              mediaUrl,
+              closed: false,
+            });
+        return json({
+          ok: true,
+          lead_id: leadId,
+          reply: outbound.sent ? reply : null,
+          outbound,
+          telegram_alert: alert,
+        });
       }
     }
 
     if (!next.verified) {
-      const { data: drivers } = await db
+      const { data: driversData } = await db
         .from("driver_tracks")
-        .select("vehicle_id, reg, driver_name, phone, active")
-        .eq("user_id", userId)
-        .limit(1000);
+        .select("id, vehicle_id, reg, driver_name, phone, active");
+      const { data: vehiclesData } = await db.from("vehicles").select("id, reg, make, model");
 
-      const allDrivers = (drivers ?? []) as { vehicle_id?: string | null; reg?: string | null; driver_name?: string | null; phone?: string | null; active?: boolean | null }[];
+      const vehiclesById = new Map<string, string>();
+      (vehiclesData ?? []).forEach((v: { id: string; reg?: string | null }) => {
+        if (v.id && v.reg) vehiclesById.set(v.id, v.reg);
+      });
 
-      const matchedByPhone = allDrivers.find((d) => canonicalPhoneKey(d.phone) === canonicalPhoneKey(phone ?? chatId));
+      const allDrivers = (driversData ?? []).map(
+        (d: {
+          vehicle_id?: string | null;
+          reg?: string | null;
+          driver_name?: string | null;
+          phone?: string | null;
+          active?: boolean | null;
+        }) => ({
+          vehicle_id: d.vehicle_id,
+          reg: d.reg || (d.vehicle_id ? vehiclesById.get(d.vehicle_id) : "") || "",
+          driver_name: d.driver_name,
+          phone: d.phone,
+          active: d.active,
+        }),
+      );
 
       const reqReg = normalizeReg(next.driverReg ?? "");
       const reqName = normalizeDriverName(next.driverName ?? "");
 
+      const isNameMatch = (nameA: string, nameB: string): boolean => {
+        const normA = normalizeDriverName(nameA);
+        const normB = normalizeDriverName(nameB);
+        if (!normA || !normB) return false;
+        if (normA === normB) return true;
+        if (normA.includes(normB) || normB.includes(normA)) return true;
+        const wordsA = normA.split(" ").filter(Boolean);
+        const wordsB = normB.split(" ").filter(Boolean);
+        return wordsA.every((w) => normB.includes(w)) || wordsB.every((w) => normA.includes(w));
+      };
+
+      const matchedByPhone = allDrivers.find(
+        (d) => canonicalPhoneKey(d.phone) === canonicalPhoneKey(phone ?? chatId),
+      );
       const regMatches = allDrivers.filter((d) => normalizeReg(d.reg ?? "") === reqReg);
-      const nameMatches = allDrivers.filter((d) => {
-        const dName = normalizeDriverName(d.driver_name ?? "");
-        return dName && reqName && (dName.includes(reqName) || reqName.includes(dName));
-      });
+      const nameMatches = allDrivers.filter((d) => isNameMatch(d.driver_name ?? "", reqName));
 
       const matchedByNameAndReg = allDrivers.find((d) => {
-        const dReg = normalizeReg(d.reg ?? "");
-        const dName = normalizeDriverName(d.driver_name ?? "");
-        const regOk = dReg === reqReg;
-        const nameOk = dName && reqName && (dName.includes(reqName) || reqName.includes(dName));
+        const regOk = normalizeReg(d.reg ?? "") === reqReg;
+        const nameOk = isNameMatch(d.driver_name ?? "", reqName);
         return regOk && nameOk;
       });
 
-      const driver = matchedByPhone || matchedByNameAndReg || (regMatches.length > 0 && nameMatches.length > 0 ? regMatches[0] : null);
+      const driver =
+        matchedByNameAndReg ||
+        regMatches.find((d) => isNameMatch(d.driver_name ?? "", reqName)) ||
+        matchedByPhone ||
+        (regMatches.length > 0 && nameMatches.length > 0 ? regMatches[0] : null);
 
       if (!driver) {
         let reply = "";
         if (regMatches.length > 0) {
-          reply = "Your name hasn't come in our database please try again";
-          next.driverName = undefined; // allow customer to retry entering name
+          reply =
+            "Your name has not been recognized in our database for this vehicle. Please reply with your full name as shown on your rental agreement.";
+          next.driverName = undefined;
         } else {
-          reply = "The reg is not been recorded in our database please try again";
-          next.driverReg = undefined; // allow customer to retry entering reg
+          reply =
+            "The vehicle registration has not been recorded in our database. Please check your registration plate and try again.";
+          next.driverReg = undefined;
         }
         const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
-        if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
-        await db.from("whatsapp_leads").update({ accident_data: next, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
-        return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, needs_human: false });
+        if (outbound.sent)
+          await insertWithSessionFallback(db, "messages", {
+            user_id: userId,
+            lead_id: leadId,
+            sender: "ai_agent",
+            content: reply,
+            session_id: sessionId,
+          });
+        await db
+          .from("whatsapp_leads")
+          .update({ accident_data: next, last_message_at: new Date().toISOString() } as never)
+          .eq("id", leadId);
+        return json({
+          ok: true,
+          lead_id: leadId,
+          reply: outbound.sent ? reply : null,
+          outbound,
+          needs_human: false,
+        });
       }
 
       next.verified = true;
@@ -1505,28 +2509,100 @@ export async function handleAgentWebhookRequest(request: Request) {
       customerType = "existing_customer";
       const reply = `Driver details verified in our Database\n\nPlease send the required accident details:\n• The other driver’s full name\n• Their vehicle registration\n• Their insurance provider\n• The date and time of the accident\n• The place of the accident\n• A description of what happened\n• Photos and/or videos of the accident\n\nYou can send these details in separate messages.`;
       const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
-      if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
-      await db.from("whatsapp_leads").update({ accident_data: next, customer_type: customerType, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
-      const alert = await sendTelegramAlert({ name: leadName, phone, reason: `Accident report started by verified driver ${next.driverName} (${next.driverReg})`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
-      return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, telegram_alert: alert });
+      if (outbound.sent)
+        await insertWithSessionFallback(db, "messages", {
+          user_id: userId,
+          lead_id: leadId,
+          sender: "ai_agent",
+          content: reply,
+          session_id: sessionId,
+        });
+      await db
+        .from("whatsapp_leads")
+        .update({
+          accident_data: next,
+          customer_type: customerType,
+          ai_summary: reply,
+          last_message_at: new Date().toISOString(),
+        } as never)
+        .eq("id", leadId);
+      const alert = await sendTelegramAlert({
+        name: leadName,
+        phone,
+        reason: `Accident report started by verified driver ${next.driverName} (${next.driverReg})`,
+        leadId,
+        history: [...history, { sender: "ai_agent", content: reply }],
+        mediaUrl,
+        closed: false,
+      });
+      return json({
+        ok: true,
+        lead_id: leadId,
+        reply: outbound.sent ? reply : null,
+        outbound,
+        telegram_alert: alert,
+      });
     }
 
-    const licenseUrl = labeledValue(content, ["licence", "license", "driving licence", "driving license"]) ? mediaUrl : null;
+    const licenseUrl = labeledValue(content, [
+      "licence",
+      "license",
+      "driving licence",
+      "driving license",
+    ])
+      ? mediaUrl
+      : null;
     next.atFaultDriverLicenseUrl = next.atFaultDriverLicenseUrl ?? licenseUrl ?? undefined;
-    next.atFaultDriverName = next.atFaultDriverName ?? labeledValue(content, ["other driver", "driver name", "their name"]) ?? undefined;
-    next.atFaultVehicleReg = next.atFaultVehicleReg ?? labeledValue(content, ["their car reg", "their vehicle reg", "other car reg", "other vehicle registration"]) ?? extractReg(content) ?? undefined;
-    next.insuranceProvider = next.insuranceProvider ?? labeledValue(content, ["insurance", "insurance provider", "insurer"]) ?? undefined;
-    next.incidentDate = next.incidentDate ?? labeledValue(content, ["date", "accident date"]) ?? extractDate(content) ?? undefined;
-    next.incidentTime = next.incidentTime ?? labeledValue(content, ["time", "accident time"]) ?? extractTime(content) ?? undefined;
-    next.location = next.location ?? labeledValue(content, ["place", "location", "accident location"]) ?? undefined;
-    next.description = next.description ?? labeledValue(content, ["description", "what happened", "details"]) ?? undefined;
+    next.atFaultDriverName =
+      next.atFaultDriverName ??
+      labeledValue(content, ["other driver", "driver name", "their name"]) ??
+      undefined;
+    next.atFaultVehicleReg =
+      next.atFaultVehicleReg ??
+      labeledValue(content, [
+        "their car reg",
+        "their vehicle reg",
+        "other car reg",
+        "other vehicle registration",
+      ]) ??
+      extractReg(content) ??
+      undefined;
+    next.insuranceProvider =
+      next.insuranceProvider ??
+      labeledValue(content, ["insurance", "insurance provider", "insurer"]) ??
+      undefined;
+    next.incidentDate =
+      next.incidentDate ??
+      labeledValue(content, ["date", "accident date"]) ??
+      extractDate(content) ??
+      undefined;
+    next.incidentTime =
+      next.incidentTime ??
+      labeledValue(content, ["time", "accident time"]) ??
+      extractTime(content) ??
+      undefined;
+    next.location =
+      next.location ??
+      labeledValue(content, ["place", "location", "accident location"]) ??
+      undefined;
+    next.description =
+      next.description ??
+      labeledValue(content, ["description", "what happened", "details"]) ??
+      undefined;
     const evidenceUrls = next.evidenceUrls ?? (next.evidenceUrls = []);
     if (mediaUrl && !evidenceUrls.includes(mediaUrl)) evidenceUrls.push(mediaUrl);
 
     const missing = accidentMissing(next);
-    if (lowerLast.includes("is this information correct") && isTermsResponse(content)) {
-      if (/^yes[.!\\s]*$/i.test(content.trim())) {
-        const summary = formatAccidentSummary(next).replace(/\\n\\nIs this information correct\\? Please reply Yes or No\\./, "");
+    if (
+      (lowerLast.includes("is this information correct") ||
+        lowerLast.includes("accident report summary")) &&
+      (isPositiveConfirmation(content) || isNegativeConfirmation(content))
+    ) {
+      if (isPositiveConfirmation(content)) {
+        const summary = formatAccidentSummary(next).replace(
+          /\n\nIs this information correct\? Reply Yes to confirm or No to edit\./,
+          "",
+        );
         const { error: caseError } = await db.from("accident_cases").insert({
           user_id: userId,
           vehicle_id: next.vehicleId ?? null,
@@ -1547,32 +2623,130 @@ export async function handleAgentWebhookRequest(request: Request) {
           severity: "minor",
           status: "open",
         } as never);
-        if (caseError) console.error("[agent-webhook] accident case insert failed", { leadId, error: caseError.message });
-        const reply = "✅ Thank you. Your accident report has been saved and sent to our team for review. This conversation is now closed.";
+        if (caseError)
+          console.error("[agent-webhook] accident case insert failed", {
+            leadId,
+            error: caseError.message,
+          });
+        const reply =
+          "✅ Thank you. Your accident report has been saved and sent to our team for review. This conversation is now closed.";
         const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
-        if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, handoff: true, session_id: sessionId });
-        await db.from("whatsapp_leads").update({ accident_data: next, customer_type: "existing_customer", status: "closed", ai_paused: true, closed_at: new Date().toISOString(), ai_summary: summary, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
-        const alert = await sendTelegramAlert({ name: leadName, phone, reason: caseError ? "Accident report requires manual CRM review" : "Verified accident report confirmed by customer", leadId, history: [...history, { sender: "ai_agent", content: summary }, { sender: "ai_agent", content: reply }], mediaUrl, closed: true });
-        return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, telegram_alert: alert, accident_case_saved: !caseError });
+        if (outbound.sent)
+          await insertWithSessionFallback(db, "messages", {
+            user_id: userId,
+            lead_id: leadId,
+            sender: "ai_agent",
+            content: reply,
+            handoff: true,
+            session_id: sessionId,
+          });
+        await db
+          .from("whatsapp_leads")
+          .update({
+            accident_data: next,
+            customer_type: "existing_customer",
+            status: "closed",
+            ai_paused: true,
+            closed_at: new Date().toISOString(),
+            ai_summary: summary,
+            last_message_at: new Date().toISOString(),
+          } as never)
+          .eq("id", leadId);
+        const alert = await sendTelegramAlert({
+          name: leadName,
+          phone,
+          reason: caseError
+            ? "Accident report requires manual CRM review"
+            : "Verified accident report confirmed by customer",
+          leadId,
+          history: [
+            ...history,
+            { sender: "ai_agent", content: summary },
+            { sender: "ai_agent", content: reply },
+          ],
+          mediaUrl,
+          closed: true,
+        });
+        return json({
+          ok: true,
+          lead_id: leadId,
+          reply: outbound.sent ? reply : null,
+          outbound,
+          telegram_alert: alert,
+          accident_case_saved: !caseError,
+        });
+      } else {
+        const reply =
+          "No problem. Please tell me which part is incorrect, and I will update the accident report.";
+        const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
+        if (outbound.sent)
+          await insertWithSessionFallback(db, "messages", {
+            user_id: userId,
+            lead_id: leadId,
+            sender: "ai_agent",
+            content: reply,
+            session_id: sessionId,
+          });
+        await db
+          .from("whatsapp_leads")
+          .update({
+            accident_data: next,
+            ai_summary: reply,
+            last_message_at: new Date().toISOString(),
+          } as never)
+          .eq("id", leadId);
+        return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound });
       }
-      const reply = "No problem. Please tell me which part is incorrect, and I will update the accident report.";
-      const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
-      if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
-      await db.from("whatsapp_leads").update({ accident_data: next, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
-      return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound });
     }
 
     const reply = missing.length
       ? `🚨 Accident report\\n\\nThank you. I still need ${missing.join(", ")}. Please send the missing information; you can send photos and videos as separate messages.`
       : formatAccidentSummary(next);
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
-    if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
-    await db.from("whatsapp_leads").update({ accident_data: next, customer_type: customerType, ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
-    const alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({ name: leadName, phone, reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`, leadId, history: [...history, { sender: "ai_agent", content: reply }], mediaUrl, closed: false });
-    return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, telegram_alert: alert, missing });
+    if (outbound.sent)
+      await insertWithSessionFallback(db, "messages", {
+        user_id: userId,
+        lead_id: leadId,
+        sender: "ai_agent",
+        content: reply,
+        session_id: sessionId,
+      });
+    await db
+      .from("whatsapp_leads")
+      .update({
+        accident_data: next,
+        customer_type: customerType,
+        ai_summary: reply,
+        last_message_at: new Date().toISOString(),
+      } as never)
+      .eq("id", leadId);
+    const alert = outbound.sent
+      ? { sent: false, reason: "not_needed" }
+      : await sendTelegramAlert({
+          name: leadName,
+          phone,
+          reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`,
+          leadId,
+          history: [...history, { sender: "ai_agent", content: reply }],
+          mediaUrl,
+          closed: false,
+        });
+    return json({
+      ok: true,
+      lead_id: leadId,
+      reply: outbound.sent ? reply : null,
+      outbound,
+      telegram_alert: alert,
+      missing,
+    });
   }
 
-  if (!option && isTermsResponse(content) && (lastAgentMessage.toLowerCase().includes("happy to proceed") || lastAgentMessage.toLowerCase().includes("are you fully aware"))) {
+  if (
+    !option &&
+    isTermsResponse(content) &&
+    (lastAgentMessage.toLowerCase().includes("happy to proceed") ||
+      lastAgentMessage.toLowerCase().includes("are you fully aware"))
+  ) {
     const answer = content.trim();
     if (/^yes/i.test(answer)) {
       const selected = carEligibility.selectedVehicle;
@@ -1581,22 +2755,72 @@ export async function handleAgentWebhookRequest(request: Request) {
         : "your selected vehicle request";
       const reply = `Great! Here is a summary of your request:\n\n🚗 Vehicle: ${vehicleDesc}\n\nIs this everything? Reply Yes to confirm.`;
       const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
-      if (outbound.sent) await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, session_id: sessionId });
-      await db.from("whatsapp_leads").update({ ai_summary: reply, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+      if (outbound.sent)
+        await insertWithSessionFallback(db, "messages", {
+          user_id: userId,
+          lead_id: leadId,
+          sender: "ai_agent",
+          content: reply,
+          session_id: sessionId,
+        });
+      await db
+        .from("whatsapp_leads")
+        .update({ ai_summary: reply, last_message_at: new Date().toISOString() } as never)
+        .eq("id", leadId);
       return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound });
     }
   }
 
-  if (!option && isTermsResponse(content) && lastAgentMessage.toLowerCase().includes("is this everything")) {
+  if (
+    !option &&
+    isTermsResponse(content) &&
+    lastAgentMessage.toLowerCase().includes("is this everything")
+  ) {
     const answer = content.trim();
     if (/^yes/i.test(answer)) {
       const summary = formatCarHandoffSummary(carEligibility, answer);
       const reply = `Thank you! Your car enquiry has been submitted.\n\n${HANDOFF_24H}`;
-      await insertWithSessionFallback(db, "messages", { user_id: userId, lead_id: leadId, sender: "ai_agent", content: reply, handoff: true, session_id: sessionId });
-      await db.from("whatsapp_leads").update({ status: "needs_human", customer_type: "needs_human", ai_paused: true, closed_at: new Date().toISOString(), intent: leadIntent ?? "book_car", ai_summary: summary, last_message_at: new Date().toISOString() } as never).eq("id", leadId);
+      await insertWithSessionFallback(db, "messages", {
+        user_id: userId,
+        lead_id: leadId,
+        sender: "ai_agent",
+        content: reply,
+        handoff: true,
+        session_id: sessionId,
+      });
+      await db
+        .from("whatsapp_leads")
+        .update({
+          status: "needs_human",
+          customer_type: "needs_human",
+          ai_paused: true,
+          closed_at: new Date().toISOString(),
+          intent: leadIntent ?? "book_car",
+          ai_summary: summary,
+          last_message_at: new Date().toISOString(),
+        } as never)
+        .eq("id", leadId);
       const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
-      const alert = await sendTelegramAlert({ name: leadName, phone, reason: "🚨 Human handoff needed, please look at this", leadId, history: [{ sender: "ai_agent", content: summary }, { sender: "ai_agent", content: reply }], mediaUrl, closed: true });
-      return json({ ok: true, lead_id: leadId, reply, needs_human: true, telegram_alert: alert, outbound });
+      const alert = await sendTelegramAlert({
+        name: leadName,
+        phone,
+        reason: "🚨 Human handoff needed, please look at this",
+        leadId,
+        history: [
+          { sender: "ai_agent", content: summary },
+          { sender: "ai_agent", content: reply },
+        ],
+        mediaUrl,
+        closed: true,
+      });
+      return json({
+        ok: true,
+        lead_id: leadId,
+        reply,
+        needs_human: true,
+        telegram_alert: alert,
+        outbound,
+      });
     }
   }
 
@@ -1623,16 +2847,25 @@ export async function handleAgentWebhookRequest(request: Request) {
       } as never)
       .eq("id", leadId);
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
-    const alert = outbound.sent ? { sent: false, reason: "not_needed" } : await sendTelegramAlert({
-      name: leadName,
-      phone,
-      reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`,
-      leadId,
-      history: [...history, { sender: "ai_agent", content: reply }],
-      mediaUrl,
-      closed: false,
+    const alert = outbound.sent
+      ? { sent: false, reason: "not_needed" }
+      : await sendTelegramAlert({
+          name: leadName,
+          phone,
+          reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`,
+          leadId,
+          history: [...history, { sender: "ai_agent", content: reply }],
+          mediaUrl,
+          closed: false,
+        });
+    return json({
+      ok: true,
+      lead_id: leadId,
+      reply: outbound.sent ? reply : null,
+      needs_human: !outbound.sent,
+      telegram_alert: alert,
+      outbound,
     });
-    return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, needs_human: !outbound.sent, telegram_alert: alert, outbound });
   }
 
   if (isPositiveClosure(content)) {
@@ -1659,7 +2892,9 @@ export async function handleAgentWebhookRequest(request: Request) {
     const alert = await sendTelegramAlert({
       name: leadName,
       phone,
-      reason: outbound.sent ? "Customer confirmed closure" : `WhatsApp Cloud API reply failed: ${outbound.reason}`,
+      reason: outbound.sent
+        ? "Customer confirmed closure"
+        : `WhatsApp Cloud API reply failed: ${outbound.reason}`,
       leadId,
       history: finalHistory,
       mediaUrl,
@@ -1676,19 +2911,32 @@ export async function handleAgentWebhookRequest(request: Request) {
     });
   }
 
-  console.info("[agent-webhook] awaiting AI response", { leadId, historyLength: history.length, fleetCount: fleet?.length ?? 0 });
+  console.info("[agent-webhook] awaiting AI response", {
+    leadId,
+    historyLength: history.length,
+    fleetCount: fleet?.length ?? 0,
+  });
   const ai = await generateReply(
     history,
     content,
     Boolean(mediaUrl),
     (fleet ?? []) as FleetVehicle[],
   );
-  console.info("[agent-webhook] AI response ready", { leadId, needsHuman: ai.needs_human, replyLength: ai.reply.length });
+  console.info("[agent-webhook] AI response ready", {
+    leadId,
+    needsHuman: ai.needs_human,
+    replyLength: ai.reply.length,
+  });
   const needsHuman = Boolean(ai.needs_human);
   const finalReply =
     needsHuman && !ai.reply ? "I’m connecting you with a member of our team now." : ai.reply;
-  console.info("[agent-webhook] awaiting Meta WhatsApp AI dispatch", { leadId, transportSession: "meta-cloud-api", chatId: chatId ?? phone, hasPhone: Boolean(phone || chatId) });
-  const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: finalReply,  });
+  console.info("[agent-webhook] awaiting Meta WhatsApp AI dispatch", {
+    leadId,
+    transportSession: "meta-cloud-api",
+    chatId: chatId ?? phone,
+    hasPhone: Boolean(phone || chatId),
+  });
+  const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: finalReply });
   if (outbound.sent) {
     await insertWithSessionFallback(db, "messages", {
       user_id: userId,
@@ -1707,14 +2955,20 @@ export async function handleAgentWebhookRequest(request: Request) {
       } as never)
       .eq("id", leadId);
   }
-  console.info("[agent-webhook] Meta WhatsApp AI dispatch complete", { leadId, sent: outbound.sent, reason: outbound.sent ? undefined : outbound.reason });
+  console.info("[agent-webhook] Meta WhatsApp AI dispatch complete", {
+    leadId,
+    sent: outbound.sent,
+    reason: outbound.sent ? undefined : outbound.reason,
+  });
   const deliveryFailed = !outbound.sent;
   let alert: { sent: boolean; reason?: string } = { sent: false, reason: "not_needed" };
   if (needsHuman || deliveryFailed) {
     alert = await sendTelegramAlert({
       name: leadName,
       phone,
-      reason: deliveryFailed ? `WhatsApp Cloud API reply failed: ${outbound.reason}` : (ai.reason || "AI trouble or customer needs help"),
+      reason: deliveryFailed
+        ? `WhatsApp Cloud API reply failed: ${outbound.reason}`
+        : ai.reason || "AI trouble or customer needs help",
       leadId,
       history: [...history, { sender: "ai_agent", content: finalReply }],
       mediaUrl,

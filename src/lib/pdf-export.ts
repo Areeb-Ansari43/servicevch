@@ -68,7 +68,9 @@ export function exportServiceHistoryPdf(services: ServiceRecord[]) {
   doc.setTextColor(...INK);
   doc.text(`Total Records: ${services.length}`, 40, finalY);
   doc.setTextColor(...ORANGE);
-  doc.text(`Total Spend: £${total.toFixed(2)}`, doc.internal.pageSize.getWidth() - 40, finalY, { align: "right" });
+  doc.text(`Total Spend: £${total.toFixed(2)}`, doc.internal.pageSize.getWidth() - 40, finalY, {
+    align: "right",
+  });
 
   footer(doc);
   doc.save(`vch-service-history-${new Date().toISOString().slice(0, 10)}.pdf`);
@@ -100,7 +102,9 @@ export function exportVehiclePdf(v: Vehicle, services: ServiceRecord[]) {
     styles: { fontSize: 10, cellPadding: 6 },
   });
 
-  const vehicleServices = services.filter((s) => s.vehicle_id === v.id || s.registration === v.registration);
+  const vehicleServices = services.filter(
+    (s) => s.vehicle_id === v.id || s.registration === v.registration,
+  );
   const total = vehicleServices.reduce((a, s) => a + (s.cost || 0), 0);
 
   const y1 = (doc as any).lastAutoTable.finalY + 24;
@@ -138,9 +142,13 @@ export function exportVehiclePdf(v: Vehicle, services: ServiceRecord[]) {
     doc.setTextColor(...INK);
     doc.text(`Records: ${vehicleServices.length}`, 40, yEnd);
     doc.setTextColor(...ORANGE);
-    doc.text(`Total Spend: £${total.toFixed(2)}`, doc.internal.pageSize.getWidth() - 40, yEnd, { align: "right" });
+    doc.text(`Total Spend: £${total.toFixed(2)}`, doc.internal.pageSize.getWidth() - 40, yEnd, {
+      align: "right",
+    });
   }
 
   footer(doc);
-  doc.save(`vch-${v.registration.replace(/\s+/g, "")}-${new Date().toISOString().slice(0, 10)}.pdf`);
+  doc.save(
+    `vch-${v.registration.replace(/\s+/g, "")}-${new Date().toISOString().slice(0, 10)}.pdf`,
+  );
 }

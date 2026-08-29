@@ -27,14 +27,17 @@ type ConversationMessage = {
 
 function isMissingColumn(error: unknown, column: string): boolean {
   const text = error instanceof Error ? error.message : JSON.stringify(error);
-  return new RegExp(`${column}["']?\\s+column|column\\s+["']?${column}|schema cache`, "i").test(text ?? "");
+  return new RegExp(`${column}["']?\\s+column|column\\s+["']?${column}|schema cache`, "i").test(
+    text ?? "",
+  );
 }
 
 async function insertMessageWithCompatibility(supabase: any, row: Record<string, unknown>) {
   let compatibleRow = { ...row };
   let result = await supabase.from("messages").insert(compatibleRow);
   for (const column of ["session_id", "handoff"]) {
-    if (!result.error || !(column in compatibleRow) || !isMissingColumn(result.error, column)) continue;
+    if (!result.error || !(column in compatibleRow) || !isMissingColumn(result.error, column))
+      continue;
     const { [column]: _removed, ...nextRow } = compatibleRow;
     compatibleRow = nextRow;
     result = await supabase.from("messages").insert(compatibleRow);
@@ -69,7 +72,9 @@ export const getLeadConversation = createServerFn({ method: "GET" })
       if ((batch ?? []).length < pageSize) break;
     }
 
-    localMessages.sort((a, b) => new Date(String(a.created_at)).getTime() - new Date(String(b.created_at)).getTime());
+    localMessages.sort(
+      (a, b) => new Date(String(a.created_at)).getTime() - new Date(String(b.created_at)).getTime(),
+    );
     return { messages: localMessages };
   });
 

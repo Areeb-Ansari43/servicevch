@@ -51,7 +51,9 @@ function LoginPage() {
     supabase.auth.getSession().then(({ data }) => {
       if (!cancelled && data.session) navigate({ to: "/" });
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [navigate]);
 
   useEffect(() => {
@@ -60,15 +62,23 @@ function LoginPage() {
 
   const submitCreds = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null); setInfo(null);
-    if (!email.trim() || !password) { setError("Email and password are required."); return; }
+    setError(null);
+    setInfo(null);
+    if (!email.trim() || !password) {
+      setError("Email and password are required.");
+      return;
+    }
     setLoading(true);
     try {
       await requestLoginCode({ data: { email: email.trim(), password } });
       setStage("otp");
       setInfo("We emailed a 6-digit verification code to the authorised account.");
     } catch (err: any) {
-      setError(err?.message?.includes("Invalid credentials") ? "Invalid credentials." : (err?.message ?? "Sign-in failed."));
+      setError(
+        err?.message?.includes("Invalid credentials")
+          ? "Invalid credentials."
+          : (err?.message ?? "Sign-in failed."),
+      );
     } finally {
       setLoading(false);
     }
@@ -105,7 +115,11 @@ function LoginPage() {
   const setDigit = (i: number, raw: string) => {
     const chars = raw.replace(/\D/g, "");
     if (!chars) {
-      setDigits((d) => { const n = [...d]; n[i] = ""; return n; });
+      setDigits((d) => {
+        const n = [...d];
+        n[i] = "";
+        return n;
+      });
       return;
     }
     setDigits((d) => {
@@ -122,7 +136,11 @@ function LoginPage() {
   const onKeyDown = (i: number, e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Backspace" && !digits[i] && i > 0) {
       e.preventDefault();
-      setDigits((d) => { const n = [...d]; n[i - 1] = ""; return n; });
+      setDigits((d) => {
+        const n = [...d];
+        n[i - 1] = "";
+        return n;
+      });
       boxRefs.current[i - 1]?.focus();
     }
     if (e.key === "ArrowLeft" && i > 0) boxRefs.current[i - 1]?.focus();
@@ -138,7 +156,9 @@ function LoginPage() {
   return (
     <div
       className="relative flex min-h-screen items-center justify-center overflow-hidden px-4"
-      style={{ background: "radial-gradient(120% 90% at 50% -10%, #17161d 0%, #0a0b10 55%, #06070a 100%)" }}
+      style={{
+        background: "radial-gradient(120% 90% at 50% -10%, #17161d 0%, #0a0b10 55%, #06070a 100%)",
+      }}
     >
       <div
         className="pointer-events-none absolute inset-0"
@@ -150,14 +170,26 @@ function LoginPage() {
       />
       <div
         className="pointer-events-none absolute inset-0 opacity-[0.035]"
-        style={{ backgroundImage: "linear-gradient(rgba(255,255,255,.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.6) 1px, transparent 1px)", backgroundSize: "56px 56px" }}
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(255,255,255,.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.6) 1px, transparent 1px)",
+          backgroundSize: "56px 56px",
+        }}
         aria-hidden
       />
 
       <main className="relative w-full max-w-md">
         <div className="mb-7 flex flex-col items-center text-center">
           <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-[22px] border border-white/20 bg-gradient-to-br from-[#ff7a1a] to-[#ff9d52] text-white shadow-[0_18px_40px_-12px_rgba(255,106,0,0.7),inset_0_1px_0_rgba(255,255,255,0.5)]">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-8">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-8 w-8"
+            >
               <path d="M5 17h14M5 17a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm18 0a2 2 0 1 1-4 0 2 2 0 0 1 4 0z" />
               <path d="M3 17v-5l2-5h14l2 5v5" />
             </svg>
@@ -170,17 +202,42 @@ function LoginPage() {
 
         {stage === "creds" ? (
           <form onSubmit={submitCreds} className={`${glassCard} space-y-5`}>
-            <div className="pointer-events-none absolute inset-x-8 -top-px h-px bg-gradient-to-r from-transparent via-white/50 to-transparent" aria-hidden />
+            <div
+              className="pointer-events-none absolute inset-x-8 -top-px h-px bg-gradient-to-r from-transparent via-white/50 to-transparent"
+              aria-hidden
+            />
             <div>
-              <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Email</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className={inputCls} autoComplete="email" />
+              <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                Email
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className={inputCls}
+                autoComplete="email"
+              />
             </div>
             <div>
-              <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Password</label>
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className={inputCls} autoComplete="current-password" />
+              <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                Password
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className={inputCls}
+                autoComplete="current-password"
+              />
             </div>
 
-            {error && <div className="rounded-2xl border border-red-400/25 bg-red-500/10 px-4 py-2.5 text-xs text-red-200 backdrop-blur-xl">{error}</div>}
+            {error && (
+              <div className="rounded-2xl border border-red-400/25 bg-red-500/10 px-4 py-2.5 text-xs text-red-200 backdrop-blur-xl">
+                {error}
+              </div>
+            )}
 
             <button
               type="submit"
@@ -190,21 +247,32 @@ function LoginPage() {
               {loading ? "Sending code…" : "Continue"}
             </button>
 
-            <p className="text-center text-[11px] text-slate-500">Protected by two-step verification</p>
+            <p className="text-center text-[11px] text-slate-500">
+              Protected by two-step verification
+            </p>
           </form>
         ) : (
           <div className={`${glassCard} space-y-6`}>
-            <div className="pointer-events-none absolute inset-x-8 -top-px h-px bg-gradient-to-r from-transparent via-white/50 to-transparent" aria-hidden />
+            <div
+              className="pointer-events-none absolute inset-x-8 -top-px h-px bg-gradient-to-r from-transparent via-white/50 to-transparent"
+              aria-hidden
+            />
             <div className="text-center">
               <h2 className="text-lg font-semibold text-white">Enter your verification code</h2>
-              <p className="mt-1.5 text-xs text-slate-400">{info ?? "Enter the 6-digit code we emailed you."}</p>
+              <p className="mt-1.5 text-xs text-slate-400">
+                {info ?? "Enter the 6-digit code we emailed you."}
+              </p>
             </div>
 
-            <div className={`flex justify-center gap-2.5 ${feedback === "error" ? "vch-otp-error" : ""}`}>
+            <div
+              className={`flex justify-center gap-2.5 ${feedback === "error" ? "vch-otp-error" : ""}`}
+            >
               {digits.map((d, i) => (
                 <input
                   key={i}
-                  ref={(el) => { boxRefs.current[i] = el; }}
+                  ref={(el) => {
+                    boxRefs.current[i] = el;
+                  }}
                   value={d}
                   onChange={(e) => setDigit(i, e.target.value)}
                   onKeyDown={(e) => onKeyDown(i, e)}
@@ -219,18 +287,33 @@ function LoginPage() {
                   }`}
                   style={{
                     animationDelay:
-                      feedback === "success" ? `${i * 55}ms` : feedback === "none" ? `${i * 40}ms` : "0ms",
+                      feedback === "success"
+                        ? `${i * 55}ms`
+                        : feedback === "none"
+                          ? `${i * 40}ms`
+                          : "0ms",
                   }}
                 />
               ))}
             </div>
 
-            {error && <div className="rounded-2xl border border-red-400/25 bg-red-500/10 px-4 py-2.5 text-center text-xs text-red-200">{error}</div>}
+            {error && (
+              <div className="rounded-2xl border border-red-400/25 bg-red-500/10 px-4 py-2.5 text-center text-xs text-red-200">
+                {error}
+              </div>
+            )}
             {loading && <div className="text-center text-xs text-slate-400">Verifying…</div>}
 
             <button
               type="button"
-              onClick={() => { setStage("creds"); setDigits(["", "", "", "", "", ""]); setError(null); setInfo(null); setFeedback("none"); submittedRef.current = false; }}
+              onClick={() => {
+                setStage("creds");
+                setDigits(["", "", "", "", "", ""]);
+                setError(null);
+                setInfo(null);
+                setFeedback("none");
+                submittedRef.current = false;
+              }}
               className="w-full text-center text-xs font-medium text-slate-400 transition-colors hover:text-white"
             >
               ← Use a different email

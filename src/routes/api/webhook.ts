@@ -4,8 +4,16 @@ import { handleAgentWebhookRequest } from "./public/agent-webhook";
 
 type JsonRecord = Record<string, any>;
 
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
-const text = (body: string, status = 200) => new Response(body, { status, headers: { "Content-Type": "text/plain", "Access-Control-Allow-Origin": "*" } });
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+  });
+const text = (body: string, status = 200) =>
+  new Response(body, {
+    status,
+    headers: { "Content-Type": "text/plain", "Access-Control-Allow-Origin": "*" },
+  });
 
 function constantTimeEqual(a: string, b: string) {
   if (a.length !== b.length) return false;
@@ -19,15 +27,27 @@ async function validMetaSignature(request: Request, body: string) {
   if (!appSecret) return true;
   const header = request.headers.get("x-hub-signature-256") ?? "";
   if (!header.startsWith("sha256=")) return false;
-  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(appSecret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(appSecret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
   const digest = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body));
-  const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join(
+    "",
+  );
   return constantTimeEqual(header.slice(7), hex);
 }
 
 function redactHeaders(request: Request) {
   const headers: JsonRecord = {};
-  request.headers.forEach((value, key) => { headers[key] = /authorization|signature|token|secret|api-key/i.test(key) ? "[redacted]" : value.slice(0, 300); });
+  request.headers.forEach((value, key) => {
+    headers[key] = /authorization|signature|token|secret|api-key/i.test(key)
+      ? "[redacted]"
+      : value.slice(0, 300);
+  });
   return headers;
 }
 
@@ -49,7 +69,9 @@ function extractMessages(payload: JsonRecord) {
 }
 
 function normalizeMetaMessage(message: JsonRecord, value: JsonRecord) {
-  const contact = Array.isArray(value.contacts) ? value.contacts.find((item: JsonRecord) => item.wa_id === message.from) ?? value.contacts[0] : undefined;
+  const contact = Array.isArray(value.contacts)
+    ? (value.contacts.find((item: JsonRecord) => item.wa_id === message.from) ?? value.contacts[0])
+    : undefined;
   const profileName = contact?.profile?.name;
   const interactive = message.interactive;
   let content = "";
@@ -61,7 +83,8 @@ function normalizeMetaMessage(message: JsonRecord, value: JsonRecord) {
   else if (message.type === "video") content = String(message.video?.caption ?? "(video)");
   else if (message.type === "document") content = String(message.document?.caption ?? "(document)");
   else content = `(${message.type ?? "media"})`;
-  const media = message.image ?? message.video ?? message.document ?? message.audio ?? message.sticker;
+  const media =
+    message.image ?? message.video ?? message.document ?? message.audio ?? message.sticker;
   const mediaId = media?.id;
   return {
     eventName: "messages.received",
@@ -69,18 +92,27 @@ function normalizeMetaMessage(message: JsonRecord, value: JsonRecord) {
     chat_id: normalizePhone(message.from),
     name: typeof profileName === "string" ? profileName : undefined,
     content: content.trim() || "(media)",
-    ...(mediaId ? {
-      media_url: `https://graph.facebook.com/${encodeURIComponent(mediaId)}`,
-      media_meta_id: String(mediaId),
-      media_type: String(message.type ?? "media"),
-      media_mime_type: typeof media?.mime_type === "string" ? media.mime_type : undefined,
-    } : {}),
+    ...(mediaId
+      ? {
+          media_url: `https://graph.facebook.com/${encodeURIComponent(mediaId)}`,
+          media_meta_id: String(mediaId),
+          media_type: String(message.type ?? "media"),
+          media_mime_type: typeof media?.mime_type === "string" ? media.mime_type : undefined,
+        }
+      : {}),
     meta_message_id: typeof message.id === "string" ? message.id : undefined,
     session_id: `meta:${message.from}`,
   };
 }
 
-async function logMetaEvent(params: { payload: unknown; request: Request; status: string; error?: string; normalized?: unknown; requestId: string }) {
+async function logMetaEvent(params: {
+  payload: unknown;
+  request: Request;
+  status: string;
+  error?: string;
+  normalized?: unknown;
+  requestId: string;
+}) {
   try {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await supabaseAdmin.from("webhook_events").insert({
@@ -96,7 +128,10 @@ async function logMetaEvent(params: { payload: unknown; request: Request; status
       processed_at: new Date().toISOString(),
     } as never);
   } catch (error) {
-    console.error("[meta-webhook] event logging failed", { requestId: params.requestId, error: error instanceof Error ? error.message : String(error) });
+    console.error("[meta-webhook] event logging failed", {
+      requestId: params.requestId,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 
@@ -109,39 +144,95 @@ export const Route = createFileRoute("/api/webhook")({
         const token = url.searchParams.get("hub.verify_token") ?? "";
         const challenge = url.searchParams.get("hub.challenge") ?? "";
         const expected = getRuntimeEnv("META_WEBHOOK_VERIFY_TOKEN")?.trim() ?? "";
-        if (mode === "subscribe" && expected && constantTimeEqual(token, expected)) return text(challenge, 200);
+        if (mode === "subscribe" && expected && constantTimeEqual(token, expected))
+          return text(challenge, 200);
         return text("Forbidden", 403);
       },
-      OPTIONS: async () => new Response(null, { status: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Access-Control-Allow-Headers": "content-type, x-hub-signature-256" } }),
+      OPTIONS: async () =>
+        new Response(null, {
+          status: 204,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "content-type, x-hub-signature-256",
+          },
+        }),
       POST: async ({ request }) => {
         const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
         const rawBody = await request.text();
         let payload: JsonRecord;
-        try { payload = JSON.parse(rawBody); } catch { await logMetaEvent({ payload: rawBody.slice(0, 20000), request, status: "error", error: "Invalid JSON", requestId }); return json({ ok: true, received: true }, 200); }
+        try {
+          payload = JSON.parse(rawBody);
+        } catch {
+          await logMetaEvent({
+            payload: rawBody.slice(0, 20000),
+            request,
+            status: "error",
+            error: "Invalid JSON",
+            requestId,
+          });
+          return json({ ok: true, received: true }, 200);
+        }
         if (!(await validMetaSignature(request, rawBody))) {
-          await logMetaEvent({ payload, request, status: "unauthorized", error: "Meta signature validation failed", requestId });
+          await logMetaEvent({
+            payload,
+            request,
+            status: "unauthorized",
+            error: "Meta signature validation failed",
+            requestId,
+          });
           return json({ ok: false, error: "Unauthorized" }, 403);
         }
         const messages = extractMessages(payload);
-        console.info("[meta-webhook] inbound delivery", { requestId, messageCount: messages.length, object: payload.object ?? null });
-        await logMetaEvent({ payload, request, status: "received", normalized: messages.map(({ message, value }) => normalizeMetaMessage(message, value)), requestId });
+        console.info("[meta-webhook] inbound delivery", {
+          requestId,
+          messageCount: messages.length,
+          object: payload.object ?? null,
+        });
+        await logMetaEvent({
+          payload,
+          request,
+          status: "received",
+          normalized: messages.map(({ message, value }) => normalizeMetaMessage(message, value)),
+          requestId,
+        });
         for (const { message, value } of messages) {
           const normalized = normalizeMetaMessage(message, value);
           if (!normalized.phone) {
-            console.error("[meta-webhook] message skipped: Meta payload had no usable sender phone", { requestId, messageId: normalized.meta_message_id ?? null, from: message.from ?? null });
+            console.error(
+              "[meta-webhook] message skipped: Meta payload had no usable sender phone",
+              {
+                requestId,
+                messageId: normalized.meta_message_id ?? null,
+                from: message.from ?? null,
+              },
+            );
             continue;
           }
           try {
-            const response = await handleAgentWebhookRequest(new Request("https://servicevch.pages.dev/api/public/agent-webhook", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(normalized) }));
+            const response = await handleAgentWebhookRequest(
+              new Request("https://servicevch.pages.dev/api/public/agent-webhook", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(normalized),
+              }),
+            );
             const responseBody = (await response.text()).slice(0, 2000);
             let responseSummary: JsonRecord = { raw: responseBody };
-            try { responseSummary = JSON.parse(responseBody) as JsonRecord; } catch { /* retain raw response */ }
+            try {
+              responseSummary = JSON.parse(responseBody) as JsonRecord;
+            } catch {
+              /* retain raw response */
+            }
             console.info("[meta-webhook] agent processing result", {
               requestId,
               status: response.status,
               ok: response.ok,
               leadId: responseSummary.lead_id ?? null,
-              reply: typeof responseSummary.reply === "string" ? responseSummary.reply.slice(0, 160) : null,
+              reply:
+                typeof responseSummary.reply === "string"
+                  ? responseSummary.reply.slice(0, 160)
+                  : null,
               outbound: responseSummary.outbound ?? null,
               welcomeMenu: responseSummary.welcome_menu ?? null,
               needsHuman: responseSummary.needs_human ?? null,
@@ -151,7 +242,9 @@ export const Route = createFileRoute("/api/webhook")({
                 payload,
                 request,
                 status: "agent_error",
-                error: !response.ok ? `agent_http_${response.status}: ${responseBody}` : `outbound_failed: ${JSON.stringify(responseSummary.outbound ?? {})}`,
+                error: !response.ok
+                  ? `agent_http_${response.status}: ${responseBody}`
+                  : `outbound_failed: ${JSON.stringify(responseSummary.outbound ?? {})}`,
                 normalized,
                 requestId,
               });
@@ -159,10 +252,23 @@ export const Route = createFileRoute("/api/webhook")({
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             console.error("[meta-webhook] agent processing failed", { requestId, error: message });
-            await logMetaEvent({ payload, request, status: "agent_error", error: message, normalized, requestId });
+            await logMetaEvent({
+              payload,
+              request,
+              status: "agent_error",
+              error: message,
+              normalized,
+              requestId,
+            });
           }
         }
-        await logMetaEvent({ payload, request, status: "processed", normalized: messages.map(({ message, value }) => normalizeMetaMessage(message, value)), requestId });
+        await logMetaEvent({
+          payload,
+          request,
+          status: "processed",
+          normalized: messages.map(({ message, value }) => normalizeMetaMessage(message, value)),
+          requestId,
+        });
         return json({ ok: true, received: true, processed: messages.length }, 200);
       },
     },
