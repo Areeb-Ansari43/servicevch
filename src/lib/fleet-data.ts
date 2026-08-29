@@ -55,9 +55,21 @@ export type DriverTrack = {
 };
 
 const statusToDb = (s: Vehicle["status"]): string =>
-  s === "Active" ? "available" : s === "In Service" ? "in_service" : s === "Rented" ? "rented" : "off_road";
+  s === "Active"
+    ? "available"
+    : s === "In Service"
+      ? "in_service"
+      : s === "Rented"
+        ? "rented"
+        : "off_road";
 const statusFromDb = (s: string): Vehicle["status"] =>
-  s === "in_service" ? "In Service" : s === "rented" ? "Rented" : s === "off_road" ? "Off Road" : "Active";
+  s === "in_service"
+    ? "In Service"
+    : s === "rented"
+      ? "Rented"
+      : s === "off_road"
+        ? "Off Road"
+        : "Active";
 
 const vFromRow = (r: any): Vehicle => ({
   id: r.id,
@@ -121,7 +133,11 @@ export function useFleetData() {
     const [vRes, sRes, dRes, lRes] = await Promise.all([
       supabase.from("vehicles").select("*").order("reg"),
       supabase.from("service_records").select("*").order("service_date", { ascending: false }),
-      supabase.from("driver_tracks").select("*").eq("active", true).order("created_at", { ascending: false }),
+      supabase
+        .from("driver_tracks")
+        .select("*")
+        .eq("active", true)
+        .order("created_at", { ascending: false }),
       supabase.from("mileage_logs").select("*").order("period_end", { ascending: false }),
     ]);
     setVehicles((vRes.data ?? []).map(vFromRow));
@@ -174,156 +190,218 @@ export function useFleetData() {
     };
   }, [refresh]);
 
-  const saveVehicle = useCallback(async (v: Vehicle, isNew: boolean) => {
-    const { data: userData } = await supabase.auth.getUser();
-    const userId = userData.user?.id;
-    if (!userId) throw new Error("Not signed in");
+  const saveVehicle = useCallback(
+    async (v: Vehicle, isNew: boolean) => {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id;
+      if (!userId) throw new Error("Not signed in");
 
-    const payload = {
-      user_id: userId,
-      reg: v.registration.toUpperCase().trim(),
-      make: v.make,
-      model: v.model,
-      year: v.year,
-      fuel_type: v.fuel_type,
-      current_mileage: v.current_mileage,
-      status: statusToDb(v.status),
-      next_service_date: v.next_service_date || null,
-      next_mot_date: v.next_mot_date || null,
-      pco_expiry_date: v.insurance_expiry || null,
-      notes: v.notes,
-    };
-    if (isNew) {
-      const { error } = await supabase.from("vehicles").insert(payload);
+      const payload = {
+        user_id: userId,
+        reg: v.registration.toUpperCase().trim(),
+        make: v.make,
+        model: v.model,
+        year: v.year,
+        fuel_type: v.fuel_type,
+        current_mileage: v.current_mileage,
+        status: statusToDb(v.status),
+        next_service_date: v.next_service_date || null,
+        next_mot_date: v.next_mot_date || null,
+        pco_expiry_date: v.insurance_expiry || null,
+        notes: v.notes,
+      };
+      if (isNew) {
+        const { error } = await supabase.from("vehicles").insert(payload);
+        if (error) throw new Error(error.message);
+      } else {
+        const { error } = await supabase.from("vehicles").update(payload).eq("id", v.id);
+        if (error) throw new Error(error.message);
+      }
+      // sync driver_tracks current_mileage if updated
+      await supabase
+        .from("driver_tracks")
+        .update({ current_mileage: v.current_mileage })
+        .eq("vehicle_id", v.id)
+        .lt("current_mileage", v.current_mileage);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const deleteVehicle = useCallback(
+    async (id: string) => {
+      await supabase.from("vehicles").delete().eq("id", id);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const addService = useCallback(
+    async (s: Omit<ServiceRecord, "id">) => {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id;
+      if (!userId) throw new Error("Not signed in");
+
+      const { error } = await supabase.from("service_records").insert({
+        user_id: userId,
+        vehicle_id: s.vehicle_id || null,
+        reg: s.registration,
+        service_type: s.service_type,
+        service_date: s.service_date,
+        mileage: s.mileage,
+        cost: s.cost,
+        garage: s.garage,
+        notes: s.description,
+      });
       if (error) throw new Error(error.message);
-    } else {
-      const { error } = await supabase.from("vehicles").update(payload).eq("id", v.id);
+      // bump vehicle mileage
+      if (s.vehicle_id && s.mileage > 0) {
+        await supabase
+          .from("vehicles")
+          .update({ current_mileage: s.mileage })
+          .eq("id", s.vehicle_id)
+          .lt("current_mileage", s.mileage);
+        await supabase
+          .from("driver_tracks")
+          .update({ current_mileage: s.mileage })
+          .eq("vehicle_id", s.vehicle_id)
+          .lt("current_mileage", s.mileage);
+      }
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const deleteService = useCallback(
+    async (id: string) => {
+      await supabase.from("service_records").delete().eq("id", id);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const addDriver = useCallback(
+    async (d: Omit<DriverTrack, "id" | "monthly_logs">) => {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id;
+      if (!userId) throw new Error("Not signed in");
+      const driverPayload = {
+        user_id: userId,
+        vehicle_id: d.vehicle_id || null,
+        reg: d.registration,
+        driver_name: d.driver_name,
+        phone: d.phone?.trim() || null,
+        start_date: d.start_date,
+        start_mileage: d.start_mileage,
+        current_mileage: d.start_mileage,
+        allowance: d.allowance,
+        rate_pence: d.excess_rate,
+      };
+      let { error } = await (supabase.from("driver_tracks") as any).insert(driverPayload);
+      if (error && /phone|column/i.test(error.message)) {
+        const { phone: _phone, ...legacyPayload } = driverPayload;
+        ({ error } = await (supabase.from("driver_tracks") as any).insert(legacyPayload));
+      }
       if (error) throw new Error(error.message);
-    }
-    // sync driver_tracks current_mileage if updated
-    await supabase.from("driver_tracks").update({ current_mileage: v.current_mileage }).eq("vehicle_id", v.id).lt("current_mileage", v.current_mileage);
-    await refresh();
-  }, [refresh]);
+      if (d.vehicle_id) {
+        const { error: vehicleError } = await supabase
+          .from("vehicles")
+          .update({ status: "rented" })
+          .eq("id", d.vehicle_id);
+        if (vehicleError) throw new Error(vehicleError.message);
+      }
+      await refresh();
+    },
+    [refresh],
+  );
 
-  const deleteVehicle = useCallback(async (id: string) => {
-    await supabase.from("vehicles").delete().eq("id", id);
-    await refresh();
-  }, [refresh]);
+  const updateDriverMileage = useCallback(
+    async (d: DriverTrack, newMi: number) => {
+      await supabase.from("driver_tracks").update({ current_mileage: newMi }).eq("id", d.id);
+      if (d.vehicle_id) {
+        await supabase
+          .from("vehicles")
+          .update({ current_mileage: newMi })
+          .eq("id", d.vehicle_id)
+          .lt("current_mileage", newMi);
+      }
+      await refresh();
+    },
+    [refresh],
+  );
 
-  const addService = useCallback(async (s: Omit<ServiceRecord, "id">) => {
-    const { data: userData } = await supabase.auth.getUser();
-    const userId = userData.user?.id;
-    if (!userId) throw new Error("Not signed in");
+  const closeMonth = useCallback(
+    async (d: DriverTrack, endMi: number) => {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id;
+      if (!userId) throw new Error("Not signed in");
 
-    const { error } = await supabase.from("service_records").insert({
-      user_id: userId,
-      vehicle_id: s.vehicle_id || null,
-      reg: s.registration,
-      service_type: s.service_type,
-      service_date: s.service_date,
-      mileage: s.mileage,
-      cost: s.cost,
-      garage: s.garage,
-      notes: s.description,
-    });
-    if (error) throw new Error(error.message);
-    // bump vehicle mileage
-    if (s.vehicle_id && s.mileage > 0) {
-      await supabase.from("vehicles").update({ current_mileage: s.mileage }).eq("id", s.vehicle_id).lt("current_mileage", s.mileage);
-      await supabase.from("driver_tracks").update({ current_mileage: s.mileage }).eq("vehicle_id", s.vehicle_id).lt("current_mileage", s.mileage);
-    }
-    await refresh();
-  }, [refresh]);
+      const driven = Math.max(0, endMi - d.start_mileage);
+      const over = Math.max(0, driven - d.allowance);
+      const charge = (over * d.excess_rate) / 100;
 
-  const deleteService = useCallback(async (id: string) => {
-    await supabase.from("service_records").delete().eq("id", id);
-    await refresh();
-  }, [refresh]);
+      await supabase.from("mileage_logs").insert({
+        user_id: userId,
+        track_id: d.id,
+        reg: d.registration,
+        driver_name: d.driver_name,
+        period_start: d.start_date,
+        period_end: new Date().toISOString().slice(0, 10),
+        start_mileage: d.start_mileage,
+        end_mileage: endMi,
+        allowance: d.allowance,
+        rate_pence: d.excess_rate,
+        excess_charge: charge,
+      });
+      await supabase
+        .from("driver_tracks")
+        .update({
+          start_mileage: endMi,
+          current_mileage: endMi,
+          start_date: new Date().toISOString().slice(0, 10),
+        })
+        .eq("id", d.id);
+      if (d.vehicle_id) {
+        await supabase.from("vehicles").update({ current_mileage: endMi }).eq("id", d.vehicle_id);
+      }
+      await refresh();
+    },
+    [refresh],
+  );
 
-  const addDriver = useCallback(async (d: Omit<DriverTrack, "id" | "monthly_logs">) => {
-    const { data: userData } = await supabase.auth.getUser();
-    const userId = userData.user?.id;
-    if (!userId) throw new Error("Not signed in");
-    const driverPayload = {
-      user_id: userId,
-      vehicle_id: d.vehicle_id || null,
-      reg: d.registration,
-      driver_name: d.driver_name,
-      phone: d.phone?.trim() || null,
-      start_date: d.start_date,
-      start_mileage: d.start_mileage,
-      current_mileage: d.start_mileage,
-      allowance: d.allowance,
-      rate_pence: d.excess_rate,
-    };
-    let { error } = await (supabase.from("driver_tracks") as any).insert(driverPayload);
-    if (error && /phone|column/i.test(error.message)) {
-      const { phone: _phone, ...legacyPayload } = driverPayload;
-      ({ error } = await (supabase.from("driver_tracks") as any).insert(legacyPayload));
-    }
-    if (error) throw new Error(error.message);
-    if (d.vehicle_id) {
-      const { error: vehicleError } = await supabase.from("vehicles").update({ status: "rented" }).eq("id", d.vehicle_id);
-      if (vehicleError) throw new Error(vehicleError.message);
-    }
-    await refresh();
-  }, [refresh]);
-
-  const updateDriverMileage = useCallback(async (d: DriverTrack, newMi: number) => {
-    await supabase.from("driver_tracks").update({ current_mileage: newMi }).eq("id", d.id);
-    if (d.vehicle_id) {
-      await supabase.from("vehicles").update({ current_mileage: newMi }).eq("id", d.vehicle_id).lt("current_mileage", newMi);
-    }
-    await refresh();
-  }, [refresh]);
-
-  const closeMonth = useCallback(async (d: DriverTrack, endMi: number) => {
-    const { data: userData } = await supabase.auth.getUser();
-    const userId = userData.user?.id;
-    if (!userId) throw new Error("Not signed in");
-
-    const driven = Math.max(0, endMi - d.start_mileage);
-    const over = Math.max(0, driven - d.allowance);
-    const charge = (over * d.excess_rate) / 100;
-
-    await supabase.from("mileage_logs").insert({
-      user_id: userId,
-      track_id: d.id,
-      reg: d.registration,
-      driver_name: d.driver_name,
-      period_start: d.start_date,
-      period_end: new Date().toISOString().slice(0, 10),
-      start_mileage: d.start_mileage,
-      end_mileage: endMi,
-      allowance: d.allowance,
-      rate_pence: d.excess_rate,
-      excess_charge: charge,
-    });
-    await supabase.from("driver_tracks").update({
-      start_mileage: endMi,
-      current_mileage: endMi,
-      start_date: new Date().toISOString().slice(0, 10),
-    }).eq("id", d.id);
-    if (d.vehicle_id) {
-      await supabase.from("vehicles").update({ current_mileage: endMi }).eq("id", d.vehicle_id);
-    }
-    await refresh();
-  }, [refresh]);
-
-  const removeDriver = useCallback(async (id: string) => {
-    const { data: track } = await supabase.from("driver_tracks").select("vehicle_id").eq("id", id).maybeSingle();
-    await supabase.from("driver_tracks").update({ active: false }).eq("id", id);
-    if (track?.vehicle_id) {
-      await supabase.from("vehicles").update({ status: "available" }).eq("id", track.vehicle_id).eq("status", "rented");
-    }
-    await refresh();
-  }, [refresh]);
+  const removeDriver = useCallback(
+    async (id: string) => {
+      const { data: track } = await supabase
+        .from("driver_tracks")
+        .select("vehicle_id")
+        .eq("id", id)
+        .maybeSingle();
+      await supabase.from("driver_tracks").update({ active: false }).eq("id", id);
+      if (track?.vehicle_id) {
+        await supabase
+          .from("vehicles")
+          .update({ status: "available" })
+          .eq("id", track.vehicle_id)
+          .eq("status", "rented");
+      }
+      await refresh();
+    },
+    [refresh],
+  );
 
   return {
-    vehicles, services, drivers, loading,
-    saveVehicle, deleteVehicle,
-    addService, deleteService,
-    addDriver, updateDriverMileage, closeMonth, removeDriver,
+    vehicles,
+    services,
+    drivers,
+    loading,
+    saveVehicle,
+    deleteVehicle,
+    addService,
+    deleteService,
+    addDriver,
+    updateDriverMileage,
+    closeMonth,
+    removeDriver,
     refresh,
   };
 }

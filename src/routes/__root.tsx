@@ -13,10 +13,12 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { NotFoundPanel } from "@/components/not-found-panel";
 
-
 function NotFoundComponent() {
   return (
-    <div className="relative flex min-h-screen items-center justify-center px-4" style={{ background: "linear-gradient(160deg,#0b0d12,#11141b 55%,#0b0d12)" }}>
+    <div
+      className="relative flex min-h-screen items-center justify-center px-4"
+      style={{ background: "linear-gradient(160deg,#0b0d12,#11141b 55%,#0b0d12)" }}
+    >
       <div
         className="pointer-events-none fixed inset-0"
         style={{
@@ -35,7 +37,6 @@ function NotFoundComponent() {
     </div>
   );
 }
-
 
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
@@ -79,23 +80,47 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" },
+      {
+        name: "viewport",
+        content:
+          "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover",
+      },
       { name: "theme-color", content: "#0b0d12" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
       { name: "apple-mobile-web-app-title", content: "Virtual Car Hire" },
       { title: "Service VCH" },
-      { name: "description", content: "VCH Fleet Manager is a web application for managing a vehicle fleet, tracking mileage, and logging services." },
+      {
+        name: "description",
+        content:
+          "VCH Fleet Manager is a web application for managing a vehicle fleet, tracking mileage, and logging services.",
+      },
       { name: "author", content: "Lovable" },
       { property: "og:title", content: "Service VCH" },
-      { property: "og:description", content: "VCH Fleet Manager is a web application for managing a vehicle fleet, tracking mileage, and logging services." },
+      {
+        property: "og:description",
+        content:
+          "VCH Fleet Manager is a web application for managing a vehicle fleet, tracking mileage, and logging services.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
       { name: "twitter:title", content: "Service VCH" },
-      { name: "twitter:description", content: "VCH Fleet Manager is a web application for managing a vehicle fleet, tracking mileage, and logging services." },
-      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/6o9fnvMqPjRQxcQx2YTW2nNrZpu1/social-images/social-1782752720678-Screenshot_2026-06-26_165610.webp" },
-      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/6o9fnvMqPjRQxcQx2YTW2nNrZpu1/social-images/social-1782752720678-Screenshot_2026-06-26_165610.webp" },
+      {
+        name: "twitter:description",
+        content:
+          "VCH Fleet Manager is a web application for managing a vehicle fleet, tracking mileage, and logging services.",
+      },
+      {
+        property: "og:image",
+        content:
+          "https://storage.googleapis.com/gpt-engineer-file-uploads/6o9fnvMqPjRQxcQx2YTW2nNrZpu1/social-images/social-1782752720678-Screenshot_2026-06-26_165610.webp",
+      },
+      {
+        name: "twitter:image",
+        content:
+          "https://storage.googleapis.com/gpt-engineer-file-uploads/6o9fnvMqPjRQxcQx2YTW2nNrZpu1/social-images/social-1782752720678-Screenshot_2026-06-26_165610.webp",
+      },
     ],
     links: [
       {

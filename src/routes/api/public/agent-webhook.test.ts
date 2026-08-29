@@ -8,6 +8,8 @@ import {
   isOutsideUKBusinessHours,
   getWelcomeMenuText,
   simplifyVehicleName,
+  isPositiveConfirmation,
+  isNegativeConfirmation,
 } from "./agent-webhook";
 
 describe("Car Eligibility Parsing & Warnings", () => {
@@ -67,36 +69,158 @@ describe("Out-of-Hours Check", () => {
 
 describe("Fleet Availability & Model Deduplication", () => {
   test("isAvailable correctly identifies available vs unavailable vehicles", () => {
-    expect(isAvailable({ reg: "A1", make: "Mercedes", model: "E20", year: 2022, fuel_type: "Petrol", status: "available", next_mot_date: null, pco_expiry_date: null })).toBe(true);
-    expect(isAvailable({ reg: "A2", make: "Mercedes", model: "E20", year: 2022, fuel_type: "Petrol", status: "Active", next_mot_date: null, pco_expiry_date: null })).toBe(true);
-    expect(isAvailable({ reg: "A3", make: "Mercedes", model: "E20", year: 2022, fuel_type: "Petrol", status: "rented", next_mot_date: null, pco_expiry_date: null })).toBe(false);
-    expect(isAvailable({ reg: "A4", make: "Mercedes", model: "E20", year: 2022, fuel_type: "Petrol", status: "In Service", next_mot_date: null, pco_expiry_date: null })).toBe(false);
-    expect(isAvailable({ reg: "A5", make: "Mercedes", model: "E20", year: 2022, fuel_type: "Petrol", status: "off_road", next_mot_date: null, pco_expiry_date: null })).toBe(false);
+    expect(
+      isAvailable({
+        reg: "A1",
+        make: "Mercedes",
+        model: "E20",
+        year: 2022,
+        fuel_type: "Petrol",
+        status: "available",
+        next_mot_date: null,
+        pco_expiry_date: null,
+      }),
+    ).toBe(true);
+    expect(
+      isAvailable({
+        reg: "A2",
+        make: "Mercedes",
+        model: "E20",
+        year: 2022,
+        fuel_type: "Petrol",
+        status: "Active",
+        next_mot_date: null,
+        pco_expiry_date: null,
+      }),
+    ).toBe(true);
+    expect(
+      isAvailable({
+        reg: "A3",
+        make: "Mercedes",
+        model: "E20",
+        year: 2022,
+        fuel_type: "Petrol",
+        status: "rented",
+        next_mot_date: null,
+        pco_expiry_date: null,
+      }),
+    ).toBe(false);
+    expect(
+      isAvailable({
+        reg: "A4",
+        make: "Mercedes",
+        model: "E20",
+        year: 2022,
+        fuel_type: "Petrol",
+        status: "In Service",
+        next_mot_date: null,
+        pco_expiry_date: null,
+      }),
+    ).toBe(false);
+    expect(
+      isAvailable({
+        reg: "A5",
+        make: "Mercedes",
+        model: "E20",
+        year: 2022,
+        fuel_type: "Petrol",
+        status: "off_road",
+        next_mot_date: null,
+        pco_expiry_date: null,
+      }),
+    ).toBe(false);
   });
 
-  test("simplifyVehicleName simplifies long raw vehicle names correctly", () => {
-    expect(simplifyVehicleName("MERCEDES-BENZ", "VITO 114 BLUETEC TOURER PRO")).toEqual({ make: "Mercedes", model: "Vito" });
-    expect(simplifyVehicleName("MERCEDES-BENZ", "E 220 D SE AUTO")).toEqual({ make: "Mercedes", model: "E220D" });
-    expect(simplifyVehicleName("TOYOTA", "AURIS HYBRID ESTATE")).toEqual({ make: "Toyota", model: "Auris Estate" });
-    expect(simplifyVehicleName("MG", "MG5 EV")).toEqual({ make: "MG", model: "5EV" });
+  test("simplifyVehicleName simplifies long raw vehicle names correctly to Make and Model only", () => {
+    expect(simplifyVehicleName("MERCEDES-BENZ", "VITO 114 BLUETEC TOURER PRO")).toEqual({
+      make: "Mercedes-Benz",
+      model: "Vito",
+    });
+    expect(simplifyVehicleName("MERCEDES-BENZ", "E 220 D SE AUTO (2018, 2019)")).toEqual({
+      make: "Mercedes-Benz",
+      model: "E220d",
+    });
+    expect(simplifyVehicleName("TESLA", "MODEL 3 LONG RANGE AWD")).toEqual({
+      make: "Tesla",
+      model: "Model 3",
+    });
+    expect(simplifyVehicleName("TOYOTA", "COROLLA ICON VVT-I HEV CVT")).toEqual({
+      make: "Toyota",
+      model: "Corolla Estate",
+    });
+    expect(simplifyVehicleName("MG", "MG 5 EXCITE EV")).toEqual({ make: "MG", model: "MG5 EV" });
   });
 
   test("uniqueAvailableVehicles deduplicates identical or slightly varied models with simplified names", () => {
     const fleet = [
-      { reg: "A1", make: "Mercedes-Benz", model: "E 220 D SE AUTO", year: 2018, fuel_type: "Petrol", status: "available", next_mot_date: null, pco_expiry_date: null },
-      { reg: "A2", make: "Mercedes-Benz", model: "E 220 D AMG LINE AUTO", year: 2019, fuel_type: "Petrol", status: "available", next_mot_date: null, pco_expiry_date: null },
-      { reg: "A3", make: "Mercedes-Benz", model: "Vito 114 Tourer", year: 2019, fuel_type: "Petrol", status: "available", next_mot_date: null, pco_expiry_date: null },
-      { reg: "B1", make: "Toyota", model: "Prius", year: 2020, fuel_type: "Hybrid", status: "rented", next_mot_date: null, pco_expiry_date: null },
+      {
+        reg: "A1",
+        make: "Mercedes-Benz",
+        model: "E 220 D SE AUTO",
+        year: 2018,
+        fuel_type: "Petrol",
+        status: "available",
+        next_mot_date: null,
+        pco_expiry_date: null,
+      },
+      {
+        reg: "A2",
+        make: "Mercedes-Benz",
+        model: "E 220 D AMG LINE AUTO",
+        year: 2019,
+        fuel_type: "Petrol",
+        status: "available",
+        next_mot_date: null,
+        pco_expiry_date: null,
+      },
+      {
+        reg: "A3",
+        make: "Mercedes-Benz",
+        model: "Vito 114 Tourer",
+        year: 2019,
+        fuel_type: "Petrol",
+        status: "available",
+        next_mot_date: null,
+        pco_expiry_date: null,
+      },
+      {
+        reg: "B1",
+        make: "Toyota",
+        model: "Prius",
+        year: 2020,
+        fuel_type: "Hybrid",
+        status: "rented",
+        next_mot_date: null,
+        pco_expiry_date: null,
+      },
     ];
 
     const unique = uniqueAvailableVehicles(fleet);
     expect(unique.length).toBe(2);
-    expect(unique[0].make).toBe("Mercedes");
-    expect(unique[0].model).toBe("E220D");
-    expect(unique[1].make).toBe("Mercedes");
+    expect(unique[0].make).toBe("Mercedes-Benz");
+    expect(unique[0].model).toBe("E220d");
+    expect(unique[1].make).toBe("Mercedes-Benz");
     expect(unique[1].model).toBe("Vito");
 
     const years = availableYears(fleet, unique[0]);
     expect(years).toBe("2018, 2019");
+  });
+});
+
+describe("Confirmation Response Parsing", () => {
+  test("isPositiveConfirmation correctly parses variations of affirmative input", () => {
+    expect(isPositiveConfirmation("yes")).toBe(true);
+    expect(isPositiveConfirmation("Yes")).toBe(true);
+    expect(isPositiveConfirmation("yes correct")).toBe(true);
+    expect(isPositiveConfirmation("yes it is")).toBe(true);
+    expect(isPositiveConfirmation("confirm")).toBe(true);
+    expect(isPositiveConfirmation("yeah")).toBe(true);
+  });
+
+  test("isNegativeConfirmation correctly parses variations of negative input", () => {
+    expect(isNegativeConfirmation("no")).toBe(true);
+    expect(isNegativeConfirmation("No")).toBe(true);
+    expect(isNegativeConfirmation("not correct")).toBe(true);
+    expect(isNegativeConfirmation("incorrect")).toBe(true);
   });
 });

@@ -11,7 +11,8 @@ type RuntimeBindings = Record<string, unknown>;
 
 function exposeRuntimeBindings(env: unknown) {
   if (!env || typeof env !== "object") return;
-  (globalThis as typeof globalThis & { __env__?: RuntimeBindings }).__env__ = env as RuntimeBindings;
+  (globalThis as typeof globalThis & { __env__?: RuntimeBindings }).__env__ =
+    env as RuntimeBindings;
 }
 
 let serverEntryPromise: Promise<ServerEntry> | undefined;

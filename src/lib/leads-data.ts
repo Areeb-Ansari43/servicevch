@@ -68,25 +68,46 @@ export function useLeadsData() {
     };
   }, [refresh]);
 
-  const setLeadStatus = useCallback(async (id: string, status: string) => {
-    await supabase.from("whatsapp_leads").update({ status }).eq("id", id);
-    await refresh();
-  }, [refresh]);
+  const setLeadStatus = useCallback(
+    async (id: string, status: string) => {
+      await supabase.from("whatsapp_leads").update({ status }).eq("id", id);
+      await refresh();
+    },
+    [refresh],
+  );
 
-  const deleteLead = useCallback(async (id: string) => {
-    await supabase.from("whatsapp_leads").delete().eq("id", id);
-    await refresh();
-  }, [refresh]);
+  const deleteLead = useCallback(
+    async (id: string) => {
+      await supabase.from("whatsapp_leads").delete().eq("id", id);
+      await refresh();
+    },
+    [refresh],
+  );
 
-  const setAccidentStatus = useCallback(async (id: string, status: string) => {
-    await supabase.from("accident_cases").update({ status }).eq("id", id);
-    await refresh();
-  }, [refresh]);
+  const setAccidentStatus = useCallback(
+    async (id: string, status: string) => {
+      await supabase.from("accident_cases").update({ status }).eq("id", id);
+      await refresh();
+    },
+    [refresh],
+  );
 
-  const deleteAccident = useCallback(async (id: string) => {
-    await supabase.from("accident_cases").delete().eq("id", id);
-    await refresh();
-  }, [refresh]);
+  const deleteAccident = useCallback(
+    async (id: string) => {
+      await supabase.from("accident_cases").delete().eq("id", id);
+      await refresh();
+    },
+    [refresh],
+  );
 
-  return { leads, accidents, loading, refresh, setLeadStatus, deleteLead, setAccidentStatus, deleteAccident };
+  return {
+    leads,
+    accidents,
+    loading,
+    refresh,
+    setLeadStatus,
+    deleteLead,
+    setAccidentStatus,
+    deleteAccident,
+  };
 }

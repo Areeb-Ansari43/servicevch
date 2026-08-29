@@ -22,11 +22,33 @@ export const askApex = createServerFn({ method: "POST" })
     const today = new Date().toISOString().slice(0, 10);
 
     const [vehiclesRes, servicesRes, driversRes, leadsRes, accidentsRes] = await Promise.all([
-      supabase.from("vehicles").select("reg, make, model, year, fuel_type, current_mileage, status, next_service_date, next_mot_date, pco_expiry_date").limit(200),
-      supabase.from("service_records").select("reg, service_date, service_type, cost, mileage, garage, notes").order("service_date", { ascending: false }).limit(80),
-      supabase.from("driver_tracks").select("reg, driver_name, start_date, start_mileage, current_mileage, allowance, rate_pence, active").limit(80),
-      supabase.from("whatsapp_leads").select("contact_name, phone, intent, status, ai_summary, created_at").order("created_at", { ascending: false }).limit(40),
-      supabase.from("accident_cases").select("reg, driver_name, incident_date, severity, status, ai_summary").order("incident_date", { ascending: false }).limit(40),
+      supabase
+        .from("vehicles")
+        .select(
+          "reg, make, model, year, fuel_type, current_mileage, status, next_service_date, next_mot_date, pco_expiry_date",
+        )
+        .limit(200),
+      supabase
+        .from("service_records")
+        .select("reg, service_date, service_type, cost, mileage, garage, notes")
+        .order("service_date", { ascending: false })
+        .limit(80),
+      supabase
+        .from("driver_tracks")
+        .select(
+          "reg, driver_name, start_date, start_mileage, current_mileage, allowance, rate_pence, active",
+        )
+        .limit(80),
+      supabase
+        .from("whatsapp_leads")
+        .select("contact_name, phone, intent, status, ai_summary, created_at")
+        .order("created_at", { ascending: false })
+        .limit(40),
+      supabase
+        .from("accident_cases")
+        .select("reg, driver_name, incident_date, severity, status, ai_summary")
+        .order("incident_date", { ascending: false })
+        .limit(40),
     ]);
 
     const crm = {
@@ -40,7 +62,10 @@ export const askApex = createServerFn({ method: "POST" })
 
     const apiKey = process.env["LOVABLE_API_KEY"];
     if (!apiKey) {
-      return { answer: "Apex is not configured right now. Please try again shortly.", ok: false as const };
+      return {
+        answer: "Apex is not configured right now. Please try again shortly.",
+        ok: false as const,
+      };
     }
 
     const messages = [
@@ -63,13 +88,27 @@ export const askApex = createServerFn({ method: "POST" })
       body: JSON.stringify({ model: "google/gemini-2.5-flash", messages }),
     });
 
-    if (res.status === 429) return { answer: "Apex is rate limited right now — try again in a moment.", ok: false as const };
-    if (res.status === 402) return { answer: "Apex is out of AI credits. Top up workspace credits to continue.", ok: false as const };
+    if (res.status === 429)
+      return {
+        answer: "Apex is rate limited right now — try again in a moment.",
+        ok: false as const,
+      };
+    if (res.status === 402)
+      return {
+        answer: "Apex is out of AI credits. Top up workspace credits to continue.",
+        ok: false as const,
+      };
     if (!res.ok) {
       console.error("[Apex] gateway error", res.status, await res.text());
-      return { answer: "Apex couldn't reach the AI service. Please try again.", ok: false as const };
+      return {
+        answer: "Apex couldn't reach the AI service. Please try again.",
+        ok: false as const,
+      };
     }
 
     const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-    return { answer: json.choices?.[0]?.message?.content ?? "No answer returned.", ok: true as const };
+    return {
+      answer: json.choices?.[0]?.message?.content ?? "No answer returned.",
+      ok: true as const,
+    };
   });
