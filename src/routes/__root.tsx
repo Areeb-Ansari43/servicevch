@@ -137,8 +137,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         href: "/favicon.ico",
       },
       {
+        rel: "icon",
+        type: "image/png",
+        sizes: "32x32",
+        href: "/favicon-32x32.png",
+      },
+      {
         rel: "apple-touch-icon",
-        href: "/whatsapp/virtual-car-hire-welcome.jpg",
+        href: "/apple-touch-icon.png",
       },
     ],
   }),
