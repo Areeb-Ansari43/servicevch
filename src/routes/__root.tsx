@@ -132,6 +132,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         href: "/manifest.json",
       },
       {
+        rel: "icon",
+        type: "image/x-icon",
+        href: "/favicon.ico",
+      },
+      {
         rel: "apple-touch-icon",
         href: "/whatsapp/virtual-car-hire-welcome.jpg",
       },

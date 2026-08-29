@@ -13,12 +13,20 @@ const SUGGESTIONS = [
   "Total service spend this month?",
 ];
 
-export function ApexAssistant(_props: {
+export function ApexAssistant(props: {
   vehicles?: unknown;
   services?: unknown;
   drivers?: unknown;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = props.open !== undefined ? props.open : internalOpen;
+  const setOpen = (val: boolean | ((prev: boolean) => boolean)) => {
+    const next = typeof val === "function" ? val(open) : val;
+    if (props.onOpenChange) props.onOpenChange(next);
+    else setInternalOpen(next);
+  };
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([
@@ -58,29 +66,9 @@ export function ApexAssistant(_props: {
 
   return (
     <>
-      {/* Floating launcher */}
+      {/* Voice launcher (if any) */}
       <div className="fixed bottom-6 right-6 z-[80] flex flex-col items-end gap-3">
         <VapiVoiceButton />
-        <button
-          onClick={() => setOpen((o) => !o)}
-          aria-label="Open Apex AI assistant"
-          className="group flex items-center gap-2.5 rounded-full border border-white/15 bg-white/[0.08] py-3 pl-3 pr-5 text-sm font-semibold text-white shadow-2xl backdrop-blur-xl transition-all hover:bg-white/[0.14]"
-        >
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-[#ff6a00] to-[#ff9d4d] text-white shadow-lg shadow-orange-500/40">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-4 w-4"
-            >
-              <path d="M12 3l1.8 4.9L19 9.7l-4.4 3 .5 5.3-3.1-2.5-3.1 2.5.5-5.3-4.4-3 5.2-1.8z" />
-            </svg>
-          </span>
-          Apex AI
-        </button>
       </div>
 
       {/* Glass side panel */}
