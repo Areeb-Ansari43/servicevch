@@ -905,7 +905,7 @@ function Sidebar({
         />
       )}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-[min(19rem,88vw)] max-w-[88vw] flex-col border-r transition-transform duration-200 lg:z-30 lg:w-64 lg:translate-x-0 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
+        className={`fixed inset-y-0 left-0 z-50 flex w-[min(19rem,88vw)] max-w-[88vw] flex-col border-r pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] transition-transform duration-200 lg:z-30 lg:w-64 lg:translate-x-0 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
         style={{
           borderColor: T.border,
           background: "rgba(12,16,27,0.96)",
@@ -914,13 +914,17 @@ function Sidebar({
       >
         <div className="flex items-center gap-3 px-5 py-4">
           <div
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-[#ff6a00] shadow-sm"
+            className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-[#ff6a00]/30 shadow-md"
             style={{ background: "linear-gradient(135deg,#0b0d12,#1e222b)" }}
           >
-            <Icon.Car className="h-5 w-5" />
+            <img
+              src="/whatsapp/virtual-car-hire-welcome.jpg"
+              alt="Virtual Car Hire Logo"
+              className="h-full w-full object-cover"
+            />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-bold leading-tight">Virtual Car Hire</div>
+            <div className="truncate text-sm font-bold leading-tight text-white">Virtual Car Hire</div>
             <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8b95a8]">
               Fleet Tracker
             </div>
@@ -1023,10 +1027,10 @@ function Topbar({
 }) {
   return (
     <header
-      className="sticky top-0 z-20 flex min-h-16 items-center gap-3 border-b px-3 py-2 sm:px-6 xl:px-8"
+      className="sticky top-0 z-20 flex min-h-[calc(4rem+env(safe-area-inset-top))] items-center gap-3 border-b px-3 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))] sm:px-6 xl:px-8"
       style={{
         borderColor: T.border,
-        background: "rgba(8,11,19,0.78)",
+        background: "rgba(8,11,19,0.88)",
         backdropFilter: "blur(20px)",
       }}
     >
@@ -1045,33 +1049,48 @@ function Topbar({
         <span className="h-1.5 w-1.5 rounded-full bg-[#ff6a00]" /> VCH Fleet
       </span>
       <GlobalSearch vehicles={vehicles} drivers={drivers} services={services} goto={goto} />
-      <div className="hidden items-center gap-1.5 text-[#aeb8c9] sm:flex">
-        <button
-          onClick={() => goto("dashboard")}
-          title="View dashboard alerts"
-          aria-label="View dashboard alerts"
-          className="relative rounded-xl p-2 transition hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6a00]/60"
+      <div className="flex items-center gap-2">
+        <div className="hidden items-center gap-1.5 text-[#aeb8c9] sm:flex">
+          <button
+            onClick={() => goto("dashboard")}
+            title="View dashboard alerts"
+            aria-label="View dashboard alerts"
+            className="relative rounded-xl p-2 transition hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6a00]/60"
+          >
+            <span className="absolute right-1.5 top-1 h-1.5 w-1.5 rounded-full bg-[#ff6a00]" />
+            <Icon.Alert className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => goto("leads")}
+            title="Open WhatsApp messages"
+            aria-label="Open WhatsApp messages"
+            className="relative rounded-xl p-2 transition hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6a00]/60"
+          >
+            <span className="absolute right-1.5 top-1 h-1.5 w-1.5 rounded-full bg-red-400" />
+            <Icon.Chat className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => goto("services")}
+            title="Open service calendar"
+            aria-label="Open service calendar"
+            className="rounded-xl p-2 transition hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6a00]/60"
+          >
+            <Icon.Calendar className="h-4 w-4" />
+          </button>
+        </div>
+        <div
+          className="flex shrink-0 items-center gap-2 rounded-full border px-2 py-1 transition sm:px-3"
+          style={{ borderColor: T.border, background: T.panel }}
         >
-          <span className="absolute right-1.5 top-1 h-1.5 w-1.5 rounded-full bg-[#ff6a00]" />
-          <Icon.Alert className="h-4 w-4" />
-        </button>
-        <button
-          onClick={() => goto("leads")}
-          title="Open WhatsApp messages"
-          aria-label="Open WhatsApp messages"
-          className="relative rounded-xl p-2 transition hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6a00]/60"
-        >
-          <span className="absolute right-1.5 top-1 h-1.5 w-1.5 rounded-full bg-red-400" />
-          <Icon.Chat className="h-4 w-4" />
-        </button>
-        <button
-          onClick={() => goto("services")}
-          title="Open service calendar"
-          aria-label="Open service calendar"
-          className="rounded-xl p-2 transition hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6a00]/60"
-        >
-          <Icon.Calendar className="h-4 w-4" />
-        </button>
+          <img
+            src="/whatsapp/virtual-car-hire-welcome.jpg"
+            alt="Virtual Car Hire Logo"
+            className="h-7 w-7 rounded-full object-cover border border-[#ff6a00]/50 shadow-sm"
+          />
+          <span className="hidden text-xs font-bold text-white md:inline">
+            Virtual Car Hire
+          </span>
+        </div>
       </div>
     </header>
   );
