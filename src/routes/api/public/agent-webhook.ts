@@ -288,7 +288,8 @@ export function isMenuReset(text: string): boolean {
     "options", "help", "info", "what can you do", "get started", "hello", "helo", "helloo", "hi", "hiii",
     "hey", "heyy", "heyyy", "hiya", "howdy", "greetings", "welcome", "good morning", "goodmorning",
     "good afternoon", "goodafternoon", "good evening", "goodevening", "good day", "goodday",
-    "morning", "afternoon", "evening", "yo", "hola", "wassup", "whatsup", "sup"
+    "morning", "afternoon", "evening", "yo", "hola", "wassup", "whatsup", "sup",
+    "anyone", "anyone there", "anyone here", "abyone there", "anybody", "someone"
   ];
 
   const pattern = new RegExp(
@@ -1583,30 +1584,28 @@ export async function handleAgentWebhookRequest(request: Request) {
     !isHelp
   ) {
     const reply = getWelcomeMenuText();
+    await db
+      .from("whatsapp_leads")
+      .update({
+        status: "active",
+        ai_paused: false,
+        closed_at: null,
+        intent: null,
+        car_enquiry_data: {},
+        accident_data: {},
+        breakdown_data: {},
+        ai_summary: reply,
+        last_message_at: new Date().toISOString(),
+      } as never)
+      .eq("id", leadId);
+    await insertWithSessionFallback(db, "messages", {
+      user_id: userId,
+      lead_id: leadId,
+      sender: "ai_agent",
+      content: reply,
+      session_id: sessionId,
+    });
     const outbound = await sendWelcomeMenu(phone ?? chatId);
-    if (outbound.sent) {
-      await db
-        .from("whatsapp_leads")
-        .update({
-          status: "active",
-          ai_paused: false,
-          closed_at: null,
-          intent: null,
-          car_enquiry_data: {},
-          accident_data: {},
-          breakdown_data: {},
-          ai_summary: reply,
-          last_message_at: new Date().toISOString(),
-        } as never)
-        .eq("id", leadId);
-      await insertWithSessionFallback(db, "messages", {
-        user_id: userId,
-        lead_id: leadId,
-        sender: "ai_agent",
-        content: reply,
-        session_id: sessionId,
-      });
-    }
     const telegram_alert = outbound.sent
       ? { sent: false, reason: "not_needed" }
       : await sendTelegramAlert({
@@ -1621,7 +1620,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     return json({
       ok: true,
       lead_id: leadId,
-      reply: outbound.sent ? reply : null,
+      reply: reply,
       welcome_menu: outbound.sent,
       needs_human: !outbound.sent,
       telegram_alert,
@@ -1645,16 +1644,14 @@ export async function handleAgentWebhookRequest(request: Request) {
         last_message_at: new Date().toISOString(),
       } as never)
       .eq("id", leadId);
+    await insertWithSessionFallback(db, "messages", {
+      user_id: userId,
+      lead_id: leadId,
+      sender: "ai_agent",
+      content: reply,
+      session_id: sessionId,
+    });
     const outbound = await sendWelcomeMenu(phone ?? chatId);
-    if (outbound.sent) {
-      await insertWithSessionFallback(db, "messages", {
-        user_id: userId,
-        lead_id: leadId,
-        sender: "ai_agent",
-        content: reply,
-        session_id: sessionId,
-      });
-    }
     const telegram_alert = outbound.sent
       ? { sent: false, reason: "not_needed" }
       : await sendTelegramAlert({
@@ -1669,7 +1666,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     return json({
       ok: true,
       lead_id: leadId,
-      reply: outbound.sent ? reply : null,
+      reply: reply,
       welcome_menu: outbound.sent,
       needs_human: !outbound.sent,
       telegram_alert,
@@ -1769,13 +1766,13 @@ export async function handleAgentWebhookRequest(request: Request) {
   const accidentActive =
     !compactEligibilityAnswer &&
     (accidentIdentityReply ||
-      (!carPromptIsMostRecent && (leadIntent === "report_accident" || accidentPromptActive)));
+      (leadIntent === "report_accident" && (!carPromptIsMostRecent || accidentPromptActive)));
   const carEligibilityActive =
     !accidentActive &&
     (compactEligibilityAnswer ||
-      leadIntent === "book_car" ||
-      carEligibilityPromptActive ||
-      (!carEligibility.completed && Object.keys(carEligibility).length > 0));
+      (leadIntent === "book_car" &&
+        (carEligibilityPromptActive ||
+          (!carEligibility.completed && Object.keys(carEligibility).length > 0))));
   const matchedVehicle =
     !option && !accidentIdentityReply
       ? findSelectedVehicle(content, (fleet ?? []) as FleetVehicle[])

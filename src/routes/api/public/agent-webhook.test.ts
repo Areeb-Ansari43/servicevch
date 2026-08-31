@@ -229,6 +229,10 @@ describe("Menu Reset / Greeting Detection", () => {
     expect(isMenuReset("restart")).toBe(true);
     expect(isMenuReset("options")).toBe(true);
     expect(isMenuReset("Hello Virtual car Hire")).toBe(true);
+    expect(isMenuReset("Hello there")).toBe(true);
+    expect(isMenuReset("abyone there")).toBe(true);
+    expect(isMenuReset("Anyone there can menu")).toBe(true);
+    expect(isMenuReset("Hello hello")).toBe(true);
   });
 });
 
