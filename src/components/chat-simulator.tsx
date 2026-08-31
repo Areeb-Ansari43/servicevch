@@ -9,9 +9,9 @@ type Entry = {
 };
 
 const OPTIONS = [
-  { key: "1", label: "[1] Book a Car" },
-  { key: "2", label: "[2] Report Accident" },
-  { key: "3", label: "[3] Speak to Human" },
+  { key: "book_car", label: "🚗 Car enquiry" },
+  { key: "emergency_breakdown", label: "🛠️ Emergency Breakdown" },
+  { key: "report_accident", label: "⚠️ Report Accident" },
 ];
 
 const uid = () => Math.random().toString(36).slice(2);

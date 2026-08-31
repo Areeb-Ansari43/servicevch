@@ -449,17 +449,21 @@ function parseMenuOption(text: string): 1 | 2 | 3 | null {
     .replace(/[.!]+$/g, "");
   if (
     /^(?:option\s*)?\[?1\]?$/.test(normalized) ||
-    /^(?:car enquiry|enquire about a car|book a car)$/.test(normalized)
+    /^(?:book_car|car enquiry|car_enquiry|enquire about a car|book a car|1\.?\s*car enquiry)$/.test(normalized) ||
+    normalized === "car enquiry" ||
+    normalized === "book a car"
   )
     return 1;
   if (
     /^(?:option\s*)?\[?2\]?$/.test(normalized) ||
-    /^(?:emergency breakdown|breakdown|emergency)$/.test(normalized)
+    /^(?:emergency_breakdown|emergency breakdown|breakdown|emergency|2\.?\s*emergency breakdown)$/.test(normalized) ||
+    normalized === "emergency breakdown"
   )
     return 2;
   if (
     /^(?:option\s*)?\[?3\]?$/.test(normalized) ||
-    /^(?:report accident|accident)$/.test(normalized)
+    /^(?:report_accident|report accident|accident|3\.?\s*report accident)$/.test(normalized) ||
+    normalized === "report accident"
   )
     return 3;
   return null;
@@ -927,19 +931,29 @@ async function sendWelcomeMenu(phone: unknown, date = new Date()) {
     buttons,
   });
   if (interactive.sent) return interactive;
-  console.warn("[agent-webhook] welcome interactive image failed; falling back to text menu", {
+  console.warn("[agent-webhook] welcome interactive image failed; falling back to text buttons", {
     reason: interactive.reason,
+  });
+  const textButtons = await sendWhatsAppButtons({
+    phone,
+    body,
+    buttons,
+  });
+  if (textButtons.sent) return textButtons;
+  console.warn("[agent-webhook] welcome text buttons failed; falling back to text menu", {
+    reason: textButtons.reason,
   });
   const fallbackText = getWelcomeMenuText(date);
   const fallback = await sendWhatsAppText({ phone, text: fallbackText });
   if (fallback.sent) return fallback;
   console.error("[agent-webhook] welcome delivery failed", {
     interactive: interactive.reason,
+    textButtons: textButtons.reason,
     fallback: fallback.reason,
   });
   return {
     sent: false,
-    reason: `welcome_delivery_failed: interactive=${interactive.reason}; fallback=${fallback.reason}`,
+    reason: `welcome_delivery_failed: interactive=${interactive.reason}; textButtons=${textButtons.reason}; fallback=${fallback.reason}`,
   };
 }
 
