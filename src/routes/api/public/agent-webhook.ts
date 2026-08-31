@@ -274,22 +274,66 @@ function isAbusiveMessage(text: string): boolean {
   );
 }
 
-function isMenuReset(text: string): boolean {
-  const normalized = text.trim().replace(/^[\s,!.:;-]+|[\s,!.:;-]+$/g, "");
-  return (
-    /^(?:menu|main menu|restart|start again|start over|reset|hello|hi|hey|hiya|howdy|greetings|welcome|good morning|good afternoon|good evening|good day|morning|afternoon|evening)(?:[\s,!.:;-].*)?$/i.test(
-      normalized,
-    ) ||
-    /\b(?:hello|hi|hey|hiya|howdy|greetings|welcome|good morning|good afternoon|good evening|good day)\b/i.test(
-      normalized,
-    )
+export function isMenuReset(text: string): boolean {
+  if (!text) return false;
+  // Strip emojis and surrounding punctuation for normalized string checking
+  const cleaned = text
+    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, " ")
+    .trim()
+    .toLowerCase()
+    .replace(/^[\s,!.:;\-_=+#@%&*()]+|[\s,!.:;\-_=+#@%&*()]+$/g, "");
+
+  // Pure emoji input (e.g. 👋 or 🚗 or 🛠️) counts as a menu/greeting trigger
+  if (!cleaned && text.trim().length > 0) return true;
+
+  const resetKeywords = [
+    "menu", "main menu", "restart", "start", "start again", "start over", "reset", "reopen", "begin",
+    "options", "help", "info", "what can you do", "get started", "hello", "helo", "helloo", "hi", "hiii",
+    "hey", "heyy", "heyyy", "hiya", "howdy", "greetings", "welcome", "good morning", "goodmorning",
+    "good afternoon", "goodafternoon", "good evening", "goodevening", "good day", "goodday",
+    "morning", "afternoon", "evening", "yo", "hola", "wassup", "whatsup", "sup"
+  ];
+
+  const pattern = new RegExp(
+    `^(?:${resetKeywords.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})(?:[\\s,!.:;\\-_=+#@%&*()].*)?$`,
+    "i",
   );
+  if (pattern.test(cleaned)) return true;
+
+  const wordBoundaryPattern = new RegExp(
+    `\\b(?:${resetKeywords.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`,
+    "i",
+  );
+  return wordBoundaryPattern.test(cleaned);
 }
 
 function isCarRequest(text: string): boolean {
   return /\b(?:car|cars|vehicle|vehicles|available|availability|fleet|hire|rent|rental|mercedes|toyota|tesla|eqe|corolla|auris|prius|e300|e220|vito|eqs|ioniq|jaguar|mg5|tourneo|multivan)\b/i.test(
     text,
   );
+}
+
+export function isOffScriptQuestion(text: string): boolean {
+  const lower = text.toLowerCase();
+  return (
+    /\b(?:who|what|where|when|why|how|are you|is this|can i|do you|opening hours|phone number|address|contact|human|agent)\b/i.test(
+      lower,
+    ) ||
+    lower.includes("?") ||
+    /^(?:who is this|who are you|is this a bot|where are you|what is this|can i speak|opening hours|who am i speaking)\b/i.test(
+      lower,
+    )
+  );
+}
+
+export function applyAntiRepetition(reply: string, lastAgentMessage: string): string {
+  if (!reply || !lastAgentMessage) return reply;
+  const normReply = reply.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+  const normLast = lastAgentMessage.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (normReply === normLast && normReply.length > 0) {
+    return `${reply}\n\n(Please let me know if you have any questions or need further clarification!)`;
+  }
+  return reply;
 }
 
 function isAccidentRequest(text: string): boolean {
@@ -391,7 +435,7 @@ function isLikelyFullName(text: string): boolean {
   );
 }
 
-function parseAccidentIdentity(text: string): { name: string; registration: string } | null {
+export function parseAccidentIdentity(text: string): { name: string; registration: string } | null {
   const value = text.trim().replace(/\s+/g, " ");
   const match = value.match(/\b([A-Z]{2}\d{2}\s?[A-Z]{3})\b/i);
   if (!match) return null;
@@ -910,6 +954,7 @@ async function generateReply(
   latest: string,
   hasMedia: boolean,
   fleet: FleetVehicle[],
+  flowContext?: string,
 ): Promise<AiResult> {
   const fallbackReply = isBreakdownRequest(latest)
     ? `I’m here to help. If the vehicle is unsafe, move to a safe place and call 999 if anyone is injured or in immediate danger. For recovery, please use your own provider and take the vehicle to ${AUTO_SURGEON_ADDRESS}. Send your registration and location so I can guide you through the next step.`
@@ -928,6 +973,9 @@ async function generateReply(
     "You are the WhatsApp assistant for Virtual Car Hire (VCH), a UK PCO/private-hire car rental company. " +
     "Reply naturally in UK English. Keep normal replies short: one to four brief lines and normally under 450 characters. Do not repeat the welcome menu or previous answer. Use concise bullet-style lines only when listing cars or contract details. Use £ for prices. " +
     "Use only the supplied live fleet data: never invent availability, prices, dates, MOT or PCO information. " +
+    (flowContext
+      ? `\n\nACTIVE FLOW CONTEXT: ${flowContext}\nIf the customer asks an off-topic or side question (e.g. 'who is this?', 'what are your hours?'), answer their question directly and politely first, then gently guide them back to the active flow. NEVER ask for details that have already been collected.\n\n`
+      : "") +
     "Treat only vehicles marked available/active/in stock as available; rented, assigned, in-service and off-road vehicles are unavailable. " +
     "If the customer asks for a car, wants to hire/rent, asks what is available, or uses any natural wording with the same meaning, treat it as a car enquiry and show all currently available vehicles from the supplied fleet, grouped clearly under Electric, Plug-in-Hybrid, Petrol where possible. If the conversation already contains the complete available-fleet list and the customer names a vehicle, respond with that vehicle's complete contract details: contract length, mileage allowance, weekly rate, and inclusions, then ask for Yes or No confirmation. If the requested car is unavailable, explicitly say so and suggest alternatives under exactly these headings: Electric, Plug-in-Hybrid, Petrol. Do not repeat the full fleet list when the customer has selected a vehicle. " +
     "If you cannot safely answer, the AI service fails, or you become stuck, set needs_human true; otherwise keep needs_human false. For an accident report, gather the details for the CRM accident workflow instead of handing off immediately. " +
@@ -979,7 +1027,12 @@ async function generateReply(
     const requestBody = {
       systemInstruction: { parts: [{ text: system }] },
       contents: [{ role: "user", parts: [{ text: userText }] }],
-      generationConfig: { responseMimeType: "application/json", responseSchema, temperature: 0.2 },
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema,
+        temperature: 0.2,
+        maxOutputTokens: 300,
+      },
     };
     const requestHeaders = {
       "Content-Type": "application/json",
@@ -1482,12 +1535,20 @@ export async function handleAgentWebhookRequest(request: Request) {
     }
   }
 
-  const { data: oldHistory } = await db
-    .from("messages")
-    .select("sender, content, media_url")
-    .eq("lead_id", leadId)
-    .order("created_at", { ascending: true })
-    .limit(40);
+  const [oldHistoryRes, fleetRes] = await Promise.all([
+    db
+      .from("messages")
+      .select("sender, content, media_url")
+      .eq("lead_id", leadId)
+      .order("created_at", { ascending: true })
+      .limit(30),
+    db
+      .from("vehicles")
+      .select("reg, make, model, year, fuel_type, status, next_mot_date, pco_expiry_date"),
+  ]);
+  const oldHistory = oldHistoryRes.data;
+  const fleet = fleetRes.data;
+
   const inbound: Turn = { sender: "customer", content, media_url: mediaUrl };
   const { error: inboundError } = await insertWithSessionFallback(db, "messages", {
     user_id: userId,
@@ -1505,7 +1566,7 @@ export async function handleAgentWebhookRequest(request: Request) {
   const history = [...((oldHistory ?? []) as Turn[]), inbound];
 
   if (isNewLead || closed) {
-    await sendTelegramAlert({
+    sendTelegramAlert({
       name: leadName,
       phone: phone ?? chatId,
       reason: `👋 New conversation started by ${leadName} (${displayPhone(phone ?? chatId)})`,
@@ -1513,13 +1574,10 @@ export async function handleAgentWebhookRequest(request: Request) {
       history,
       mediaUrl,
       closed: false,
-    });
+    }).catch(() => {});
   }
   const lastAgentMessage =
     [...history].reverse().find((turn) => turn.sender === "ai_agent")?.content ?? "";
-  const { data: fleet } = await db
-    .from("vehicles")
-    .select("reg, make, model, year, fuel_type, status, next_mot_date, pco_expiry_date");
 
   const compactEligibilityAnswer =
     /^\s*(?:(?:yes|yeah|yep|no|nope)[\s,;|/]+){1,2}(?:yes|yeah|yep|no|nope)(?:\s*(?:[-–—:=\s]+)\s*\d{1,2}\s*(?:points?)?)?\s*$/i.test(
@@ -1678,19 +1736,17 @@ export async function handleAgentWebhookRequest(request: Request) {
     });
   }
 
-  // A fresh menu tap is an explicit new session. Reopen the lead and let the
-  // option branch send the next prompt instead of silently returning closed.
-  if (closed && !rawOption && !compactEligibilityAnswer) {
-    console.info("[agent-webhook] conversation closed; no AI reply", { leadId });
-    return json({ ok: true, lead_id: leadId, closed: true, reply: null, needs_human: false });
-  }
-
-  if (aiPaused) {
-    console.warn("[agent-webhook] reactivating AI after inbound customer message", { leadId });
+  if (closed || aiPaused) {
+    console.info("[agent-webhook] reopening / reactivating lead for new inbound message", {
+      leadId,
+      wasClosed: closed,
+      wasPaused: aiPaused,
+    });
     await db
       .from("whatsapp_leads")
       .update({ ai_paused: false, status: "active", closed_at: null } as never)
       .eq("id", leadId);
+    closed = false;
     aiPaused = false;
   }
 
@@ -2113,11 +2169,17 @@ export async function handleAgentWebhookRequest(request: Request) {
     const reply = suppliedRegistration
       ? `Accident Support\n\nThank you, ${customerName}. I have recorded vehicle registration ${suppliedRegistration}. I am checking these details against our driver records now. If verified, I will collect the accident details next.`
       : `Accident Support\n\nThank you, ${customerName}. Please now send the vehicle registration, incident date, location, a short description of what happened, and any photos.`;
+    const nextAccidentData = {
+      ...accidentData,
+      driverName: customerName,
+      ...(suppliedRegistration ? { driverReg: suppliedRegistration } : {}),
+    };
     await db
       .from("whatsapp_leads")
       .update({
         contact_name: customerName,
         vehicle_registration: suppliedRegistration || undefined,
+        accident_data: nextAccidentData,
         intent: "report_accident",
         ai_summary: reply,
         last_message_at: new Date().toISOString(),
@@ -2382,7 +2444,7 @@ export async function handleAgentWebhookRequest(request: Request) {
         next.driverReg = next.driverReg ?? reg;
         const possibleName = content
           .replace(reg, "")
-          .replace(/^[\\s,;:-]+|[\\s,;:-]+$/g, "")
+          .replace(/^[\s,;:-]+|[\s,;:-]+$/g, "")
           .trim();
         if (possibleName && isLikelyFullName(possibleName))
           next.driverName = next.driverName ?? possibleName;
@@ -2390,7 +2452,35 @@ export async function handleAgentWebhookRequest(request: Request) {
         next.driverName = content.trim();
       }
       if (!next.driverName || !next.driverReg) {
-        const reply = `🚨 Accident verification\\n\\nPlease send the missing detail: ${!next.driverName ? "your full name" : "your vehicle registration"}.`;
+        if (isOffScriptQuestion(content)) {
+          const flowContext = `The customer is in the Accident Report flow. Details collected so far: driverName="${next.driverName ?? "none"}", driverReg="${next.driverReg ?? "none"}". Missing details: ${!next.driverName ? "full name" : "vehicle registration"}. Answer the customer's question directly and politely, then ask for the missing detail.`;
+          const ai = await generateReply(
+            history,
+            content,
+            Boolean(mediaUrl),
+            (fleet ?? []) as FleetVehicle[],
+            flowContext,
+          );
+          const reply = applyAntiRepetition(ai.reply, lastAgentMessage);
+          const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
+          if (outbound.sent)
+            await insertWithSessionFallback(db, "messages", {
+              user_id: userId,
+              lead_id: leadId,
+              sender: "ai_agent",
+              content: reply,
+              session_id: sessionId,
+            });
+          await db
+            .from("whatsapp_leads")
+            .update({ accident_data: next, last_message_at: new Date().toISOString() } as never)
+            .eq("id", leadId);
+          return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound });
+        }
+        const reply = applyAntiRepetition(
+          `🚨 Accident verification\n\nPlease send the missing detail: ${!next.driverName ? "your full name" : "your vehicle registration"}.`,
+          lastAgentMessage,
+        );
         const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
         if (outbound.sent)
           await insertWithSessionFallback(db, "messages", {
@@ -2608,6 +2698,44 @@ export async function handleAgentWebhookRequest(request: Request) {
     if (mediaUrl && !evidenceUrls.includes(mediaUrl)) evidenceUrls.push(mediaUrl);
 
     const missing = accidentMissing(next);
+
+    const providedNewFacts = Boolean(
+      licenseUrl ||
+        (next.atFaultDriverName && next.atFaultDriverName !== accidentData.atFaultDriverName) ||
+        (next.atFaultVehicleReg && next.atFaultVehicleReg !== accidentData.atFaultVehicleReg) ||
+        (next.insuranceProvider && next.insuranceProvider !== accidentData.insuranceProvider) ||
+        (next.incidentDate && next.incidentDate !== accidentData.incidentDate) ||
+        (next.location && next.location !== accidentData.location) ||
+        (next.description && next.description !== accidentData.description) ||
+        mediaUrl,
+    );
+
+    if (!providedNewFacts && isOffScriptQuestion(content)) {
+      const flowContext = `The customer is reporting an accident. Verified driver: ${next.driverName} (${next.driverReg}). Missing accident details: ${missing.join(", ")}. Answer the customer's side question directly and politely, then remind them to provide the missing accident details. Do NOT claim the driver's name or vehicle registration is missing as both have already been verified.`;
+      const ai = await generateReply(
+        history,
+        content,
+        Boolean(mediaUrl),
+        (fleet ?? []) as FleetVehicle[],
+        flowContext,
+      );
+      const reply = applyAntiRepetition(ai.reply, lastAgentMessage);
+      const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
+      if (outbound.sent)
+        await insertWithSessionFallback(db, "messages", {
+          user_id: userId,
+          lead_id: leadId,
+          sender: "ai_agent",
+          content: reply,
+          session_id: sessionId,
+        });
+      await db
+        .from("whatsapp_leads")
+        .update({ accident_data: next, last_message_at: new Date().toISOString() } as never)
+        .eq("id", leadId);
+      return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound });
+    }
+
     if (
       (lowerLast.includes("is this information correct") ||
         lowerLast.includes("accident report summary")) &&

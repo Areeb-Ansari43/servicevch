@@ -10,6 +10,10 @@ import {
   simplifyVehicleName,
   isPositiveConfirmation,
   isNegativeConfirmation,
+  isMenuReset,
+  parseAccidentIdentity,
+  isOffScriptQuestion,
+  applyAntiRepetition,
 } from "./agent-webhook";
 
 describe("Car Eligibility Parsing & Warnings", () => {
@@ -204,6 +208,71 @@ describe("Fleet Availability & Model Deduplication", () => {
 
     const years = availableYears(fleet, unique[0]);
     expect(years).toBe("2018, 2019");
+  });
+});
+
+describe("Menu Reset / Greeting Detection", () => {
+  test("isMenuReset detects standard and informal greetings, typos, emojis and restart commands", () => {
+    expect(isMenuReset("hello")).toBe(true);
+    expect(isMenuReset("Hello!")).toBe(true);
+    expect(isMenuReset("hi")).toBe(true);
+    expect(isMenuReset("hiii")).toBe(true);
+    expect(isMenuReset("helo")).toBe(true);
+    expect(isMenuReset("hey")).toBe(true);
+    expect(isMenuReset("yo")).toBe(true);
+    expect(isMenuReset("hola")).toBe(true);
+    expect(isMenuReset("goodmorning")).toBe(true);
+    expect(isMenuReset("good morning")).toBe(true);
+    expect(isMenuReset("👋")).toBe(true);
+    expect(isMenuReset("Hello 👋")).toBe(true);
+    expect(isMenuReset("menu")).toBe(true);
+    expect(isMenuReset("start")).toBe(true);
+    expect(isMenuReset("restart")).toBe(true);
+    expect(isMenuReset("options")).toBe(true);
+  });
+});
+
+describe("Accident Identity Extraction", () => {
+  test("extracts name and registration when provided together in one message", () => {
+    const res1 = parseAccidentIdentity("John Smith AB12 CDE");
+    expect(res1).not.toBeNull();
+    expect(res1?.name).toBe("John Smith");
+    expect(res1?.registration).toBe("AB12 CDE");
+
+    const res2 = parseAccidentIdentity("Muhammad Ali, LC70XYZ");
+    expect(res2).not.toBeNull();
+    expect(res2?.name).toBe("Muhammad Ali");
+    expect(res2?.registration).toBe("LC70XYZ");
+
+    const res3 = parseAccidentIdentity("David O'Connor - EF21GHI");
+    expect(res3).not.toBeNull();
+    expect(res3?.name).toBe("David O'Connor");
+    expect(res3?.registration).toBe("EF21GHI");
+  });
+
+  test("returns null if registration is missing", () => {
+    expect(parseAccidentIdentity("John Smith")).toBeNull();
+  });
+});
+
+describe("Off-Script Question Detection & Anti-Repetition", () => {
+  test("isOffScriptQuestion detects side questions like 'who is this'", () => {
+    expect(isOffScriptQuestion("Btw who is this?")).toBe(true);
+    expect(isOffScriptQuestion("who are you")).toBe(true);
+    expect(isOffScriptQuestion("what are your opening hours")).toBe(true);
+    expect(isOffScriptQuestion("where is your garage located")).toBe(true);
+    expect(isOffScriptQuestion("can I call you?")).toBe(true);
+    expect(isOffScriptQuestion("is this a bot")).toBe(true);
+  });
+
+  test("applyAntiRepetition prevents sending duplicate messages back to back", () => {
+    const original = "🚨 Accident verification\n\nPlease send the missing detail: your full name.";
+    const rephrased = applyAntiRepetition(original, original);
+    expect(rephrased).not.toBe(original);
+    expect(rephrased).toContain("Please let me know if you have any questions");
+
+    const distinct = applyAntiRepetition("Driver details verified", original);
+    expect(distinct).toBe("Driver details verified");
   });
 });
 

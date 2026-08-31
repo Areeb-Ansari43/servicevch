@@ -164,23 +164,23 @@ export const Route = createFileRoute("/api/webhook")({
         try {
           payload = JSON.parse(rawBody);
         } catch {
-          await logMetaEvent({
+          logMetaEvent({
             payload: rawBody.slice(0, 20000),
             request,
             status: "error",
             error: "Invalid JSON",
             requestId,
-          });
+          }).catch(() => {});
           return json({ ok: true, received: true }, 200);
         }
         if (!(await validMetaSignature(request, rawBody))) {
-          await logMetaEvent({
+          logMetaEvent({
             payload,
             request,
             status: "unauthorized",
             error: "Meta signature validation failed",
             requestId,
-          });
+          }).catch(() => {});
           return json({ ok: false, error: "Unauthorized" }, 403);
         }
         const messages = extractMessages(payload);
@@ -189,13 +189,13 @@ export const Route = createFileRoute("/api/webhook")({
           messageCount: messages.length,
           object: payload.object ?? null,
         });
-        await logMetaEvent({
+        logMetaEvent({
           payload,
           request,
           status: "received",
           normalized: messages.map(({ message, value }) => normalizeMetaMessage(message, value)),
           requestId,
-        });
+        }).catch(() => {});
         for (const { message, value } of messages) {
           const normalized = normalizeMetaMessage(message, value);
           if (!normalized.phone) {
@@ -238,7 +238,7 @@ export const Route = createFileRoute("/api/webhook")({
               needsHuman: responseSummary.needs_human ?? null,
             });
             if (!response.ok || responseSummary.outbound?.sent === false) {
-              await logMetaEvent({
+              logMetaEvent({
                 payload,
                 request,
                 status: "agent_error",
@@ -247,28 +247,28 @@ export const Route = createFileRoute("/api/webhook")({
                   : `outbound_failed: ${JSON.stringify(responseSummary.outbound ?? {})}`,
                 normalized,
                 requestId,
-              });
+              }).catch(() => {});
             }
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             console.error("[meta-webhook] agent processing failed", { requestId, error: message });
-            await logMetaEvent({
+            logMetaEvent({
               payload,
               request,
               status: "agent_error",
               error: message,
               normalized,
               requestId,
-            });
+            }).catch(() => {});
           }
         }
-        await logMetaEvent({
+        logMetaEvent({
           payload,
           request,
           status: "processed",
           normalized: messages.map(({ message, value }) => normalizeMetaMessage(message, value)),
           requestId,
-        });
+        }).catch(() => {});
         return json({ ok: true, received: true, processed: messages.length }, 200);
       },
     },
