@@ -7,7 +7,7 @@ import { sendWhatsAppText, sendWhatsAppImageButtons } from "@/lib/meta-whatsapp.
 const CRM_BASE = "https://servicevch.pages.dev";
 const VCH_WEBSITE = "https://virtualcarhire.pages.dev/our-fleet";
 const WELCOME_IMAGE_URL =
-  "https://servicevch.pages.dev/whatsapp/virtual-car-hire-welcome.jpg?v=20260826-4";
+  "https://servicevch.pages.dev/whatsapp/virtual-car-hire-welcome.jpg?v=20260831-1";
 const AUTO_SURGEON_ADDRESS =
   "The Auto Surgeon, Unit 3 Squirrels Trading Estate, Viveash Close, Hayes UB3 4RZ";
 const AUTO_SURGEON_MAP =
@@ -987,15 +987,24 @@ async function generateReply(
     };
     type GeminiGeneration = { response: Response; body: string; model: string; apiVersion: string };
     const callModel = async (apiVersion: string, model: string): Promise<GeminiGeneration> => {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent`,
-        {
-          method: "POST",
-          headers: requestHeaders,
-          body: JSON.stringify(requestBody),
-        },
-      );
-      return { response, body: await response.text(), model, apiVersion };
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent`,
+          {
+            method: "POST",
+            headers: requestHeaders,
+            body: JSON.stringify(requestBody),
+            signal: controller.signal,
+          },
+        );
+        clearTimeout(timeoutId);
+        return { response, body: await response.text(), model, apiVersion };
+      } catch (err) {
+        clearTimeout(timeoutId);
+        throw err;
+      }
     };
     // Use one stable low-latency model request. Do not turn a model 404 into a
     // customer handoff; the deterministic fallback above keeps the workflow moving.
