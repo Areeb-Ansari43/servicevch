@@ -13,8 +13,11 @@ function config() {
 }
 
 export function normalizeMetaPhone(value: unknown): string | null {
-  const raw = typeof value === "string" ? value.trim() : "";
-  const digits = raw.replace(/\D/g, "");
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  let raw = String(value).trim().replace(/@(?:c|s\.whatsapp\.net|lid)$/i, "");
+  let digits = raw.replace(/\D/g, "");
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  if (digits.startsWith("0") && digits.length === 11) digits = `44${digits.slice(1)}`;
   return digits.length >= 8 ? digits : null;
 }
 
