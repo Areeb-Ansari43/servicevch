@@ -1017,9 +1017,9 @@ function Sidebar({
             style={{ background: "linear-gradient(135deg,#0b0d12,#1e222b)" }}
           >
             <img
-              src="/whatsapp/virtual-car-hire-welcome.jpg"
+              src="/vch-logo.png"
               alt="Virtual Car Hire Logo"
-              className="h-full w-full object-cover"
+              className="h-full w-full object-contain p-0.5"
             />
           </div>
           <div className="min-w-0 flex-1">

@@ -182,9 +182,9 @@ function LoginPage() {
         <div className="mb-7 flex flex-col items-center text-center">
           <div className="mb-4 flex h-16 w-16 items-center justify-center overflow-hidden rounded-[22px] border border-white/20 bg-gradient-to-br from-[#ff7a1a] to-[#ff9d52] text-white shadow-[0_18px_40px_-12px_rgba(255,106,0,0.7),inset_0_1px_0_rgba(255,255,255,0.5)]">
             <img
-              src="/whatsapp/virtual-car-hire-welcome.jpg"
+              src="/vch-logo.png"
               alt="Virtual Car Hire Logo"
-              className="h-full w-full object-cover"
+              className="h-full w-full object-contain p-0.5"
             />
           </div>
           <h1 className="bg-gradient-to-b from-white to-white/65 bg-clip-text text-[28px] font-bold tracking-tight text-transparent">
