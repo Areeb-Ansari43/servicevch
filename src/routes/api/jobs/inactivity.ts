@@ -124,7 +124,7 @@ export const Route = createFileRoute("/api/jobs/inactivity")({
             if (!claim) continue;
             const outbound = await sendWhatsAppText({
               phone: chatId,
-              text: "Are you still there? If you need more help, please reply here.",
+              text: "Are you there?",
             });
             if (outbound.sent) {
               await db
@@ -133,7 +133,7 @@ export const Route = createFileRoute("/api/jobs/inactivity")({
                   user_id: lead.user_id,
                   lead_id: leadId,
                   sender: "ai_agent",
-                  content: "Are you still there? If you need more help, please reply here.",
+                  content: "Are you there?",
                 } as never);
               prompted += 1;
             } else {
@@ -147,7 +147,7 @@ export const Route = createFileRoute("/api/jobs/inactivity")({
           }
           if (!promptedAt) continue;
           const promptedAtMs = new Date(promptedAt).getTime();
-          if (promptedAtMs > now - 2 * 60_000) continue;
+          if (promptedAtMs > now - 5 * 60_000) continue;
           const lastMessage = lastMessageAt;
           if (lastMessage > promptedAtMs) continue;
           const { data: messages } = await db

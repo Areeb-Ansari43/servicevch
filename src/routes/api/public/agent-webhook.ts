@@ -1204,8 +1204,14 @@ async function sendTelegramAlert(params: {
   const token = getRuntimeEnv("TELEGRAM_BOT_TOKEN");
   const chatId = getRuntimeEnv("TELEGRAM_CHAT_ID");
   if (!token || !chatId) return { sent: false, reason: "not_configured" };
+  const isNewConvoAlert = params.reason.startsWith("👋");
+  const header = params.closed
+    ? "✅ <b>Conversation ended</b>"
+    : isNewConvoAlert
+      ? "👋 <b>New conversation started</b>"
+      : "🚨 <b>Handoff needed</b>";
   const text =
-    `${params.closed ? "✅ <b>Conversation ended</b>" : "🚨 <b>Handoff needed</b>"}\n` +
+    `${header}\n` +
     `<b>Name:</b> ${escapeHtml(params.name)}\n` +
     (params.phone ? `<b>Phone:</b> ${escapeHtml(params.phone)}\n` : "") +
     `<b>Reason:</b> ${escapeHtml(params.reason)}\n` +
@@ -1489,7 +1495,7 @@ export async function handleAgentWebhookRequest(request: Request) {
   if (inboundError) return json({ ok: false, error: inboundError.message }, 500);
   const history = [...((oldHistory ?? []) as Turn[]), inbound];
 
-  if (isNewLead) {
+  if (isNewLead || closed) {
     await sendTelegramAlert({
       name: leadName,
       phone: phone ?? chatId,
