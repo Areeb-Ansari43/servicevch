@@ -842,7 +842,7 @@ function formatCustomerFleet(fleet: FleetVehicle[]): string {
   return `Thank you for your interest in our PCO fleet. These vehicle options are currently available:\n\n${lines.join("\n")}\n\nPlease reply with the make and model you would like, and I will send its price, mileage allowance, contract length, and included services.`;
 }
 
-function findSelectedVehicle(text: string, fleet: FleetVehicle[]): FleetVehicle | undefined {
+export function findSelectedVehicle(text: string, fleet: FleetVehicle[]): FleetVehicle | undefined {
   const value = text.toLowerCase();
   const compactValue = value.replace(/[^a-z0-9]/g, "");
   const available = fleet.filter(isAvailable);
