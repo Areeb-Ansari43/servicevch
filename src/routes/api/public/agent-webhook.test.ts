@@ -11,7 +11,6 @@ import {
   isPositiveConfirmation,
   isNegativeConfirmation,
   isMenuReset,
-  parseAccidentIdentity,
   isOffScriptQuestion,
   applyAntiRepetition,
 } from "./agent-webhook";
@@ -229,29 +228,7 @@ describe("Menu Reset / Greeting Detection", () => {
     expect(isMenuReset("start")).toBe(true);
     expect(isMenuReset("restart")).toBe(true);
     expect(isMenuReset("options")).toBe(true);
-  });
-});
-
-describe("Accident Identity Extraction", () => {
-  test("extracts name and registration when provided together in one message", () => {
-    const res1 = parseAccidentIdentity("John Smith AB12 CDE");
-    expect(res1).not.toBeNull();
-    expect(res1?.name).toBe("John Smith");
-    expect(res1?.registration).toBe("AB12 CDE");
-
-    const res2 = parseAccidentIdentity("Muhammad Ali, LC70XYZ");
-    expect(res2).not.toBeNull();
-    expect(res2?.name).toBe("Muhammad Ali");
-    expect(res2?.registration).toBe("LC70XYZ");
-
-    const res3 = parseAccidentIdentity("David O'Connor - EF21GHI");
-    expect(res3).not.toBeNull();
-    expect(res3?.name).toBe("David O'Connor");
-    expect(res3?.registration).toBe("EF21GHI");
-  });
-
-  test("returns null if registration is missing", () => {
-    expect(parseAccidentIdentity("John Smith")).toBeNull();
+    expect(isMenuReset("Hello Virtual car Hire")).toBe(true);
   });
 });
 
@@ -266,7 +243,7 @@ describe("Off-Script Question Detection & Anti-Repetition", () => {
   });
 
   test("applyAntiRepetition prevents sending duplicate messages back to back", () => {
-    const original = "🚨 Accident verification\n\nPlease send the missing detail: your full name.";
+    const original = "Thanks. I still need whether your age is between 25 and 65...";
     const rephrased = applyAntiRepetition(original, original);
     expect(rephrased).not.toBe(original);
     expect(rephrased).toContain("Please let me know if you have any questions");

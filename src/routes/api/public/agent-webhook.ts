@@ -7,7 +7,7 @@ import { sendWhatsAppText, sendWhatsAppImageButtons } from "@/lib/meta-whatsapp.
 const CRM_BASE = "https://servicevch.pages.dev";
 const VCH_WEBSITE = "https://virtualcarhire.pages.dev/our-fleet";
 const WELCOME_IMAGE_URL =
-  "https://servicevch.pages.dev/whatsapp/virtual-car-hire-welcome.jpg?v=20260831-1";
+  "https://servicevch.pages.dev/whatsapp/virtual-car-hire-welcome.jpg?v=20260826-4";
 const AUTO_SURGEON_ADDRESS =
   "The Auto Surgeon, Unit 3 Squirrels Trading Estate, Viveash Close, Hayes UB3 4RZ";
 const AUTO_SURGEON_MAP =
@@ -275,15 +275,12 @@ function isAbusiveMessage(text: string): boolean {
 }
 
 export function isMenuReset(text: string): boolean {
-  if (!text) return false;
-  // Strip emojis and surrounding punctuation for normalized string checking
   const cleaned = text
     .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, " ")
     .trim()
     .toLowerCase()
     .replace(/^[\s,!.:;\-_=+#@%&*()]+|[\s,!.:;\-_=+#@%&*()]+$/g, "");
 
-  // Pure emoji input (e.g. 👋 or 🚗 or 🛠️) counts as a menu/greeting trigger
   if (!cleaned && text.trim().length > 0) return true;
 
   const resetKeywords = [
@@ -307,33 +304,29 @@ export function isMenuReset(text: string): boolean {
   return wordBoundaryPattern.test(cleaned);
 }
 
-function isCarRequest(text: string): boolean {
-  return /\b(?:car|cars|vehicle|vehicles|available|availability|fleet|hire|rent|rental|mercedes|toyota|tesla|eqe|corolla|auris|prius|e300|e220|vito|eqs|ioniq|jaguar|mg5|tourneo|multivan)\b/i.test(
-    text,
-  );
-}
-
 export function isOffScriptQuestion(text: string): boolean {
   const lower = text.toLowerCase();
   return (
-    /\b(?:who|what|where|when|why|how|are you|is this|can i|do you|opening hours|phone number|address|contact|human|agent)\b/i.test(
+    /who (are you|is this)|what (is this|do you do|are your hours|is your number|is your address)|where are you|where is (your garage|your office)|opening hours|office hours|business hours|(is this|are you) (a |an )?(bot|ai)|can i call|speak to a human|talk to someone/i.test(
       lower,
     ) ||
-    lower.includes("?") ||
-    /^(?:who is this|who are you|is this a bot|where are you|what is this|can i speak|opening hours|who am i speaking)\b/i.test(
-      lower,
-    )
+    (/\?$/.test(text.trim()) &&
+      !/yes|no|points|badge|pco|age|registration|reg|license|licence/i.test(lower))
   );
 }
 
 export function applyAntiRepetition(reply: string, lastAgentMessage: string): string {
-  if (!reply || !lastAgentMessage) return reply;
-  const normReply = reply.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
-  const normLast = lastAgentMessage.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
-  if (normReply === normLast && normReply.length > 0) {
-    return `${reply}\n\n(Please let me know if you have any questions or need further clarification!)`;
+  if (!lastAgentMessage) return reply;
+  if (reply.trim().toLowerCase() === lastAgentMessage.trim().toLowerCase()) {
+    return `${reply}\n\nPlease let me know if you have any questions or if you'd like to reach our support team directly.`;
   }
   return reply;
+}
+
+function isCarRequest(text: string): boolean {
+  return /\b(?:car|cars|vehicle|vehicles|available|availability|fleet|hire|rent|rental|mercedes|toyota|tesla|eqe|corolla|auris|prius|e300|e220|vito|eqs|ioniq|jaguar|mg5|tourneo|multivan)\b/i.test(
+    text,
+  );
 }
 
 function isAccidentRequest(text: string): boolean {
@@ -435,7 +428,7 @@ function isLikelyFullName(text: string): boolean {
   );
 }
 
-export function parseAccidentIdentity(text: string): { name: string; registration: string } | null {
+function parseAccidentIdentity(text: string): { name: string; registration: string } | null {
   const value = text.trim().replace(/\s+/g, " ");
   const match = value.match(/\b([A-Z]{2}\d{2}\s?[A-Z]{3})\b/i);
   if (!match) return null;
@@ -1027,12 +1020,7 @@ async function generateReply(
     const requestBody = {
       systemInstruction: { parts: [{ text: system }] },
       contents: [{ role: "user", parts: [{ text: userText }] }],
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema,
-        temperature: 0.2,
-        maxOutputTokens: 300,
-      },
+      generationConfig: { responseMimeType: "application/json", responseSchema, temperature: 0.2 },
     };
     const requestHeaders = {
       "Content-Type": "application/json",
@@ -1040,24 +1028,15 @@ async function generateReply(
     };
     type GeminiGeneration = { response: Response; body: string; model: string; apiVersion: string };
     const callModel = async (apiVersion: string, model: string): Promise<GeminiGeneration> => {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
-      try {
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent`,
-          {
-            method: "POST",
-            headers: requestHeaders,
-            body: JSON.stringify(requestBody),
-            signal: controller.signal,
-          },
-        );
-        clearTimeout(timeoutId);
-        return { response, body: await response.text(), model, apiVersion };
-      } catch (err) {
-        clearTimeout(timeoutId);
-        throw err;
-      }
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent`,
+        {
+          method: "POST",
+          headers: requestHeaders,
+          body: JSON.stringify(requestBody),
+        },
+      );
+      return { response, body: await response.text(), model, apiVersion };
     };
     // Use one stable low-latency model request. Do not turn a model 404 into a
     // customer handoff; the deterministic fallback above keeps the workflow moving.
@@ -1266,14 +1245,8 @@ async function sendTelegramAlert(params: {
   const token = getRuntimeEnv("TELEGRAM_BOT_TOKEN");
   const chatId = getRuntimeEnv("TELEGRAM_CHAT_ID");
   if (!token || !chatId) return { sent: false, reason: "not_configured" };
-  const isNewConvoAlert = params.reason.startsWith("👋");
-  const header = params.closed
-    ? "✅ <b>Conversation ended</b>"
-    : isNewConvoAlert
-      ? "👋 <b>New conversation started</b>"
-      : "🚨 <b>Handoff needed</b>";
   const text =
-    `${header}\n` +
+    `${params.closed ? "✅ <b>Conversation ended</b>" : "🚨 <b>Handoff needed</b>"}\n` +
     `<b>Name:</b> ${escapeHtml(params.name)}\n` +
     (params.phone ? `<b>Phone:</b> ${escapeHtml(params.phone)}\n` : "") +
     `<b>Reason:</b> ${escapeHtml(params.reason)}\n` +
@@ -1618,6 +1591,10 @@ export async function handleAgentWebhookRequest(request: Request) {
           status: "active",
           ai_paused: false,
           closed_at: null,
+          intent: null,
+          car_enquiry_data: {},
+          accident_data: {},
+          breakdown_data: {},
           ai_summary: reply,
           last_message_at: new Date().toISOString(),
         } as never)
@@ -1654,18 +1631,22 @@ export async function handleAgentWebhookRequest(request: Request) {
 
   if (isMenuReset(content)) {
     const reply = getWelcomeMenuText();
+    await db
+      .from("whatsapp_leads")
+      .update({
+        status: "active",
+        ai_paused: false,
+        closed_at: null,
+        intent: null,
+        car_enquiry_data: {},
+        accident_data: {},
+        breakdown_data: {},
+        ai_summary: reply,
+        last_message_at: new Date().toISOString(),
+      } as never)
+      .eq("id", leadId);
     const outbound = await sendWelcomeMenu(phone ?? chatId);
     if (outbound.sent) {
-      await db
-        .from("whatsapp_leads")
-        .update({
-          status: "active",
-          ai_paused: false,
-          closed_at: null,
-          ai_summary: reply,
-          last_message_at: new Date().toISOString(),
-        } as never)
-        .eq("id", leadId);
       await insertWithSessionFallback(db, "messages", {
         user_id: userId,
         lead_id: leadId,
@@ -1736,17 +1717,19 @@ export async function handleAgentWebhookRequest(request: Request) {
     });
   }
 
-  if (closed || aiPaused) {
-    console.info("[agent-webhook] reopening / reactivating lead for new inbound message", {
-      leadId,
-      wasClosed: closed,
-      wasPaused: aiPaused,
-    });
+  // A fresh menu tap is an explicit new session. Reopen the lead and let the
+  // option branch send the next prompt instead of silently returning closed.
+  if (closed && !rawOption && !compactEligibilityAnswer) {
+    console.info("[agent-webhook] conversation closed; no AI reply", { leadId });
+    return json({ ok: true, lead_id: leadId, closed: true, reply: null, needs_human: false });
+  }
+
+  if (aiPaused) {
+    console.warn("[agent-webhook] reactivating AI after inbound customer message", { leadId });
     await db
       .from("whatsapp_leads")
       .update({ ai_paused: false, status: "active", closed_at: null } as never)
       .eq("id", leadId);
-    closed = false;
     aiPaused = false;
   }
 
@@ -1964,6 +1947,42 @@ export async function handleAgentWebhookRequest(request: Request) {
       });
     }
     if (missing.length || !nextEligibility.completed) {
+      if (isOffScriptQuestion(content) && !compactEligibilityAnswer) {
+        const flowContext = `The customer is in the Car Enquiry flow. Details collected so far: ageEligible=${nextEligibility.ageEligible ?? "unknown"}, pcoBadge=${nextEligibility.pcoBadge ?? "unknown"}, points=${nextEligibility.points ?? "unknown"}. Missing details: ${missing.join(", ")}. Answer the customer's side question directly and politely, then gently ask for the missing eligibility details.`;
+        const ai = await generateReply(
+          history,
+          content,
+          Boolean(mediaUrl),
+          (fleet ?? []) as FleetVehicle[],
+          flowContext,
+        );
+        const reply = applyAntiRepetition(ai.reply, lastAgentMessage);
+        const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
+        if (outbound.sent)
+          await insertWithSessionFallback(db, "messages", {
+            user_id: userId,
+            lead_id: leadId,
+            sender: "ai_agent",
+            content: reply,
+            session_id: sessionId,
+          });
+        await db
+          .from("whatsapp_leads")
+          .update({
+            car_enquiry_data: nextEligibility,
+            ai_summary: reply,
+            last_message_at: new Date().toISOString(),
+          } as never)
+          .eq("id", leadId);
+        return json({
+          ok: true,
+          lead_id: leadId,
+          reply: outbound.sent ? reply : null,
+          outbound,
+          eligibility: nextEligibility,
+          needs_human: !outbound.sent,
+        });
+      }
       const warnings = [
         nextEligibility.pcoBadge === false
           ? "⚠️ Warning: A valid PCO badge is required to rent a vehicle with Virtual Car Hire."
@@ -1975,7 +1994,10 @@ export async function handleAgentWebhookRequest(request: Request) {
           ? "Sorry, you may be unable to rent with us as your points are too high, but we will continue."
           : "",
       ].filter(Boolean);
-      const reply = `${warnings.length ? `${warnings.join("\n\n")}\n\n` : ""}Thanks. I still need ${missing.join(", ")}. Please reply naturally—for example: I’m 30, I have a valid PCO badge, and I have 3 points.`;
+      const reply = applyAntiRepetition(
+        `${warnings.length ? `${warnings.join("\n\n")}\n\n` : ""}Thanks. I still need ${missing.join(", ")}. Please reply naturally—for example: I’m 30, I have a valid PCO badge, and I have 3 points.`,
+        lastAgentMessage,
+      );
       const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
       if (outbound.sent)
         await insertWithSessionFallback(db, "messages", {
@@ -2169,17 +2191,11 @@ export async function handleAgentWebhookRequest(request: Request) {
     const reply = suppliedRegistration
       ? `Accident Support\n\nThank you, ${customerName}. I have recorded vehicle registration ${suppliedRegistration}. I am checking these details against our driver records now. If verified, I will collect the accident details next.`
       : `Accident Support\n\nThank you, ${customerName}. Please now send the vehicle registration, incident date, location, a short description of what happened, and any photos.`;
-    const nextAccidentData = {
-      ...accidentData,
-      driverName: customerName,
-      ...(suppliedRegistration ? { driverReg: suppliedRegistration } : {}),
-    };
     await db
       .from("whatsapp_leads")
       .update({
         contact_name: customerName,
         vehicle_registration: suppliedRegistration || undefined,
-        accident_data: nextAccidentData,
         intent: "report_accident",
         ai_summary: reply,
         last_message_at: new Date().toISOString(),
