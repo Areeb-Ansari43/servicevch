@@ -1020,6 +1020,7 @@ async function generateReply(
         "[agent-webhook] AI generation skipped: no supported Gemini API key binding is configured",
         { supportedBindings: geminiKeyBindings },
       );
+      await alertAiDegraded("gemini_api_key_missing", "unknown");
       return { ...fallback, reason: "gemini_api_key_missing" };
     }
     const responseSchema = {
@@ -1064,6 +1065,11 @@ async function generateReply(
         responseBody: generation.body.slice(0, 2000),
         model: generation.model,
       });
+      await alertAiDegraded(
+        `gemini_http_${generation.response.status}`,
+        generation.model,
+        generation.body,
+      );
       return { ...fallback, reason: `gemini_http_${generation.response.status}` };
     }
     const data = JSON.parse(generation.body) as {
@@ -1079,12 +1085,11 @@ async function generateReply(
       console.error("[agent-webhook] Gemini returned no text", {
         promptFeedback: data.promptFeedback,
       });
-      return {
-        ...fallback,
-        reason: data.promptFeedback?.blockReason
-          ? `gemini_blocked_${data.promptFeedback.blockReason}`
-          : "gemini_empty_response",
-      };
+      const emptyReason = data.promptFeedback?.blockReason
+        ? `gemini_blocked_${data.promptFeedback.blockReason}`
+        : "gemini_empty_response";
+      await alertAiDegraded(emptyReason, model);
+      return { ...fallback, reason: emptyReason };
     }
     const parsed = parseAiReply(contentText);
     if (!parsed.reply) return fallback;
@@ -1095,7 +1100,12 @@ async function generateReply(
     return parsed;
   } catch (error) {
     console.error("[agent-webhook] AI failure", error);
-    return fallback;
+    await alertAiDegraded(
+      "gemini_exception",
+      "unknown",
+      error instanceof Error ? error.message : String(error),
+    );
+    return { ...fallback, reason: "gemini_exception" };
   }
 }
 
@@ -1281,6 +1291,53 @@ async function sendTelegramAlert(params: {
     return { sent: true };
   } catch {
     return { sent: false, reason: "network_error" };
+  }
+}
+
+async function alertAiDegraded(reason: string, model: string, detail?: string) {
+  // Skip the generic default reason; every other reason means the Gemini call
+  // itself failed and customers are getting scripted fallback replies instead
+  // of real AI responses.
+  if (reason === "ai_fallback_used") return;
+  try {
+    // Use the Workers Cache API as a lightweight cooldown so a sustained
+    // outage doesn't flood Telegram with one alert per customer message.
+    const cache = (caches as unknown as { default: Cache }).default;
+    const cooldownKey = new Request("https://internal.vch-bot/gemini-alert-cooldown");
+    const alreadyAlerted = await cache.match(cooldownKey);
+    if (alreadyAlerted) return;
+    await cache.put(
+      cooldownKey,
+      new Response("1", { headers: { "Cache-Control": "max-age=900" } }),
+    );
+  } catch (cacheError) {
+    console.error("[agent-webhook] AI-degraded alert cooldown check failed", cacheError);
+  }
+  const token = getRuntimeEnv("TELEGRAM_BOT_TOKEN");
+  const chatId = getRuntimeEnv("TELEGRAM_CHAT_ID");
+  if (!token || !chatId) return;
+  const text =
+    `⚠️ <b>AI replies are degraded</b>\n` +
+    `<b>Reason:</b> ${escapeHtml(reason)}\n` +
+    `<b>Model:</b> ${escapeHtml(model)}\n` +
+    (detail ? `<b>Detail:</b> ${escapeHtml(detail.slice(0, 300))}\n` : "") +
+    `Customers are receiving scripted fallback replies instead of AI-generated ones. Check the GEMINI_MODEL env var and Cloudflare Functions logs.`;
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+      }),
+    });
+    if (!res.ok) {
+      console.error("[agent-webhook] AI-degraded Telegram alert failed", { status: res.status });
+    }
+  } catch (err) {
+    console.error("[agent-webhook] AI-degraded Telegram alert error", err);
   }
 }
 
