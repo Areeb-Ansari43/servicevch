@@ -257,6 +257,8 @@ describe("Menu Reset / Greeting Detection", () => {
   test("isMenuReset detects standard and informal greetings, typos, emojis and restart commands", () => {
     expect(isMenuReset("hello")).toBe(true);
     expect(isMenuReset("Hello!")).toBe(true);
+    expect(isMenuReset("hello virtual car hello")).toBe(true);
+    expect(isMenuReset("hello virtual car")).toBe(true);
     expect(isMenuReset("hi")).toBe(true);
     expect(isMenuReset("hiii")).toBe(true);
     expect(isMenuReset("helo")).toBe(true);
