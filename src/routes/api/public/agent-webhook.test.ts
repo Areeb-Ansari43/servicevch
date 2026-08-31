@@ -8,6 +8,7 @@ import {
   isOutsideUKBusinessHours,
   getWelcomeMenuText,
   simplifyVehicleName,
+  findSelectedVehicle,
   isPositiveConfirmation,
   isNegativeConfirmation,
   isMenuReset,
@@ -53,6 +54,14 @@ describe("Car Eligibility Parsing & Warnings", () => {
 
     const highPoints = parseCarEligibility("1. Yes 2. Yes 3. 7 points");
     expect(highPoints.points).toBe(7);
+  });
+
+  test("does not misparse car model names like 'Tesla Model 3' or 'MG5' as penalty points", () => {
+    const modelChoice = parseCarEligibility("Tesla Model 3");
+    expect(modelChoice.points).toBeUndefined();
+
+    const mgChoice = parseCarEligibility("MG MG5 EV");
+    expect(mgChoice.points).toBeUndefined();
   });
 });
 
@@ -209,6 +218,39 @@ describe("Fleet Availability & Model Deduplication", () => {
     const years = availableYears(fleet, unique[0]);
     expect(years).toBe("2018, 2019");
   });
+
+  test("findSelectedVehicle matches simplified vehicle names from menu selections", () => {
+    const fleet = [
+      {
+        reg: "TSL1",
+        make: "TESLA",
+        model: "MODEL 3 LONG RANGE AWD",
+        year: 2022,
+        fuel_type: "Electric",
+        status: "available",
+        next_mot_date: null,
+        pco_expiry_date: null,
+      },
+      {
+        reg: "MB1",
+        make: "MERCEDES-BENZ",
+        model: "E 220 D SE AUTO",
+        year: 2020,
+        fuel_type: "Diesel",
+        status: "available",
+        next_mot_date: null,
+        pco_expiry_date: null,
+      },
+    ];
+
+    const matchedTesla = findSelectedVehicle("Tesla Model 3", fleet);
+    expect(matchedTesla).toBeDefined();
+    expect(matchedTesla?.reg).toBe("TSL1");
+
+    const matchedBenz = findSelectedVehicle("Mercedes-Benz E220d", fleet);
+    expect(matchedBenz).toBeDefined();
+    expect(matchedBenz?.reg).toBe("MB1");
+  });
 });
 
 describe("Menu Reset / Greeting Detection", () => {
@@ -289,6 +331,8 @@ describe("Meta Phone Number Normalization", () => {
     expect(normalizeMetaPhone("447123456789@c.us")).toBe("447123456789");
     expect(normalizeMetaPhone("447123456789@s.whatsapp.net")).toBe("447123456789");
     expect(normalizeMetaPhone("07123456789@c.us")).toBe("447123456789");
+    expect(normalizeMetaPhone("meta:447123456789")).toBe("447123456789");
+    expect(normalizeMetaPhone("meta:07123456789")).toBe("447123456789");
   });
 
   test("returns null for invalid or missing phone numbers", () => {
