@@ -14,6 +14,7 @@ import {
   isOffScriptQuestion,
   applyAntiRepetition,
 } from "./agent-webhook";
+import { normalizeMetaPhone } from "@/lib/meta-whatsapp.server";
 
 describe("Car Eligibility Parsing & Warnings", () => {
   test("answers 'No' to penalty points sets points = 0 (no warning/default answer)", () => {
@@ -272,5 +273,28 @@ describe("Confirmation Response Parsing", () => {
     expect(isNegativeConfirmation("No")).toBe(true);
     expect(isNegativeConfirmation("not correct")).toBe(true);
     expect(isNegativeConfirmation("incorrect")).toBe(true);
+  });
+});
+
+describe("Meta Phone Number Normalization", () => {
+  test("converts UK 11-digit numbers starting with 0 to international 44 format", () => {
+    expect(normalizeMetaPhone("07123456789")).toBe("447123456789");
+    expect(normalizeMetaPhone("07987654321")).toBe("447987654321");
+    expect(normalizeMetaPhone("07123 456 789")).toBe("447123456789");
+  });
+
+  test("handles international E.164 and WhatsApp JID suffixes cleanly", () => {
+    expect(normalizeMetaPhone("+447123456789")).toBe("447123456789");
+    expect(normalizeMetaPhone("447123456789")).toBe("447123456789");
+    expect(normalizeMetaPhone("447123456789@c.us")).toBe("447123456789");
+    expect(normalizeMetaPhone("447123456789@s.whatsapp.net")).toBe("447123456789");
+    expect(normalizeMetaPhone("07123456789@c.us")).toBe("447123456789");
+  });
+
+  test("returns null for invalid or missing phone numbers", () => {
+    expect(normalizeMetaPhone("")).toBe(null);
+    expect(normalizeMetaPhone("12345")).toBe(null);
+    expect(normalizeMetaPhone(null)).toBe(null);
+    expect(normalizeMetaPhone(undefined)).toBe(null);
   });
 });

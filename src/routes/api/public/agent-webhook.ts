@@ -7,7 +7,7 @@ import { sendWhatsAppText, sendWhatsAppImageButtons } from "@/lib/meta-whatsapp.
 const CRM_BASE = "https://servicevch.pages.dev";
 const VCH_WEBSITE = "https://virtualcarhire.pages.dev/our-fleet";
 const WELCOME_IMAGE_URL =
-  "https://servicevch.pages.dev/whatsapp/virtual-car-hire-welcome.jpg?v=20260826-4";
+  "https://servicevch.pages.dev/whatsapp/virtual-car-hire-welcome.jpg";
 const AUTO_SURGEON_ADDRESS =
   "The Auto Surgeon, Unit 3 Squirrels Trading Estate, Viveash Close, Hayes UB3 4RZ";
 const AUTO_SURGEON_MAP =
@@ -1584,34 +1584,46 @@ export async function handleAgentWebhookRequest(request: Request) {
     !isHelp
   ) {
     const reply = getWelcomeMenuText();
-    await db
-      .from("whatsapp_leads")
-      .update({
-        status: "active",
-        ai_paused: false,
-        closed_at: null,
-        intent: null,
-        car_enquiry_data: {},
-        accident_data: {},
-        breakdown_data: {},
-        ai_summary: reply,
-        last_message_at: new Date().toISOString(),
-      } as never)
-      .eq("id", leadId);
-    await insertWithSessionFallback(db, "messages", {
-      user_id: userId,
-      lead_id: leadId,
-      sender: "ai_agent",
-      content: reply,
-      session_id: sessionId,
-    });
     const outbound = await sendWelcomeMenu(phone ?? chatId);
+    if (outbound.sent) {
+      await insertWithSessionFallback(db, "messages", {
+        user_id: userId,
+        lead_id: leadId,
+        sender: "ai_agent",
+        content: reply,
+        session_id: sessionId,
+      });
+      await db
+        .from("whatsapp_leads")
+        .update({
+          status: "active",
+          ai_paused: false,
+          closed_at: null,
+          intent: null,
+          car_enquiry_data: {},
+          accident_data: {},
+          breakdown_data: {},
+          ai_summary: reply,
+          last_message_at: new Date().toISOString(),
+        } as never)
+        .eq("id", leadId);
+    } else {
+      await db
+        .from("whatsapp_leads")
+        .update({
+          status: "needs_human",
+          ai_paused: true,
+          ai_summary: `⚠️ Outbound WhatsApp menu delivery failed: ${outbound.reason}`,
+          last_message_at: new Date().toISOString(),
+        } as never)
+        .eq("id", leadId);
+    }
     const telegram_alert = outbound.sent
       ? { sent: false, reason: "not_needed" }
       : await sendTelegramAlert({
           name: leadName,
           phone,
-          reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`,
+          reason: `WhatsApp Cloud API menu delivery failed: ${outbound.reason}`,
           leadId,
           history,
           mediaUrl,
@@ -1620,7 +1632,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     return json({
       ok: true,
       lead_id: leadId,
-      reply: reply,
+      reply: outbound.sent ? reply : null,
       welcome_menu: outbound.sent,
       needs_human: !outbound.sent,
       telegram_alert,
@@ -1630,34 +1642,46 @@ export async function handleAgentWebhookRequest(request: Request) {
 
   if (isMenuReset(content)) {
     const reply = getWelcomeMenuText();
-    await db
-      .from("whatsapp_leads")
-      .update({
-        status: "active",
-        ai_paused: false,
-        closed_at: null,
-        intent: null,
-        car_enquiry_data: {},
-        accident_data: {},
-        breakdown_data: {},
-        ai_summary: reply,
-        last_message_at: new Date().toISOString(),
-      } as never)
-      .eq("id", leadId);
-    await insertWithSessionFallback(db, "messages", {
-      user_id: userId,
-      lead_id: leadId,
-      sender: "ai_agent",
-      content: reply,
-      session_id: sessionId,
-    });
     const outbound = await sendWelcomeMenu(phone ?? chatId);
+    if (outbound.sent) {
+      await insertWithSessionFallback(db, "messages", {
+        user_id: userId,
+        lead_id: leadId,
+        sender: "ai_agent",
+        content: reply,
+        session_id: sessionId,
+      });
+      await db
+        .from("whatsapp_leads")
+        .update({
+          status: "active",
+          ai_paused: false,
+          closed_at: null,
+          intent: null,
+          car_enquiry_data: {},
+          accident_data: {},
+          breakdown_data: {},
+          ai_summary: reply,
+          last_message_at: new Date().toISOString(),
+        } as never)
+        .eq("id", leadId);
+    } else {
+      await db
+        .from("whatsapp_leads")
+        .update({
+          status: "needs_human",
+          ai_paused: true,
+          ai_summary: `⚠️ Outbound WhatsApp menu delivery failed: ${outbound.reason}`,
+          last_message_at: new Date().toISOString(),
+        } as never)
+        .eq("id", leadId);
+    }
     const telegram_alert = outbound.sent
       ? { sent: false, reason: "not_needed" }
       : await sendTelegramAlert({
           name: leadName,
           phone,
-          reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`,
+          reason: `WhatsApp Cloud API menu delivery failed: ${outbound.reason}`,
           leadId,
           history,
           mediaUrl,
@@ -1666,7 +1690,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     return json({
       ok: true,
       lead_id: leadId,
-      reply: reply,
+      reply: outbound.sent ? reply : null,
       welcome_menu: outbound.sent,
       needs_human: !outbound.sent,
       telegram_alert,
@@ -1676,28 +1700,32 @@ export async function handleAgentWebhookRequest(request: Request) {
 
   if (isAbusiveMessage(content)) {
     const reply = `Handoff needed.\n\n${HANDOFF_24H}`;
-    await insertWithSessionFallback(db, "messages", {
-      user_id: userId,
-      lead_id: leadId,
-      sender: "ai_agent",
-      content: reply,
-      handoff: true,
-      session_id: sessionId,
-    });
+    const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
+    if (outbound.sent) {
+      await insertWithSessionFallback(db, "messages", {
+        user_id: userId,
+        lead_id: leadId,
+        sender: "ai_agent",
+        content: reply,
+        handoff: true,
+        session_id: sessionId,
+      });
+    }
     await db
       .from("whatsapp_leads")
       .update({
         status: "needs_human",
         ai_paused: true,
-        ai_summary: reply,
+        ai_summary: outbound.sent ? reply : `⚠️ Outbound WhatsApp delivery failed: ${outbound.reason}`,
         last_message_at: new Date().toISOString(),
       } as never)
       .eq("id", leadId);
-    const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
     const alert = await sendTelegramAlert({
       name: leadName,
       phone,
-      reason: "Abusive or profane customer message detected",
+      reason: outbound.sent
+        ? "Abusive or profane customer message detected"
+        : `WhatsApp Cloud API reply failed: ${outbound.reason}`,
       leadId,
       history: [...history, { sender: "ai_agent", content: reply }],
       mediaUrl,
@@ -1706,7 +1734,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     return json({
       ok: true,
       lead_id: leadId,
-      reply,
+      reply: outbound.sent ? reply : null,
       needs_human: true,
       ai_paused: true,
       telegram_alert: alert,
@@ -2095,23 +2123,25 @@ export async function handleAgentWebhookRequest(request: Request) {
   ) {
     const customerName = content.trim();
     const reply = formatCustomerFleet((fleet ?? []) as FleetVehicle[]);
-    await db
-      .from("whatsapp_leads")
-      .update({
-        contact_name: customerName,
-        ai_summary: reply,
-        last_message_at: new Date().toISOString(),
-      } as never)
-      .eq("id", leadId);
-    await insertWithSessionFallback(db, "messages", {
-      user_id: userId,
-      lead_id: leadId,
-      sender: "ai_agent",
-      content: reply,
-      session_id: sessionId,
-    });
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
-    return json({ ok: true, lead_id: leadId, reply, outbound, needs_human: !outbound.sent });
+    if (outbound.sent) {
+      await db
+        .from("whatsapp_leads")
+        .update({
+          contact_name: customerName,
+          ai_summary: reply,
+          last_message_at: new Date().toISOString(),
+        } as never)
+        .eq("id", leadId);
+      await insertWithSessionFallback(db, "messages", {
+        user_id: userId,
+        lead_id: leadId,
+        sender: "ai_agent",
+        content: reply,
+        session_id: sessionId,
+      });
+    }
+    return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, needs_human: !outbound.sent });
   }
 
   if (
@@ -2188,24 +2218,26 @@ export async function handleAgentWebhookRequest(request: Request) {
     const reply = suppliedRegistration
       ? `Accident Support\n\nThank you, ${customerName}. I have recorded vehicle registration ${suppliedRegistration}. I am checking these details against our driver records now. If verified, I will collect the accident details next.`
       : `Accident Support\n\nThank you, ${customerName}. Please now send the vehicle registration, incident date, location, a short description of what happened, and any photos.`;
-    await db
-      .from("whatsapp_leads")
-      .update({
-        contact_name: customerName,
-        vehicle_registration: suppliedRegistration || undefined,
-        intent: "report_accident",
-        ai_summary: reply,
-        last_message_at: new Date().toISOString(),
-      } as never)
-      .eq("id", leadId);
-    await insertWithSessionFallback(db, "messages", {
-      user_id: userId,
-      lead_id: leadId,
-      sender: "ai_agent",
-      content: reply,
-      session_id: sessionId,
-    });
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
+    if (outbound.sent) {
+      await db
+        .from("whatsapp_leads")
+        .update({
+          contact_name: customerName,
+          vehicle_registration: suppliedRegistration || undefined,
+          intent: "report_accident",
+          ai_summary: reply,
+          last_message_at: new Date().toISOString(),
+        } as never)
+        .eq("id", leadId);
+      await insertWithSessionFallback(db, "messages", {
+        user_id: userId,
+        lead_id: leadId,
+        sender: "ai_agent",
+        content: reply,
+        session_id: sessionId,
+      });
+    }
     return json({
       ok: true,
       lead_id: leadId,
@@ -2936,14 +2968,17 @@ export async function handleAgentWebhookRequest(request: Request) {
     if (/^yes/i.test(answer)) {
       const summary = formatCarHandoffSummary(carEligibility, answer);
       const reply = `Thank you! Your car enquiry has been submitted.\n\n${HANDOFF_24H}`;
-      await insertWithSessionFallback(db, "messages", {
-        user_id: userId,
-        lead_id: leadId,
-        sender: "ai_agent",
-        content: reply,
-        handoff: true,
-        session_id: sessionId,
-      });
+      const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
+      if (outbound.sent) {
+        await insertWithSessionFallback(db, "messages", {
+          user_id: userId,
+          lead_id: leadId,
+          sender: "ai_agent",
+          content: reply,
+          handoff: true,
+          session_id: sessionId,
+        });
+      }
       await db
         .from("whatsapp_leads")
         .update({
@@ -2952,15 +2987,16 @@ export async function handleAgentWebhookRequest(request: Request) {
           ai_paused: true,
           closed_at: new Date().toISOString(),
           intent: leadIntent ?? "book_car",
-          ai_summary: summary,
+          ai_summary: outbound.sent ? summary : `⚠️ WhatsApp delivery failed: ${outbound.reason}`,
           last_message_at: new Date().toISOString(),
         } as never)
         .eq("id", leadId);
-      const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
       const alert = await sendTelegramAlert({
         name: leadName,
         phone,
-        reason: "🚨 Human handoff needed, please look at this",
+        reason: outbound.sent
+          ? "🚨 Human handoff needed, please look at this"
+          : `WhatsApp Cloud API reply failed: ${outbound.reason}`,
         leadId,
         history: [
           { sender: "ai_agent", content: summary },
@@ -2972,7 +3008,7 @@ export async function handleAgentWebhookRequest(request: Request) {
       return json({
         ok: true,
         lead_id: leadId,
-        reply,
+        reply: outbound.sent ? reply : null,
         needs_human: true,
         telegram_alert: alert,
         outbound,
@@ -2983,26 +3019,28 @@ export async function handleAgentWebhookRequest(request: Request) {
   if (option === 3) {
     const reply =
       "🚨 Accident Support\n\nWe are sorry to hear you have been in an accident. To begin verification, please send your full name and the vehicle registration you drive for Virtual Car Hire.";
-    await insertWithSessionFallback(db, "messages", {
-      user_id: userId,
-      lead_id: leadId,
-      sender: "ai_agent",
-      content: reply,
-      handoff: true,
-      session_id: sessionId,
-    });
-    await db
-      .from("whatsapp_leads")
-      .update({
-        status: "active",
-        ai_paused: false,
-        closed_at: null,
-        intent: "report_accident",
-        ai_summary: reply,
-        last_message_at: new Date().toISOString(),
-      } as never)
-      .eq("id", leadId);
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
+    if (outbound.sent) {
+      await insertWithSessionFallback(db, "messages", {
+        user_id: userId,
+        lead_id: leadId,
+        sender: "ai_agent",
+        content: reply,
+        handoff: true,
+        session_id: sessionId,
+      });
+      await db
+        .from("whatsapp_leads")
+        .update({
+          status: "active",
+          ai_paused: false,
+          closed_at: null,
+          intent: "report_accident",
+          ai_summary: reply,
+          last_message_at: new Date().toISOString(),
+        } as never)
+        .eq("id", leadId);
+    }
     const alert = outbound.sent
       ? { sent: false, reason: "not_needed" }
       : await sendTelegramAlert({
@@ -3026,25 +3064,27 @@ export async function handleAgentWebhookRequest(request: Request) {
 
   if (isPositiveClosure(content)) {
     const reply = `Thanks for contacting Virtual Car Hire.\n\n${HANDOFF_24H}`;
-    await insertWithSessionFallback(db, "messages", {
-      user_id: userId,
-      lead_id: leadId,
-      sender: "ai_agent",
-      content: reply,
-      session_id: sessionId,
-    });
-    const finalHistory = [...history, { sender: "ai_agent", content: reply }];
-    await db
-      .from("whatsapp_leads")
-      .update({
-        status: "closed",
-        ai_paused: true,
-        closed_at: new Date().toISOString(),
-        ai_summary: reply,
-        last_message_at: new Date().toISOString(),
-      } as never)
-      .eq("id", leadId);
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
+    if (outbound.sent) {
+      await insertWithSessionFallback(db, "messages", {
+        user_id: userId,
+        lead_id: leadId,
+        sender: "ai_agent",
+        content: reply,
+        session_id: sessionId,
+      });
+      await db
+        .from("whatsapp_leads")
+        .update({
+          status: "closed",
+          ai_paused: true,
+          closed_at: new Date().toISOString(),
+          ai_summary: reply,
+          last_message_at: new Date().toISOString(),
+        } as never)
+        .eq("id", leadId);
+    }
+    const finalHistory = [...history, { sender: "ai_agent", content: reply }];
     const alert = await sendTelegramAlert({
       name: leadName,
       phone,
@@ -3059,9 +3099,9 @@ export async function handleAgentWebhookRequest(request: Request) {
     return json({
       ok: true,
       lead_id: leadId,
-      reply,
-      closed: true,
-      needs_human: false,
+      reply: outbound.sent ? reply : null,
+      closed: outbound.sent,
+      needs_human: !outbound.sent,
       telegram_alert: alert,
       outbound,
     });
