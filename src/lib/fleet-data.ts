@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { getNextMotDate, getPcoExpiryDate } from "@/lib/vehicle-date-fields";
+import { PDF_FLEET } from "@/lib/pdf-fleet";
 
 export type Vehicle = {
   id: string;
@@ -8,7 +9,7 @@ export type Vehicle = {
   make: string;
   model: string;
   year: number;
-  fuel_type: "Petrol" | "Diesel" | "Hybrid" | "Electric";
+  fuel_type: "Petrol" | "Diesel" | "Hybrid" | "Electric" | "Plug-in-Hybrid";
   current_mileage: number;
   status: "Active" | "In Service" | "Rented" | "Off Road";
   next_service_date: string;
@@ -77,7 +78,15 @@ const vFromRow = (r: any): Vehicle => ({
   make: r.make,
   model: r.model,
   year: r.year ?? new Date().getFullYear(),
-  fuel_type: (r.fuel_type ?? "Diesel") as Vehicle["fuel_type"],
+  fuel_type: (r.fuel_type ??
+    PDF_FLEET.find(
+      (vehicle) =>
+        vehicle.registration ===
+        String(r.reg ?? "")
+          .replace(/\s+/g, "")
+          .toUpperCase(),
+    )?.fuelType ??
+    "Diesel") as Vehicle["fuel_type"],
   current_mileage: r.current_mileage ?? 0,
   status: statusFromDb(r.status ?? "available"),
   next_service_date: r.next_service_date ?? "",
