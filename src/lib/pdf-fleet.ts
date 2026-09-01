@@ -47,6 +47,10 @@ export const PDF_FLEET: PdfFleetVehicle[] = [
   { registration: "WR16UED", displayName: "Mercedes-Benz Vito", fuelType: "Diesel", year: 2016 },
   { registration: "WR19UFG", displayName: "Mercedes-Benz Vito", fuelType: "Diesel", year: 2019 },
 
+  // Mercedes V-Class (2)
+  { registration: "LN72XWA", displayName: "Mercedes-Benz V-Class", fuelType: "Diesel", year: 2022 },
+  { registration: "LN72XWB", displayName: "Mercedes-Benz V-Class", fuelType: "Diesel", year: 2022 },
+
   // Toyota Corolla (6)
   { registration: "KF19UCJ", displayName: "Toyota Corolla", fuelType: "Petrol", year: 2019 },
   { registration: "KF19UCM", displayName: "Toyota Corolla", fuelType: "Petrol", year: 2019 },
