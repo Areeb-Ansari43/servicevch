@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { useFleetData, type Vehicle, type ServiceRecord, type DriverTrack } from "@/lib/fleet-data";
-import { simplifyVehicleName } from "@/routes/api/public/agent-webhook";
+import { simplifyVehicleName, vehicleArtworkPath } from "@/lib/vehicle-display";
 import { exportServiceHistoryPdf } from "@/lib/pdf-export";
 import { useLeadsData } from "@/lib/leads-data";
 import { ApexAssistant } from "@/components/apex-assistant";
@@ -1023,7 +1023,9 @@ function Sidebar({
             />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-bold leading-tight text-white">Virtual Car Hire</div>
+            <div className="truncate text-sm font-bold leading-tight text-white">
+              Virtual Car Hire
+            </div>
             <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8b95a8]">
               Fleet Tracker
             </div>
@@ -1224,7 +1226,7 @@ function GlobalSearch({
           .filter((v) => `${v.registration} ${v.make} ${v.model}`.toLowerCase().includes(q))
           .slice(0, 5)
           .map((v) => ({
-            label: `${v.make} ${v.model}`,
+            label: simplifyVehicleName(v),
             meta: v.registration,
             searchKey: v.registration,
             view: "vehicles" as View,
@@ -1453,9 +1455,9 @@ function Dashboard({
               >
                 <UKPlate reg={d.registration} size="sm" />
                 <div className="flex-1 text-sm">
-                  <span className="font-bold text-[#ff8a3d]">Please update driver mileage:</span> Ask{" "}
-                  <span className="font-bold">{d.driver_name}</span> to send a photo of the current
-                  mileage for <span className="font-semibold">{d.registration}</span>.
+                  <span className="font-bold text-[#ff8a3d]">Please update driver mileage:</span>{" "}
+                  Ask <span className="font-bold">{d.driver_name}</span> to send a photo of the
+                  current mileage for <span className="font-semibold">{d.registration}</span>.
                   <div className="text-xs text-[#8b95a8]">
                     Due {dueDate.toLocaleDateString("en-GB")} · Dismisses when you log End of Month
                     mileage
@@ -1470,7 +1472,11 @@ function Dashboard({
                         : "bg-red-500/20 text-red-300"
                   }`}
                 >
-                  {days < 0 ? `${Math.abs(days)}d overdue` : days === 1 ? "Due tomorrow" : "Due today"}
+                  {days < 0
+                    ? `${Math.abs(days)}d overdue`
+                    : days === 1
+                      ? "Due tomorrow"
+                      : "Due today"}
                 </span>
               </button>
             ))}
@@ -1503,7 +1509,7 @@ function Dashboard({
                 <UKPlate reg={v.registration} size="sm" />
                 <div className="flex-1 text-sm">
                   <span className="font-bold">{type}</span> {days < 0 ? "expired" : "expiring"} for{" "}
-                  {v.make} {v.model}
+                  {simplifyVehicleName(v)}
                   <div className="text-xs text-[#8b95a8]">
                     {new Date(date).toLocaleDateString("en-GB")}
                   </div>
@@ -1887,29 +1893,7 @@ function LineChart({ data, height }: { data: [string, number][]; height: number 
 
 /* ---------------- Vehicles ---------------- */
 function vehicleArtwork(vehicle: Vehicle) {
-  const model = `${vehicle.make} ${vehicle.model}`.toLowerCase().replace(/[-_]/g, " ");
-  if (model.includes("mercedes") && model.includes("vito"))
-    return "/vehicle-artwork/mercedes-vito-transparent.png";
-  if (model.includes("mercedes") && model.includes("eqe"))
-    return "/vehicle-artwork/mercedes-eqe-transparent.png";
-  if (model.includes("mercedes") && /(^|[^0-9])(e\s*300|e\s*220|e300|e220)([^0-9]|$)/.test(model))
-    return "/vehicle-artwork/mercedes-eclass-transparent.png";
-  if (model.includes("ford") && (model.includes("tourneo") || model.includes("custom")))
-    return "/vehicle-artwork/ford-tourneo-custom-transparent.png";
-  if (model.includes("hyundai") && model.includes("ioniq"))
-    return "/vehicle-artwork/hyundai-ioniq-transparent.png";
-  if (model.includes("jaguar") && model.includes("pace"))
-    return "/vehicle-artwork/jaguar-ipace-transparent.png";
-  if (model.includes("mg") && model.includes("5")) return "/vehicle-artwork/mg5-ev-transparent.png";
-  if (model.includes("tesla") && (model.includes("model 3") || model.includes("model3")))
-    return "/vehicle-artwork/tesla-model3-transparent.png";
-  if (model.includes("toyota") && model.includes("auris"))
-    return "/vehicle-artwork/toyota-auris-estate-transparent.png";
-  if (model.includes("toyota") && model.includes("corolla"))
-    return "/vehicle-artwork/toyota-corolla-estate-transparent.png";
-  if (model.includes("toyota") && model.includes("prius"))
-    return "/vehicle-artwork/toyota-prius-transparent.png";
-  return null;
+  return vehicleArtworkPath(vehicle);
 }
 
 function VehiclesList({
@@ -1924,7 +1908,9 @@ function VehiclesList({
   onOpen: (v: Vehicle) => void;
 }) {
   const [q, setQ] = useState(() =>
-    typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("q") ?? "" : "",
+    typeof window !== "undefined"
+      ? (new URLSearchParams(window.location.search).get("q") ?? "")
+      : "",
   );
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const filtered = vehicles.filter((v) => {
@@ -2034,14 +2020,14 @@ function VehiclesList({
                   <StatusBadge status={v.status} />
                 </div>
                 {(() => {
-                  const simp = simplifyVehicleName(v.make, v.model);
+                  const simp = simplifyVehicleName(v);
                   return (
                     <button
                       onClick={() => onOpen(v)}
                       className="relative z-10 block max-w-[82%] text-left"
                     >
                       <div className="line-clamp-2 text-lg font-extrabold uppercase leading-[1.08] tracking-tight text-[#f3f5f8] sm:text-xl">
-                        {simp.make} {simp.model}
+                        {simp}
                       </div>
                     </button>
                   );
@@ -2621,7 +2607,7 @@ function RegSearch({
             >
               <UKPlate reg={v.registration} size="sm" />
               <div className="flex-1 truncate">
-                <div className="text-sm font-semibold">{v.make}</div>
+                <div className="text-sm font-semibold">{simplifyVehicleName(v)}</div>
                 <div className="text-xs text-[#8b95a8]">
                   {v.model} · {v.year}
                 </div>
@@ -2700,7 +2686,7 @@ function LogService({
           >
             <UKPlate reg={selected.registration} size="sm" />
             <div className="text-sm">
-              <span className="font-semibold">{selected.make}</span> {selected.model} ·{" "}
+              <span className="font-semibold">{simplifyVehicleName(selected)}</span> ·{" "}
               {selected.year}
             </div>
           </div>
@@ -2802,7 +2788,9 @@ function ServicesList({
   onDelete: (id: string) => void;
 }) {
   const [q, setQ] = useState(() =>
-    typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("q") ?? "" : "",
+    typeof window !== "undefined"
+      ? (new URLSearchParams(window.location.search).get("q") ?? "")
+      : "",
   );
   const [category, setCategory] = useState<ServiceCategory | "All">("All");
   const [selected, setSelected] = useState<ServiceRecord | null>(null);
@@ -3069,7 +3057,9 @@ function DriversView({
   toast: (m: string, t?: Toast["type"]) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState(() =>
-    typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("q") ?? "" : "",
+    typeof window !== "undefined"
+      ? (new URLSearchParams(window.location.search).get("q") ?? "")
+      : "",
   );
   const [statusFilter, setStatusFilter] = useState("all");
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -3160,9 +3150,7 @@ function DriversView({
           <div className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
             Pending Action
           </div>
-          <div className="mt-1 text-2xl font-extrabold text-amber-300">
-            {pendingActionDrivers}
-          </div>
+          <div className="mt-1 text-2xl font-extrabold text-amber-300">{pendingActionDrivers}</div>
         </div>
       </div>
 
@@ -3227,10 +3215,7 @@ function DriversView({
                     .slice(0, 2)
                     .toUpperCase();
                   return (
-                    <tr
-                      key={driver.id}
-                      className="transition-colors hover:bg-white/[0.04]"
-                    >
+                    <tr key={driver.id} className="transition-colors hover:bg-white/[0.04]">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2.5">
                           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#ff6a00] to-[#ff9d4d] text-xs font-bold text-white shadow-sm">
@@ -3249,12 +3234,9 @@ function DriversView({
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          <UKPlate
-                            reg={vehicle?.registration ?? driver.registration}
-                            size="sm"
-                          />
+                          <UKPlate reg={vehicle?.registration ?? driver.registration} size="sm" />
                           <span className="text-xs text-[#aeb8c9]">
-                            {vehicle ? `${vehicle.make} ${vehicle.model}` : "Unassigned"}
+                            {vehicle ? simplifyVehicleName(vehicle) : "Unassigned"}
                           </span>
                         </div>
                       </td>
@@ -3428,7 +3410,7 @@ function AddDriverModal({
               placeholder="Choose a vehicle…"
               options={vehicles.map((v) => ({
                 value: v.id,
-                label: `${v.registration} — ${v.make} ${v.model}`,
+                label: `${v.registration} — ${simplifyVehicleName(v)}`,
               }))}
             />
           </Field>
@@ -3535,11 +3517,7 @@ function EditDriverModal({
             />
           </Field>
           <Field label="Phone Number">
-            <input
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className={inputCls}
-            />
+            <input value={phone} onChange={(e) => setPhone(e.target.value)} className={inputCls} />
           </Field>
           <Field label="Linked Vehicle">
             <DarkSelect
@@ -3547,7 +3525,7 @@ function EditDriverModal({
               onChange={setVehicleId}
               options={vehicles.map((v) => ({
                 value: v.id,
-                label: `${v.registration} — ${v.make} ${v.model}`,
+                label: `${v.registration} — ${simplifyVehicleName(v)}`,
               }))}
             />
           </Field>
@@ -3675,7 +3653,7 @@ function DriverPreviewModal({
             <p className="text-sm text-[#aeb8c9]">{driver.phone || "No phone saved"}</p>
             <p className="mt-1 text-xs text-[#7f8aa0]">
               {vehicle
-                ? `${vehicle.make} ${vehicle.model} · ${vehicle.registration}`
+                ? `${simplifyVehicleName(vehicle)} · ${vehicle.registration}`
                 : driver.registration}
             </p>
           </div>
