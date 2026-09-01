@@ -987,6 +987,7 @@ async function generateReply(
     "Treat only vehicles marked available/active/in stock as available; rented, assigned, in-service and off-road vehicles are unavailable. " +
     "If the customer asks for a car, wants to hire/rent, asks what is available, or uses any natural wording with the same meaning, treat it as a car enquiry and show all currently available vehicles from the supplied fleet, grouped clearly under Electric, Plug-in-Hybrid, Petrol where possible. If the conversation already contains the complete available-fleet list and the customer names a vehicle, respond with that vehicle's complete contract details: contract length, mileage allowance, weekly rate, and inclusions, then ask for Yes or No confirmation. If the requested car is unavailable, explicitly say so and suggest alternatives under exactly these headings: Electric, Plug-in-Hybrid, Petrol. Do not repeat the full fleet list when the customer has selected a vehicle. " +
     "If you cannot safely answer, the AI service fails, or you become stuck, set needs_human true; otherwise keep needs_human false. For an accident report, gather the details for the CRM accident workflow instead of handing off immediately. " +
+    "If the customer asks to negotiate, lower, or change the price, weekly rate, mileage allowance, or contract terms in any way (e.g. 'can I get it cheaper', 'more miles please', 'any discount'), do not agree to or discuss any change yourself. Politely explain that pricing and mileage are not something you're able to adjust and that a member of the team will discuss it with them directly, then ask if they'd still like to confirm their current selection so you can pass it on. " +
     'Respond ONLY as JSON: {"reply": string, "needs_human": boolean, "reason": string, "asks_closure": boolean}. ' +
     "Set asks_closure true when the reply contains that exact question.\n\n" +
     formatFleet(fleet);
@@ -1714,6 +1715,20 @@ export async function handleAgentWebhookRequest(request: Request) {
   if (isMenuReset(content)) {
     const reply = getWelcomeMenuText();
     const outbound = await sendWelcomeMenu(phone ?? chatId);
+    if (!isNewLead && !closed) {
+      // A genuinely new lead already triggered the "New conversation started"
+      // alert earlier in this function; this covers an existing, still-open
+      // customer saying hi/menu/etc. to restart, so the team knows they're back.
+      sendTelegramAlert({
+        name: leadName,
+        phone: phone ?? chatId,
+        reason: `🔁 Existing Customer Texted: ${leadName} (${displayPhone(phone ?? chatId)})`,
+        leadId,
+        history,
+        mediaUrl,
+        closed: false,
+      }).catch(() => {});
+    }
     if (outbound.sent) {
       await insertWithSessionFallback(db, "messages", {
         user_id: userId,
@@ -3134,6 +3149,8 @@ export async function handleAgentWebhookRequest(request: Request) {
   }
 
   if (isPositiveClosure(content)) {
+    const lastAgentTurn = [...history].reverse().find((turn) => turn.sender === "ai_agent");
+    const confirmedSummary = lastAgentTurn?.content?.trim() || "";
     const reply = `Thanks for contacting Virtual Car Hire.\n\n${HANDOFF_24H}`;
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
     if (outbound.sent) {
@@ -3150,7 +3167,7 @@ export async function handleAgentWebhookRequest(request: Request) {
           status: "closed",
           ai_paused: true,
           closed_at: new Date().toISOString(),
-          ai_summary: reply,
+          ai_summary: confirmedSummary || reply,
           last_message_at: new Date().toISOString(),
         } as never)
         .eq("id", leadId);
@@ -3160,7 +3177,7 @@ export async function handleAgentWebhookRequest(request: Request) {
       name: leadName,
       phone,
       reason: outbound.sent
-        ? "Customer confirmed closure"
+        ? `✅ Customer confirmed:\n${confirmedSummary || "(no prior AI summary available)"}`
         : `WhatsApp Cloud API reply failed: ${outbound.reason}`,
       leadId,
       history: finalHistory,
