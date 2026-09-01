@@ -77,7 +77,16 @@ const vFromRow = (r: any): Vehicle => ({
   registration: r.reg,
   make: r.make,
   model: r.model,
-  year: r.year ?? new Date().getFullYear(),
+  year:
+    r.year ??
+    PDF_FLEET.find(
+      (vehicle) =>
+        vehicle.registration ===
+        String(r.reg ?? "")
+          .replace(/\s+/g, "")
+          .toUpperCase(),
+    )?.year ??
+    new Date().getFullYear(),
   fuel_type: (r.fuel_type ??
     PDF_FLEET.find(
       (vehicle) =>
