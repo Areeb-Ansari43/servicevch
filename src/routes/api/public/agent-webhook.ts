@@ -48,9 +48,9 @@ const WEBSITE_CATALOG = [
   {
     make: "Ford",
     model: "Tourneo Custom",
-    fuel: "Plug-in-Hybrid",
+    fuel: "Electric",
     price: "£410/week",
-    year: "2021–24",
+    year: "2025",
   },
   {
     make: "MG",
@@ -894,7 +894,8 @@ function formatVehicleDetails(vehicle: FleetVehicle): string {
       ? `£${vehicle.weekly_price}/week`
       : (catalog?.price ?? "Price to confirm");
   const year = vehicle.year ?? catalog?.year ?? "Year to confirm";
-  return `Thank you for choosing the ${simplified.make} ${simplified.model}.\n\nVehicle: ${simplified.make} ${simplified.model}\nYear: ${year}\nFuel category: ${catalog?.fuel ?? fuelCategory(vehicle.fuel_type)}\nContract length: Minimum ${contractWeeks(vehicle)} weeks\nMileage allowance: ${mileageAllowance(vehicle).toLocaleString("en-GB")} miles per month\nWeekly rate: ${price}\nIncluded: PCO license, car service fully done, insurance and maintenance\n\nAre you happy to proceed with these terms? Reply Yes to proceed or No.`;
+  const fuelType = vehicle.fuel_type ?? catalog?.fuel ?? fuelCategory(vehicle.fuel_type);
+  return `Thank you for choosing the ${simplified.make} ${simplified.model}.\n\nVehicle: ${simplified.make} ${simplified.model}\nYear: ${year}\nFuel type: ${fuelType}\nRent: ${price}\nMonthly Mileage: ${mileageAllowance(vehicle).toLocaleString("en-GB")} miles\nDeposit: £500.00\nMinimum term: ${contractWeeks(vehicle)} weeks\nIncluded: PCO license, car service fully done, insurance and maintenance\n\nAre you happy to proceed with these terms? Reply Yes to proceed or No.`;
 }
 
 function formatFleet(fleet: FleetVehicle[]): string {
