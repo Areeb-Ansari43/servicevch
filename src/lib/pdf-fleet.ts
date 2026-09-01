@@ -7,6 +7,7 @@ export type PdfFleetVehicle = {
 };
 
 export const PDF_FLEET: PdfFleetVehicle[] = [
+  // Mercedes EQE (7)
   { registration: "KN73XLB", displayName: "Mercedes-Benz EQE", fuelType: "Electric", year: 2023 },
   { registration: "KN73XLA", displayName: "Mercedes-Benz EQE", fuelType: "Electric", year: 2023 },
   { registration: "KU73MVW", displayName: "Mercedes-Benz EQE", fuelType: "Electric", year: 2023 },
@@ -14,28 +15,17 @@ export const PDF_FLEET: PdfFleetVehicle[] = [
   { registration: "WG74KFJ", displayName: "Mercedes-Benz EQE", fuelType: "Electric", year: 2024 },
   { registration: "KR74WDL", displayName: "Mercedes-Benz EQE", fuelType: "Electric", year: 2024 },
   { registration: "EN73UBZ", displayName: "Mercedes-Benz EQE", fuelType: "Electric", year: 2023 },
-  {
-    registration: "WN20NKU",
-    displayName: "Mercedes-Benz E300",
-    fuelType: "Plug-in-Hybrid",
-    year: 2020,
-  },
-  {
-    registration: "BD20XPU",
-    displayName: "Mercedes-Benz E300",
-    fuelType: "Plug-in-Hybrid",
-    year: 2020,
-  },
-  {
-    registration: "GY69NWL",
-    displayName: "Mercedes-Benz E300",
-    fuelType: "Plug-in-Hybrid",
-    year: 2019,
-  },
+
+  // Mercedes E300 (3)
+  { registration: "WN20NKU", displayName: "Mercedes-Benz E300", fuelType: "Plug-in-Hybrid", year: 2020 },
+  { registration: "BD20XPU", displayName: "Mercedes-Benz E300", fuelType: "Plug-in-Hybrid", year: 2020 },
+  { registration: "GY69NWL", displayName: "Mercedes-Benz E300", fuelType: "Plug-in-Hybrid", year: 2019 },
+
+  // Mercedes E220D (16)
   { registration: "KT68VYM", displayName: "Mercedes-Benz E220D", fuelType: "Diesel", year: 2018 },
   { registration: "FX19FXC", displayName: "Mercedes-Benz E220D", fuelType: "Diesel", year: 2019 },
   { registration: "CA19UTF", displayName: "Mercedes-Benz E220D", fuelType: "Diesel", year: 2019 },
-  { registration: "OWN19XNX", displayName: "Mercedes-Benz E220D", fuelType: "Diesel", year: 2019 },
+  { registration: "OW19XNX", displayName: "Mercedes-Benz E220D", fuelType: "Diesel", year: 2019 },
   { registration: "BX19ZMY", displayName: "Mercedes-Benz E220D", fuelType: "Diesel", year: 2019 },
   { registration: "BU19ACJ", displayName: "Mercedes-Benz E220D", fuelType: "Diesel", year: 2019 },
   { registration: "WD19SNN", displayName: "Mercedes-Benz E220D", fuelType: "Diesel", year: 2019 },
@@ -48,25 +38,35 @@ export const PDF_FLEET: PdfFleetVehicle[] = [
   { registration: "AK69CKJ", displayName: "Mercedes-Benz E220D", fuelType: "Diesel", year: 2019 },
   { registration: "BL19JDZ", displayName: "Mercedes-Benz E220D", fuelType: "Diesel", year: 2019 },
   { registration: "PO18UTT", displayName: "Mercedes-Benz E220D", fuelType: "Diesel", year: 2018 },
+
+  // Mercedes Vito (6)
   { registration: "BN17CVA", displayName: "Mercedes-Benz Vito", fuelType: "Diesel", year: 2017 },
   { registration: "KO18HKE", displayName: "Mercedes-Benz Vito", fuelType: "Diesel", year: 2018 },
   { registration: "KT18ATF", displayName: "Mercedes-Benz Vito", fuelType: "Diesel", year: 2018 },
   { registration: "KW18TMV", displayName: "Mercedes-Benz Vito", fuelType: "Diesel", year: 2018 },
   { registration: "WR16UED", displayName: "Mercedes-Benz Vito", fuelType: "Diesel", year: 2016 },
   { registration: "WR19UFG", displayName: "Mercedes-Benz Vito", fuelType: "Diesel", year: 2019 },
+
+  // Toyota Corolla (6)
   { registration: "KF19UCJ", displayName: "Toyota Corolla", fuelType: "Petrol", year: 2019 },
   { registration: "KF19UCM", displayName: "Toyota Corolla", fuelType: "Petrol", year: 2019 },
   { registration: "KF19UCN", displayName: "Toyota Corolla", fuelType: "Petrol", year: 2019 },
   { registration: "LT69GSY", displayName: "Toyota Corolla", fuelType: "Petrol", year: 2019 },
   { registration: "LT69GSZ", displayName: "Toyota Corolla", fuelType: "Petrol", year: 2019 },
   { registration: "LT69GTU", displayName: "Toyota Corolla", fuelType: "Petrol", year: 2019 },
+
+  // Toyota Auris Estate (6)
   { registration: "LL68CRZ", displayName: "Toyota Auris Estate", fuelType: "Hybrid", year: 2018 },
   { registration: "LM68KRD", displayName: "Toyota Auris Estate", fuelType: "Hybrid", year: 2018 },
   { registration: "LM68KRG", displayName: "Toyota Auris Estate", fuelType: "Hybrid", year: 2018 },
   { registration: "LM68KRJ", displayName: "Toyota Auris Estate", fuelType: "Hybrid", year: 2018 },
   { registration: "LM68KRO", displayName: "Toyota Auris Estate", fuelType: "Hybrid", year: 2019 },
   { registration: "LM68KRU", displayName: "Toyota Auris Estate", fuelType: "Hybrid", year: 2018 },
+
+  // Toyota Prius (1)
   { registration: "LR16VTY", displayName: "Toyota Prius", fuelType: "Hybrid", year: 2016 },
+
+  // Tesla Model 3 (11)
   { registration: "AF70MWK", displayName: "Tesla Model 3", fuelType: "Electric", year: 2020 },
   { registration: "BJ20LGX", displayName: "Tesla Model 3", fuelType: "Electric", year: 2020 },
   { registration: "MJ69YPN", displayName: "Tesla Model 3", fuelType: "Electric", year: 2019 },
@@ -78,8 +78,12 @@ export const PDF_FLEET: PdfFleetVehicle[] = [
   { registration: "LD20COJ", displayName: "Tesla Model 3", fuelType: "Electric", year: 2020 },
   { registration: "LD20FCE", displayName: "Tesla Model 3", fuelType: "Electric", year: 2020 },
   { registration: "WN20EJA", displayName: "Tesla Model 3", fuelType: "Electric", year: 2020 },
+
+  // Jaguar I-Pace (2)
   { registration: "BN20XMX", displayName: "Jaguar I-Pace", fuelType: "Electric", year: 2020 },
   { registration: "GX70UBD", displayName: "Jaguar I-Pace", fuelType: "Electric", year: 2020 },
+
+  // Hyundai Ioniq (8)
   { registration: "EF70ZPZ", displayName: "Hyundai Ioniq", fuelType: "Plug-in-Hybrid", year: 2020 },
   { registration: "EF70ZPY", displayName: "Hyundai Ioniq", fuelType: "Plug-in-Hybrid", year: 2020 },
   { registration: "EF70ZVM", displayName: "Hyundai Ioniq", fuelType: "Plug-in-Hybrid", year: 2020 },
@@ -88,14 +92,19 @@ export const PDF_FLEET: PdfFleetVehicle[] = [
   { registration: "GU72DVP", displayName: "Hyundai Ioniq", fuelType: "Plug-in-Hybrid", year: 2022 },
   { registration: "FL70EUV", displayName: "Hyundai Ioniq", fuelType: "Plug-in-Hybrid", year: 2020 },
   { registration: "EK70BKJ", displayName: "Hyundai Ioniq", fuelType: "Plug-in-Hybrid", year: 2020 },
+
+  // MG 5 EV (9)
   { registration: "YC72HZM", displayName: "MG 5 EV", fuelType: "Electric", year: 2022 },
   { registration: "YF22UVZ", displayName: "MG 5 EV", fuelType: "Electric", year: 2022 },
   { registration: "YF22UWK", displayName: "MG 5 EV", fuelType: "Electric", year: 2022 },
   { registration: "YF22UWM", displayName: "MG 5 EV", fuelType: "Electric", year: 2022 },
   { registration: "YF22UWT", displayName: "MG 5 EV", fuelType: "Electric", year: 2022 },
+  { registration: "YF22UWA", displayName: "MG 5 EV", fuelType: "Electric", year: 2022 },
   { registration: "YF22UXC", displayName: "MG 5 EV", fuelType: "Electric", year: 2022 },
   { registration: "YF22UXY", displayName: "MG 5 EV", fuelType: "Electric", year: 2022 },
   { registration: "YG71LCZ", displayName: "MG 5 EV", fuelType: "Electric", year: 2021 },
+
+  // Ford Tourneo Custom (3)
   { registration: "MD25AYY", displayName: "Ford Tourneo Custom", fuelType: "Electric", year: 2025 },
   { registration: "MD25DDZ", displayName: "Ford Tourneo Custom", fuelType: "Electric", year: 2025 },
   { registration: "RX25CME", displayName: "Ford Tourneo Custom", fuelType: "Electric", year: 2025 },

@@ -1220,10 +1220,15 @@ function GlobalSearch({
   const navigate = useNavigate();
   const q = query.trim().toLowerCase();
 
+  const cleanQ = q.replace(/[^a-z0-9]/g, "");
   const results = q
     ? [
         ...vehicles
-          .filter((v) => `${v.registration} ${v.make} ${v.model}`.toLowerCase().includes(q))
+          .filter((v) => {
+            const rawText = `${v.registration} ${v.make} ${v.model}`.toLowerCase();
+            const cleanText = rawText.replace(/[^a-z0-9]/g, "");
+            return rawText.includes(q) || (cleanQ.length > 0 && cleanText.includes(cleanQ));
+          })
           .slice(0, 5)
           .map((v) => ({
             label: simplifyVehicleName(v),
@@ -1294,7 +1299,7 @@ function GlobalSearch({
   return (
     <div className="relative min-w-0 flex-1">
       <div
-        className="flex items-center gap-2 rounded-xl border px-3 py-2 transition-colors focus-within:border-[#ff6a00]/40"
+        className="flex items-center gap-2 rounded-xl border border-t-0 px-3 py-2 transition-colors focus-within:border-[#ff6a00]/40"
         style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.025)" }}
       >
         <Icon.Search className="h-4 w-4 shrink-0 text-[#8b95a8]" />
@@ -1914,9 +1919,13 @@ function VehiclesList({
   );
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const filtered = vehicles.filter((v) => {
-    const matchQ = [v.registration, v.make, v.model].some((s) =>
-      s.toLowerCase().includes(q.toLowerCase()),
-    );
+    const rawQ = q.trim().toLowerCase();
+    const cleanQ = rawQ.replace(/[^a-z0-9]/g, "");
+    const matchQ = [v.registration, v.make, v.model].some((s) => {
+      const rawS = (s ?? "").toLowerCase();
+      const cleanS = rawS.replace(/[^a-z0-9]/g, "");
+      return rawS.includes(rawQ) || (cleanQ.length > 0 && cleanS.includes(cleanQ));
+    });
     const matchS = statusFilter === "all" || v.status === statusFilter;
     return matchQ && matchS;
   });
