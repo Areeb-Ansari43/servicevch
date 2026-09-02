@@ -895,7 +895,7 @@ function formatVehicleDetails(vehicle: FleetVehicle): string {
       : (catalog?.price ?? "Price to confirm");
   const year = vehicle.year ?? catalog?.year ?? "Year to confirm";
   const fuelType = vehicle.fuel_type ?? catalog?.fuel ?? fuelCategory(vehicle.fuel_type);
-  return `Thank you for choosing the ${simplified.make} ${simplified.model}.\n\nVehicle: ${simplified.make} ${simplified.model}\nYear: ${year}\nFuel type: ${fuelType}\nRent: ${price}\nMonthly Mileage: ${mileageAllowance(vehicle).toLocaleString("en-GB")} miles\nDeposit: £500.00\nMinimum term: ${contractWeeks(vehicle)} weeks\nIncluded: PCO license, car service fully done, insurance and maintenance\n\nAre you happy to proceed with these terms? Reply Yes to proceed or No.`;
+  return `Thank you for choosing the ${simplified.make} ${simplified.model}.\n\nVehicle: ${simplified.make} ${simplified.model}\nWeekly rent: ${price}\nYear: ${year}\nMonthly mileage: ${mileageAllowance(vehicle).toLocaleString("en-GB")} miles\nFuel type: ${catalog?.fuel ?? fuelCategory(vehicle.fuel_type)}\nMinimum term: ${contractWeeks(vehicle)} weeks\nIncluded: PCO license, car service fully done, insurance and maintenance\n\nAre you happy to proceed with these terms? Reply Yes to proceed or No.`;
 }
 
 function formatFleet(fleet: FleetVehicle[]): string {
@@ -910,7 +910,20 @@ function formatFleet(fleet: FleetVehicle[]): string {
       .join(", ");
     return `${category}: ${cars || "none currently available"}`;
   });
-  return `Available vehicle choices (${available.length} unique make/model options; rented, in-service and off-road vehicles excluded):\n${grouped.join("\n")}\nOnly provide price, mileage allowance, contract length, and inclusions after the customer selects a vehicle.`;
+  const terms = available
+    .map((vehicle) => {
+      const simplified = simplifyVehicleName(vehicle.make, vehicle.model);
+      const catalog = websiteMatch(vehicle);
+      const price =
+        vehicle.weekly_price != null
+          ? `£${vehicle.weekly_price}/week`
+          : (catalog?.price ?? "price to confirm");
+      const mileage = mileageAllowance(vehicle);
+      const term = contractWeeks(vehicle);
+      return `${simplified.make} ${simplified.model}: ${price}, ${mileage.toLocaleString("en-GB")} miles/month, ${term}-week minimum term`;
+    })
+    .join("\n");
+  return `Available vehicle choices (${available.length} unique make/model options; rented, in-service and off-road vehicles excluded):\n${grouped.join("\n")}\n\nReal terms per vehicle (use these exact figures, never invent your own):\n${terms}\n\nOnly provide weekly rent, year, monthly mileage, fuel type, and minimum term after the customer selects a vehicle, using the exact figures above.`;
 }
 
 async function sendWelcomeMenu(phone: unknown, date = new Date()) {
@@ -986,9 +999,10 @@ async function generateReply(
       ? `\n\nACTIVE FLOW CONTEXT: ${flowContext}\nIf the customer asks an off-topic or side question (e.g. 'who is this?', 'what are your hours?'), answer their question directly and politely first, then gently guide them back to the active flow. NEVER ask for details that have already been collected.\n\n`
       : "") +
     "Treat only vehicles marked available/active/in stock as available; rented, assigned, in-service and off-road vehicles are unavailable. " +
-    "If the customer asks for a car, wants to hire/rent, asks what is available, or uses any natural wording with the same meaning, treat it as a car enquiry and show all currently available vehicles from the supplied fleet, grouped clearly under Electric, Plug-in-Hybrid, Petrol where possible. If the conversation already contains the complete available-fleet list and the customer names a vehicle, respond with that vehicle's complete contract details: contract length, mileage allowance, weekly rate, and inclusions, then ask for Yes or No confirmation. If the requested car is unavailable, explicitly say so and suggest alternatives under exactly these headings: Electric, Plug-in-Hybrid, Petrol. Do not repeat the full fleet list when the customer has selected a vehicle. " +
+    "If the customer asks for a car, wants to hire/rent, asks what is available, or uses any natural wording with the same meaning, treat it as a car enquiry and show all currently available vehicles from the supplied fleet, grouped clearly under Electric, Plug-in-Hybrid, Petrol where possible. If the conversation already contains the complete available-fleet list and the customer names a vehicle, respond with that vehicle's complete details in this order: weekly rent, year, monthly mileage allowance, fuel type, and minimum term, then ask for Yes or No confirmation. If the requested car is unavailable, explicitly say so and suggest alternatives under exactly these headings: Electric, Plug-in-Hybrid, Petrol. Do not repeat the full fleet list when the customer has selected a vehicle. " +
     "If you cannot safely answer, the AI service fails, or you become stuck, set needs_human true; otherwise keep needs_human false. For an accident report, gather the details for the CRM accident workflow instead of handing off immediately. " +
     "If the customer asks to negotiate, lower, or change the price, weekly rate, mileage allowance, or contract terms in any way (e.g. 'can I get it cheaper', 'more miles please', 'any discount'), do not agree to or discuss any change yourself. Politely explain that pricing and mileage are not something you're able to adjust and that a member of the team will discuss it with them directly, then ask if they'd still like to confirm their current selection so you can pass it on. " +
+    "If the customer pushes back or objects to any policy, cost, or exclusion (e.g. 'how come you guys don't cover that', 'that's not fair', 'why do I have to pay for that', 'other companies don't charge for this'), do not argue, apologise excessively, or invent a justification. Briefly and calmly acknowledge their concern, explain in one line that this is simply company policy, and offer to have a team member discuss it with them directly if they'd like. Never promise an exception, discount, or change to policy yourself. " +
     'Respond ONLY as JSON: {"reply": string, "needs_human": boolean, "reason": string, "asks_closure": boolean}. ' +
     "Set asks_closure true when the reply contains that exact question.\n\n" +
     formatFleet(fleet);
@@ -2336,11 +2350,16 @@ export async function handleAgentWebhookRequest(request: Request) {
   }
 
   if (option === 1 || option === 2 || option === 3) {
+    if (option === 2) {
+      // Send the address as its own message first so it's a single, easy-to-copy
+      // bubble the customer can forward straight to a recovery company.
+      await sendWhatsAppText({ phone: phone ?? chatId, text: AUTO_SURGEON_ADDRESS });
+    }
     const reply =
       option === 1
         ? `Car Enquiry\n\n${CAR_ELIGIBILITY_PROMPT}`
         : option === 2
-          ? `🛠️ Emergency Breakdown\n\nPlease arrange for the vehicle to be dropped off at our garage:\n\n${AUTO_SURGEON_ADDRESS}\n\n📍 Clickable map: ${AUTO_SURGEON_MAP}\n\nOnce the address has been sent, contact your own breakdown recovery provider, such as a local recovery company or RAC. Virtual Car Hire does not provide the recovery vehicle.\n\nPlease park the vehicle in front of The Auto Surgeon and send:\n1. One clear photo of the vehicle parked in front of the garage.\n2. Either a photo or video showing the key being placed in the letter box.\n\nI will check both pieces of evidence before we close the case.`
+          ? `🛠️ Emergency Breakdown\n\nPlease arrange for the vehicle to be dropped off at our garage — the address is above, and you can tap and hold it to copy and forward to your recovery provider.\n\nOnce the address has been sent, contact your own breakdown recovery provider, such as a local recovery company or RAC. Virtual Car Hire does not provide the recovery vehicle.\n\nPlease park the vehicle in front of The Auto Surgeon and send:\n1. One clear photo of the vehicle parked in front of the garage.\n2. Either a photo or video showing the key being placed in the letter box.\n\nI will check both pieces of evidence before we close the case.`
           : "🚨 Accident Support\n\nWe are sorry to hear you have been in an accident. We are here to help guide you through the next steps safely.\n\nTo get started, please provide your full name and vehicle registration number together. We will cross-check both against our active CRM records before collecting the accident details.";
     const intent =
       option === 1 ? "book_car" : option === 2 ? "emergency_breakdown" : "report_accident";
@@ -2570,7 +2589,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     };
     const lowerLast = lastAgentMessage.toLowerCase();
 
-    if (!next.driverName || !next.driverReg) {
+    if (!next.verified && (!next.driverName || !next.driverReg)) {
       const reg = extractReg(content);
       if (reg) {
         next.driverReg = next.driverReg ?? reg;
@@ -2688,23 +2707,19 @@ export async function handleAgentWebhookRequest(request: Request) {
         return wordsA.every((w) => normB.includes(w)) || wordsB.every((w) => normA.includes(w));
       };
 
-      const matchedByPhone = allDrivers.find(
-        (d) => canonicalPhoneKey(d.phone) === canonicalPhoneKey(phone ?? chatId),
-      );
-      const regMatches = allDrivers.filter((d) => normalizeReg(d.reg ?? "") === reqReg);
-      const nameMatches = allDrivers.filter((d) => isNameMatch(d.driver_name ?? "", reqName));
-
       const matchedByNameAndReg = allDrivers.find((d) => {
         const regOk = normalizeReg(d.reg ?? "") === reqReg;
         const nameOk = isNameMatch(d.driver_name ?? "", reqName);
         return regOk && nameOk;
       });
+      // Used only to pick the right error message below (reg exists but name
+      // doesn't match, vs. reg doesn't exist at all) — never used to verify.
+      const regMatches = allDrivers.filter((d) => normalizeReg(d.reg ?? "") === reqReg);
 
-      const driver =
-        matchedByNameAndReg ||
-        regMatches.find((d) => isNameMatch(d.driver_name ?? "", reqName)) ||
-        matchedByPhone ||
-        (regMatches.length > 0 && nameMatches.length > 0 ? regMatches[0] : null);
+      // Verification must be based on the name AND registration the customer
+      // typed matching the SAME CRM record — never fall back to matching by
+      // phone number or by name/reg matching two different records.
+      const driver = matchedByNameAndReg || null;
 
       if (!driver) {
         let reply = "";
