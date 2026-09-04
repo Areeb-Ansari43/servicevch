@@ -805,13 +805,7 @@ export function FleetShell({ view }: { view: View }) {
         onOpenApex={() => setApexOpen((prev) => !prev)}
       />
       <div className="relative z-10 ml-0 lg:ml-64">
-        <Topbar
-          vehicles={data.vehicles}
-          drivers={data.drivers}
-          services={data.services}
-          goto={go}
-          onMenu={() => setMobileNavOpen(true)}
-        />
+        <Topbar vehicles={data.vehicles} goto={go} onMenu={() => setMobileNavOpen(true)} />
         <main className="mx-auto w-full max-w-[1400px] p-3 sm:p-5 xl:p-6">
           {data.loading ? (
             <div
@@ -1136,20 +1130,34 @@ function Sidebar({
 
 function Topbar({
   vehicles,
-  drivers,
-  services,
   goto,
   onMenu,
 }: {
   vehicles: Vehicle[];
-  drivers: DriverTrack[];
-  services: ServiceRecord[];
   goto: (v: View) => void;
   onMenu: () => void;
 }) {
+  const total = vehicles.length;
+  const active = vehicles.filter((vehicle) => vehicle.status === "Active").length;
+  const rented = vehicles.filter((vehicle) => vehicle.status === "Rented").length;
+  const alertCount = vehicles.filter((vehicle) => {
+    const dates = [vehicle.next_mot_date, vehicle.insurance_expiry];
+    return dates.some((date) => {
+      if (!date) return false;
+      const days = Math.ceil((new Date(date).getTime() - Date.now()) / 86400000);
+      return !Number.isNaN(days) && days <= 30;
+    });
+  }).length;
+
+  const statusItems = [
+    { label: `${total} Vehicles`, tone: "text-[#aeb8c9]" },
+    { label: `${active} Active`, tone: "text-emerald-300" },
+    { label: `${rented} Rented`, tone: "text-sky-300" },
+  ];
+
   return (
     <header
-      className="sticky top-0 z-20 flex min-h-[calc(4rem+env(safe-area-inset-top))] items-center gap-3 border-b px-3 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))] sm:px-6 xl:px-8"
+      className="sticky top-0 z-20 flex h-[56px] items-center gap-3 border-b px-3 sm:px-6 xl:px-8"
       style={{
         borderColor: T.border,
         background: "rgba(8,11,19,0.88)",
@@ -1158,48 +1166,80 @@ function Topbar({
     >
       <button
         onClick={onMenu}
-        className="rounded-xl border p-2 text-[#c5cbd6] hover:bg-white/10 lg:hidden"
-        style={{ borderColor: T.border }}
+        className="rounded-lg border p-1.5 text-[#c5cbd6] transition hover:bg-white/10 lg:hidden"
+        style={{ borderColor: T.borderSoft }}
         aria-label="Open navigation"
       >
-        <Icon.Menu className="h-5 w-5" />
+        <Icon.Menu className="h-4 w-4" />
       </button>
       <span
-        className="hidden shrink-0 items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold text-[#ff6a00] sm:inline-flex"
+        className="inline-flex shrink-0 items-center gap-2 rounded-full px-2.5 py-1 text-[11px] font-semibold text-[#ff8a3d]"
         style={{ background: T.orangeSoft }}
       >
-        <span className="h-1.5 w-1.5 rounded-full bg-[#ff6a00]" /> VCH Fleet
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#ff6a00]/60" />
+          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#ff6a00]" />
+        </span>
+        <span>VCH Fleet</span>
+        <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#ffb27e]">
+          Live
+        </span>
       </span>
-      <GlobalSearch vehicles={vehicles} drivers={drivers} services={services} goto={goto} />
-      <div className="flex items-center gap-2">
-        <div className="hidden items-center gap-1.5 text-[#aeb8c9] sm:flex">
+      <div className="flex min-w-0 flex-1 items-center justify-center">
+        <div className="flex items-center divide-x divide-white/[0.08] rounded-lg border border-white/[0.06] bg-white/[0.018] px-1 py-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+          {statusItems.map((item) => (
+            <span
+              key={item.label}
+              className={`px-2 text-[11px] font-medium whitespace-nowrap sm:px-3 ${item.tone}`}
+            >
+              {item.label}
+            </span>
+          ))}
           <button
             onClick={() => goto("dashboard")}
-            title="View dashboard alerts"
-            aria-label="View dashboard alerts"
-            className="relative rounded-xl p-2 transition hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6a00]/60"
+            title={alertCount ? `${alertCount} fleet alerts` : "No fleet alerts"}
+            aria-label={alertCount ? `${alertCount} fleet alerts` : "No fleet alerts"}
+            className={`px-2 text-[11px] font-semibold whitespace-nowrap transition hover:text-white sm:px-3 ${alertCount ? "text-orange-300" : "text-[#758096]"}`}
           >
-            <span className="absolute right-1.5 top-1 h-1.5 w-1.5 rounded-full bg-[#ff6a00]" />
-            <Icon.Alert className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => goto("leads")}
-            title="Open WhatsApp messages"
-            aria-label="Open WhatsApp messages"
-            className="relative rounded-xl p-2 transition hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6a00]/60"
-          >
-            <span className="absolute right-1.5 top-1 h-1.5 w-1.5 rounded-full bg-red-400" />
-            <Icon.Chat className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => goto("services")}
-            title="Open service calendar"
-            aria-label="Open service calendar"
-            className="rounded-xl p-2 transition hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6a00]/60"
-          >
-            <Icon.Calendar className="h-4 w-4" />
+            <span
+              className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle"
+              style={{ background: alertCount ? "#f97316" : "#596579" }}
+            />
+            {alertCount} Alert{alertCount === 1 ? "" : "s"}
           </button>
         </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-1.5">
+        <span className="hidden text-[10px] font-medium text-[#748096] md:inline">
+          Updated just now
+        </span>
+        <button
+          onClick={() => goto("dashboard")}
+          title="View dashboard alerts"
+          aria-label="View dashboard alerts"
+          className="relative rounded-lg p-1.5 text-[#aeb8c9] transition hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6a00]/60"
+        >
+          <span
+            className={`absolute right-1 top-1 h-1.5 w-1.5 rounded-full ${alertCount ? "bg-orange-400" : "bg-[#596579]"}`}
+          />
+          <Icon.Alert className="h-4 w-4" />
+        </button>
+        <button
+          onClick={() => goto("leads")}
+          title="Open WhatsApp messages"
+          aria-label="Open WhatsApp messages"
+          className="relative rounded-lg p-1.5 text-[#aeb8c9] transition hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6a00]/60"
+        >
+          <Icon.Chat className="h-4 w-4" />
+        </button>
+        <button
+          onClick={() => goto("services")}
+          title="Open service calendar"
+          aria-label="Open service calendar"
+          className="rounded-lg p-1.5 text-[#aeb8c9] transition hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6a00]/60"
+        >
+          <Icon.Calendar className="h-4 w-4" />
+        </button>
       </div>
     </header>
   );
