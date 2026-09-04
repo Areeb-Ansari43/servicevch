@@ -4,6 +4,7 @@ export const VEHICLE_FAMILY_NAMES = [
   "Tesla Model 3",
   "Jaguar I-Pace",
   "Hyundai Ioniq",
+  "Hyundai Santa Fe",
   "Ford Tourneo Custom",
   "Mercedes-Benz E220D",
   "Mercedes-Benz E300",
@@ -31,6 +32,7 @@ export function simplifyVehicleName(
   if (text.includes("MODEL 3")) return "Tesla Model 3";
   if (text.includes("I PACE")) return "Jaguar I-Pace";
   if (text.includes("IONIQ")) return "Hyundai Ioniq";
+  if (text.includes("SANTA FE") || text.includes("SANTAFE")) return "Hyundai Santa Fe";
   if (text.includes("TOURNEO")) return "Ford Tourneo Custom";
   if (text.includes("EQE")) return "Mercedes-Benz EQE";
   if (text.includes("EQS")) return "Mercedes-Benz EQS";
@@ -53,6 +55,8 @@ export function vehicleArtworkPath(vehicle: VehicleDisplayInput): string | null 
       return "/vehicle-artwork/jaguar-ipace-transparent.png";
     case "Hyundai Ioniq":
       return "/vehicle-artwork/hyundai-ioniq-transparent.png";
+    case "Hyundai Santa Fe":
+      return "/vehicle-artwork/hyundai-santa-fe-transparent.png";
     case "Ford Tourneo Custom":
       return "/vehicle-artwork/ford-tourneo-custom-transparent.png";
     case "Mercedes-Benz E220D":
