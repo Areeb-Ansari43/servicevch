@@ -5,9 +5,9 @@ export async function routeOutbound(params: {
   content: string;
   leadId: string;
   sessionId?: string | null;
-}): Promise<{ routed: boolean; channel: string; reason?: string }> {
+}): Promise<{ routed: boolean; channel: string; reason?: string; messageId?: string }> {
   const { sendWhatsAppText } = await import("@/lib/meta-whatsapp.server");
   const result = await sendWhatsAppText({ phone: params.phone, text: params.content });
-  if (result.sent) return { routed: true, channel: "meta_whatsapp" };
+  if (result.sent) return { routed: true, channel: "meta_whatsapp", messageId: result.messageId };
   return { routed: false, channel: "meta_whatsapp", reason: result.reason };
 }

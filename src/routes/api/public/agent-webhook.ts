@@ -226,6 +226,7 @@ async function insertWithSessionFallback(
     "media_type",
     "media_mime_type",
     "media_meta_id",
+    "status",
   ]) {
     if (!result.error || !(column in currentRow) || !isMissingColumn(result.error, column))
       continue;
@@ -1679,6 +1680,8 @@ export async function handleAgentWebhookRequest(request: Request) {
         sender: "ai_agent",
         content: reply,
         session_id: sessionId,
+        meta_message_id: outbound.messageId ?? null,
+        status: "sent",
       });
       await db
         .from("whatsapp_leads")
@@ -3245,6 +3248,8 @@ export async function handleAgentWebhookRequest(request: Request) {
       content: finalReply,
       handoff: needsHuman,
       session_id: sessionId,
+      meta_message_id: outbound.messageId ?? null,
+      status: "sent",
     });
     await db
       .from("whatsapp_leads")

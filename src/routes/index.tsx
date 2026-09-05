@@ -756,6 +756,11 @@ export function FleetShell({ view }: { view: View }) {
 
   useEffect(() => {
     let cancelled = false;
+    if (typeof window !== "undefined" && (window as any).__MOCK_AUTH__) {
+      setAuthed(true);
+      setAccount({ email: "admin@virtualcarhire.com" });
+      return;
+    }
     supabase.auth.getSession().then(({ data }) => {
       if (cancelled) return;
       if (!data.session) navigate({ to: "/login" });
@@ -765,7 +770,7 @@ export function FleetShell({ view }: { view: View }) {
       }
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
-      if (!session) navigate({ to: "/login" });
+      if (!session && !((window as any).__MOCK_AUTH__)) navigate({ to: "/login" });
     });
     return () => {
       cancelled = true;

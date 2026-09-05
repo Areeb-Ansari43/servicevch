@@ -68,6 +68,27 @@ function extractMessages(payload: JsonRecord) {
   return output;
 }
 
+function extractStatuses(payload: JsonRecord) {
+  const output: Array<{ id: string; status: string; timestamp: string; recipient_id?: string }> = [];
+  for (const entry of Array.isArray(payload.entry) ? payload.entry : []) {
+    for (const change of Array.isArray(entry?.changes) ? entry.changes : []) {
+      const value = change?.value;
+      if (!value || !Array.isArray(value.statuses)) continue;
+      for (const item of value.statuses) {
+        if (item && typeof item.id === "string" && typeof item.status === "string") {
+          output.push({
+            id: item.id,
+            status: item.status,
+            timestamp: String(item.timestamp ?? ""),
+            recipient_id: typeof item.recipient_id === "string" ? item.recipient_id : undefined,
+          });
+        }
+      }
+    }
+  }
+  return output;
+}
+
 function normalizeMetaMessage(message: JsonRecord, value: JsonRecord) {
   const contact = Array.isArray(value.contacts)
     ? (value.contacts.find((item: JsonRecord) => item.wa_id === message.from) ?? value.contacts[0])
@@ -184,11 +205,37 @@ export const Route = createFileRoute("/api/webhook")({
           return json({ ok: false, error: "Unauthorized" }, 403);
         }
         const messages = extractMessages(payload);
+        const statuses = extractStatuses(payload);
         console.info("[meta-webhook] inbound delivery", {
           requestId,
           messageCount: messages.length,
+          statusCount: statuses.length,
           object: payload.object ?? null,
         });
+
+        if (statuses.length > 0) {
+          try {
+            const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+            for (const statusUpdate of statuses) {
+              const { error } = await supabaseAdmin
+                .from("messages")
+                .update({ status: statusUpdate.status } as never)
+                .eq("meta_message_id", statusUpdate.id);
+              if (error) {
+                console.warn("[meta-webhook] status update warning", {
+                  messageId: statusUpdate.id,
+                  status: statusUpdate.status,
+                  error: error.message,
+                });
+              }
+            }
+          } catch (error) {
+            console.error("[meta-webhook] status update failed", {
+              requestId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
         logMetaEvent({
           payload,
           request,
