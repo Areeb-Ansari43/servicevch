@@ -72,7 +72,7 @@ const STANDARD_TERMS =
 const CAR_ELIGIBILITY_PROMPT =
   "Before we look at available vehicles, please confirm three things:\n\n1. Are you aged between 25 and 65 years old?\n2. Do you possess a valid PCO badge?\n3. Do you have any penalty points? If you have more than 6 points, renting with us may be difficult.\n\nFor your answer, please reply simply: Yes, Yes, and specify your points. For example: 1. Yes 2. Yes 3. Yes - 3 points.";
 const HANDOFF_24H =
-  "Our team will get back to you within 24 hours. Please do not contact this number — we will contact you first.";
+  "Our team will get back to you within 24 hours. Please do not contact this number, we will contact you first.";
 const OUT_OF_HOURS_MESSAGE =
   "Virtual Car Hire is unable to connect you to an agent but our AI is always ready to help 9am to 6pm. Please chat with this bot to simplify the process and make it quicker to start renting with us.";
 
@@ -663,6 +663,9 @@ function includesClosureQuestion(text: string): boolean {
 function parseAiReply(
   content: string,
 ): Pick<AiResult, "reply" | "needs_human" | "reason" | "asks_closure"> {
+  // Strip em dashes from anything Gemini generates — house style is plain
+  // punctuation only, regardless of what the model's own writing style prefers.
+  const stripEmDash = (text: string) => text.replace(/\s*—\s*/g, ", ");
   const cleaned = content
     .trim()
     .replace(/^```(?:json)?\s*/i, "")
@@ -670,7 +673,7 @@ function parseAiReply(
     .trim();
   try {
     const parsed = JSON.parse(cleaned) as Record<string, unknown>;
-    const reply = typeof parsed.reply === "string" ? parsed.reply.trim() : "";
+    const reply = typeof parsed.reply === "string" ? stripEmDash(parsed.reply.trim()) : "";
     if (reply) {
       return {
         reply,
@@ -683,7 +686,7 @@ function parseAiReply(
     // Some compatible gateways return normal text even when JSON was requested.
   }
   return {
-    reply: cleaned,
+    reply: stripEmDash(cleaned),
     needs_human: false,
     reason: "",
     asks_closure: includesClosureQuestion(cleaned),
@@ -883,7 +886,7 @@ function contractWeeks(vehicle: FleetVehicle): number {
 function formatCarHandoffSummary(data: CarEligibility, answer: string): string {
   const selected = data.selectedVehicle;
   return selected
-    ? `Customer wants: ${selected.make} ${selected.model} (${selected.year ?? "year to confirm"}) — ${selected.weeklyRate}; ${selected.mileage.toLocaleString("en-GB")} miles/month; ${selected.contractWeeks}-week minimum. Terms answer: ${answer}.`
+    ? `Customer wants: ${selected.make} ${selected.model} (${selected.year ?? "year to confirm"}), ${selected.weeklyRate}; ${selected.mileage.toLocaleString("en-GB")} miles/month; ${selected.contractWeeks}-week minimum. Terms answer: ${answer}.`
     : `Customer wants a vehicle. Terms answer: ${answer}.`;
 }
 
@@ -2137,7 +2140,7 @@ export async function handleAgentWebhookRequest(request: Request) {
           : "",
       ].filter(Boolean);
       const reply = applyAntiRepetition(
-        `${warnings.length ? `${warnings.join("\n\n")}\n\n` : ""}Thanks. I still need ${missing.join(", ")}. Please reply naturally—for example: I’m 30, I have a valid PCO badge, and I have 3 points.`,
+        `${warnings.length ? `${warnings.join("\n\n")}\n\n` : ""}Thanks. I still need ${missing.join(", ")}. Please reply naturally, for example: I’m 30, I have a valid PCO badge, and I have 3 points.`,
         lastAgentMessage,
       );
       const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
@@ -2181,7 +2184,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     let reply = "";
     if (nextEligibility.selectedVehicle) {
       const sel = nextEligibility.selectedVehicle;
-      const vehicleDesc = `${sel.make} ${sel.model} (${sel.year ?? "year to confirm"}) — ${sel.weeklyRate}, ${sel.mileage.toLocaleString("en-GB")} miles/month, ${sel.contractWeeks}-week contract.`;
+      const vehicleDesc = `${sel.make} ${sel.model} (${sel.year ?? "year to confirm"}), ${sel.weeklyRate}, ${sel.mileage.toLocaleString("en-GB")} miles/month, ${sel.contractWeeks}-week contract.`;
       reply = `${eligibilityWarnings.length ? `${eligibilityWarnings.join("\n\n")}\n\n` : ""}Great! Here is a summary of your request:\n\n🚗 Vehicle: ${vehicleDesc}\n\nIs this everything? Reply Yes to confirm.`;
     } else {
       reply = `${eligibilityWarnings.length ? `${eligibilityWarnings.join("\n\n")}\n\n` : ""}${formatCustomerFleet((fleet ?? []) as FleetVehicle[])}`;
@@ -2375,7 +2378,7 @@ export async function handleAgentWebhookRequest(request: Request) {
       option === 1
         ? `Car Enquiry\n\n${CAR_ELIGIBILITY_PROMPT}`
         : option === 2
-          ? `🛠️ Emergency Breakdown\n\nPlease arrange for the vehicle to be dropped off at our garage — the address is above, and you can tap and hold it to copy and forward to your recovery provider.\n\nOnce the address has been sent, contact your own breakdown recovery provider, such as a local recovery company or RAC. Virtual Car Hire does not provide the recovery vehicle.\n\nPlease park the vehicle in front of The Auto Surgeon and send:\n1. One clear photo of the vehicle parked in front of the garage.\n2. Either a photo or video showing the key being placed in the letter box.\n\nI will check both pieces of evidence before we close the case.`
+          ? `🛠️ Emergency Breakdown\n\nPlease arrange for the vehicle to be dropped off at our garage. The address is above, and you can tap and hold it to copy and forward to your recovery provider.\n\nOnce the address has been sent, contact your own breakdown recovery provider, such as a local recovery company or RAC. Virtual Car Hire does not provide the recovery vehicle.\n\nPlease park the vehicle in front of The Auto Surgeon and send:\n1. One clear photo of the vehicle parked in front of the garage.\n2. Either a photo or video showing the key being placed in the letter box.\n\nI will check both pieces of evidence before we close the case.`
           : "🚨 Accident Support\n\nWe are sorry to hear you have been in an accident. We are here to help guide you through the next steps safely.\n\nTo get started, please provide your full name and vehicle registration number together. We will cross-check both against our active CRM records before collecting the accident details.";
     const intent =
       option === 1 ? "book_car" : option === 2 ? "emergency_breakdown" : "report_accident";
@@ -2603,6 +2606,15 @@ export async function handleAgentWebhookRequest(request: Request) {
       ...accidentData,
       evidenceUrls: [...(accidentData.evidenceUrls ?? [])],
     };
+    console.log("[agent-webhook] accident flow state on entry", {
+      leadId,
+      leadIntent,
+      accidentActive,
+      loadedVerified: accidentData.verified,
+      loadedDriverName: accidentData.driverName,
+      loadedDriverReg: accidentData.driverReg,
+      loadedAccidentDataRaw: JSON.stringify(accidentData),
+    });
     const lowerLast = lastAgentMessage.toLowerCase();
 
     if (!next.verified && (!next.driverName || !next.driverReg)) {
@@ -3057,7 +3069,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     if (/^yes/i.test(answer)) {
       const selected = carEligibility.selectedVehicle;
       const vehicleDesc = selected
-        ? `${selected.make} ${selected.model} (${selected.year ?? "year to confirm"}) — ${selected.weeklyRate}, ${selected.mileage.toLocaleString("en-GB")} miles/month, ${selected.contractWeeks}-week contract.`
+        ? `${selected.make} ${selected.model} (${selected.year ?? "year to confirm"}), ${selected.weeklyRate}, ${selected.mileage.toLocaleString("en-GB")} miles/month, ${selected.contractWeeks}-week contract.`
         : "your selected vehicle request";
       const reply = `Great! Here is a summary of your request:\n\n🚗 Vehicle: ${vehicleDesc}\n\nIs this everything? Reply Yes to confirm.`;
       const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
@@ -3181,9 +3193,21 @@ export async function handleAgentWebhookRequest(request: Request) {
   }
 
   if (isPositiveClosure(content)) {
-    const lastAgentTurn = [...history].reverse().find((turn) => turn.sender === "ai_agent");
+    // Find the message that actually asked "would you like to proceed" with a
+    // specific vehicle, rather than just the most recent agent turn — an older,
+    // unrelated agent message (e.g. from browsing a different car earlier in the
+    // conversation) must never be mistaken for what the customer just confirmed.
+    const lastAgentTurn = [...history]
+      .reverse()
+      .find(
+        (turn) =>
+          turn.sender === "ai_agent" &&
+          /would you like to proceed|weekly rent|reply yes to proceed/i.test(turn.content ?? ""),
+      );
     const confirmedSummary = lastAgentTurn?.content?.trim() || "";
-    const reply = `Thanks for contacting Virtual Car Hire.\n\n${HANDOFF_24H}`;
+    const reply = confirmedSummary
+      ? `Great, here's a summary of what you've confirmed:\n\n${confirmedSummary}\n\n${HANDOFF_24H}`
+      : `Thanks for contacting Virtual Car Hire.\n\n${HANDOFF_24H}`;
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
     if (outbound.sent) {
       await insertWithSessionFallback(db, "messages", {
