@@ -12,6 +12,7 @@ export type WhatsappLead = {
   ai_paused: boolean | null;
   customer_type?: string | null;
   created_at: string;
+  last_message_at?: string | null;
 };
 
 export type AccidentCase = {
@@ -34,10 +35,19 @@ export function useLeadsData() {
 
   const refresh = useCallback(async () => {
     const [lRes, aRes] = await Promise.all([
-      supabase.from("whatsapp_leads").select("*").order("created_at", { ascending: false }),
+      supabase
+        .from("whatsapp_leads")
+        .select("*")
+        .order("last_message_at", { ascending: false, nullsFirst: false }),
       supabase.from("accident_cases").select("*").order("created_at", { ascending: false }),
     ]);
-    setLeads((lRes.data ?? []) as WhatsappLead[]);
+    const fetchedLeads = (lRes.data ?? []) as WhatsappLead[];
+    fetchedLeads.sort((a, b) => {
+      const timeA = new Date(a.last_message_at || a.created_at).getTime();
+      const timeB = new Date(b.last_message_at || b.created_at).getTime();
+      return timeB - timeA;
+    });
+    setLeads(fetchedLeads);
     setAccidents((aRes.data ?? []) as AccidentCase[]);
     setLoading(false);
   }, []);

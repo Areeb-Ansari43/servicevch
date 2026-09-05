@@ -23,6 +23,8 @@ type ConversationMessage = {
   media_mime_type?: string | null;
   handoff: boolean;
   created_at: string;
+  status?: string | null;
+  meta_message_id?: string | null;
 };
 
 function isMissingColumn(error: unknown, column: string): boolean {
@@ -35,7 +37,7 @@ function isMissingColumn(error: unknown, column: string): boolean {
 async function insertMessageWithCompatibility(supabase: any, row: Record<string, unknown>) {
   let compatibleRow = { ...row };
   let result = await supabase.from("messages").insert(compatibleRow);
-  for (const column of ["session_id", "handoff"]) {
+  for (const column of ["session_id", "handoff", "meta_message_id", "status"]) {
     if (!result.error || !(column in compatibleRow) || !isMissingColumn(result.error, column))
       continue;
     const { [column]: _removed, ...nextRow } = compatibleRow;
@@ -63,13 +65,25 @@ export const getLeadConversation = createServerFn({ method: "GET" })
     for (let page = 0; ; page += 1) {
       const { data: batch, error } = await context.supabase
         .from("messages")
-        .select("id, sender, content, media_url, media_type, media_mime_type, handoff, created_at")
+        .select("id, sender, content, media_url, media_type, media_mime_type, handoff, created_at, status, meta_message_id")
         .eq("lead_id", data.leadId)
         .order("created_at", { ascending: true })
         .range(page * pageSize, page * pageSize + pageSize - 1);
-      if (error) throw new Error(error.message);
-      localMessages.push(...((batch ?? []) as unknown as ConversationMessage[]));
-      if ((batch ?? []).length < pageSize) break;
+      if (error) {
+        // Fallback without status or meta_message_id if columns missing
+        const { data: fallbackBatch, error: fallbackError } = await context.supabase
+          .from("messages")
+          .select("id, sender, content, media_url, media_type, media_mime_type, handoff, created_at")
+          .eq("lead_id", data.leadId)
+          .order("created_at", { ascending: true })
+          .range(page * pageSize, page * pageSize + pageSize - 1);
+        if (fallbackError) throw new Error(fallbackError.message);
+        localMessages.push(...((fallbackBatch ?? []) as unknown as ConversationMessage[]));
+        if ((fallbackBatch ?? []).length < pageSize) break;
+      } else {
+        localMessages.push(...((batch ?? []) as unknown as ConversationMessage[]));
+        if ((batch ?? []).length < pageSize) break;
+      }
     }
 
     localMessages.sort(
@@ -93,12 +107,22 @@ export const sendHumanReply = createServerFn({ method: "POST" })
     if (leadErr) throw new Error(leadErr.message);
     if (!lead) throw new Error("Lead not found");
 
+    const { routeOutbound } = await import("@/lib/chat.server");
+    const outbound = await routeOutbound({
+      phone: lead.phone ?? null,
+      name: lead.contact_name,
+      content: data.content,
+      leadId: lead.id,
+    });
+
     const { error: msgErr } = await insertMessageWithCompatibility(supabase, {
       user_id: userId,
       lead_id: lead.id,
       sender: "human",
       content: data.content,
       session_id: lead.session_id ?? null,
+      meta_message_id: outbound.messageId ?? null,
+      status: outbound.routed ? "sent" : "failed",
     });
     if (msgErr) throw new Error(msgErr.message);
 
@@ -111,14 +135,6 @@ export const sendHumanReply = createServerFn({ method: "POST" })
       } as never)
       .eq("id", lead.id);
     if (updErr) throw new Error(updErr.message);
-
-    const { routeOutbound } = await import("@/lib/chat.server");
-    const outbound = await routeOutbound({
-      phone: lead.phone ?? null,
-      name: lead.contact_name,
-      content: data.content,
-      leadId: lead.id,
-    });
 
     return { ok: true, outbound };
   });
