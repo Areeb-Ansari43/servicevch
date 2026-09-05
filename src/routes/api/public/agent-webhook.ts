@@ -1074,7 +1074,20 @@ async function generateReply(
     // Use one stable low-latency model request. Do not turn a model 404 into a
     // customer handoff; the deterministic fallback above keeps the workflow moving.
     const model = (getRuntimeEnv("GEMINI_MODEL") ?? "gemini-2.0-flash-001").trim();
-    const generation = await callModel("v1beta", model);
+    let generation = await callModel("v1beta", model);
+    // Gemini's free tier returns transient 503 (overloaded) / 429 (rate limited)
+    // errors fairly often under load. Retry a couple of times with a short
+    // backoff before giving up to the scripted fallback — most of these clear
+    // up within a second or two, and retrying here is far cheaper than every
+    // customer message silently degrading to canned text.
+    for (
+      let attempt = 0;
+      attempt < 2 && (generation.response.status === 503 || generation.response.status === 429);
+      attempt++
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+      generation = await callModel("v1beta", model);
+    }
     if (!generation.response.ok) {
       console.error("[agent-webhook] Gemini API error", {
         status: generation.response.status,
