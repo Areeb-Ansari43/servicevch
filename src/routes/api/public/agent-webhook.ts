@@ -1618,13 +1618,18 @@ export async function handleAgentWebhookRequest(request: Request) {
       .from("messages")
       .select("sender, content, media_url")
       .eq("lead_id", leadId)
-      .order("created_at", { ascending: true })
+      // Order newest-first so limit(30) keeps the most RECENT 30 messages,
+      // not the oldest 30. A long-running lead can easily exceed 30 messages
+      // across multiple sessions, and the AI must always see what just
+      // happened, not stale context from days ago. Reversed back to
+      // chronological order immediately below for every downstream consumer.
+      .order("created_at", { ascending: false })
       .limit(30),
     db
       .from("vehicles")
       .select("reg, make, model, year, fuel_type, status, next_mot_date, pco_expiry_date"),
   ]);
-  const oldHistory = oldHistoryRes.data;
+  const oldHistory = oldHistoryRes.data ? [...oldHistoryRes.data].reverse() : oldHistoryRes.data;
   const fleet = fleetRes.data;
 
   const inbound: Turn = { sender: "customer", content, media_url: mediaUrl };
