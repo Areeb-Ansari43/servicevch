@@ -15,7 +15,6 @@ export const Route = createFileRoute("/api/public/ai-intake")({
         new Response(null, {
           status: 204,
           headers: {
-            "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "POST, OPTIONS",
             "Access-Control-Allow-Headers": "content-type",
           },
@@ -27,7 +26,7 @@ export const Route = createFileRoute("/api/public/ai-intake")({
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+    headers: { "Content-Type": "application/json" },
   });
 
 const HANDOFF_24H =

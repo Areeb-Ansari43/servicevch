@@ -6,7 +6,7 @@ import { sendWhatsAppText } from "@/lib/meta-whatsapp.server";
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+    headers: { "Content-Type": "application/json" },
   });
 
 function escapeHtml(value: string): string {

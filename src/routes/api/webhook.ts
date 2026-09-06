@@ -7,12 +7,12 @@ type JsonRecord = Record<string, any>;
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+    headers: { "Content-Type": "application/json" },
   });
 const text = (body: string, status = 200) =>
   new Response(body, {
     status,
-    headers: { "Content-Type": "text/plain", "Access-Control-Allow-Origin": "*" },
+    headers: { "Content-Type": "text/plain" },
   });
 
 function constantTimeEqual(a: string, b: string) {
@@ -173,7 +173,6 @@ export const Route = createFileRoute("/api/webhook")({
         new Response(null, {
           status: 204,
           headers: {
-            "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
             "Access-Control-Allow-Headers": "content-type, x-hub-signature-256",
           },
