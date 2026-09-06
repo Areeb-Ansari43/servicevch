@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { CRM_BASE_URL } from "@/lib/domain-config";
 
 /**
  * Telegram Admin Assistant.
@@ -17,7 +18,7 @@ export const Route = createFileRoute("/api/public/telegram-bot")({
   },
 });
 
-const CRM_BASE = "https://servicevch.pages.dev";
+const CRM_BASE = CRM_BASE_URL;
 const STATUSES = ["new", "contacted", "handed over", "human", "closed"] as const;
 
 const json = (body: unknown, status = 200) =>

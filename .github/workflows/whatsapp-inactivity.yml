@@ -14,6 +14,7 @@ jobs:
           INACTIVITY_JOB_SECRET: ${{ secrets.INACTIVITY_JOB_SECRET }}
         run: |
           test -n "$INACTIVITY_JOB_SECRET"
+          # Note: When custom domain is live, update the URL below to https://<your-custom-crm-domain>/api/jobs/inactivity
           curl --fail-with-body --silent --show-error \
             --request POST \
             --header "x-inactivity-job-secret: $INACTIVITY_JOB_SECRET" \

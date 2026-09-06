@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { requestLoginCode, verifyLoginCode } from "@/lib/auth-otp.functions";
+import { WEBSITE_BASE_URL } from "@/lib/domain-config";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -22,7 +23,7 @@ function PoweredBy() {
     <p className="mt-6 text-center text-xs text-slate-400/80">
       Powered by{" "}
       <a
-        href="https://virtualcarhire.pages.dev/"
+        href={WEBSITE_BASE_URL}
         target="_blank"
         rel="noopener noreferrer"
         className="font-semibold text-[#ff8a3d] hover:text-[#ffab74]"

@@ -3,11 +3,11 @@ import { z } from "zod";
 
 import { getRuntimeEnv } from "@/integrations/supabase/config";
 import { sendWhatsAppText, sendWhatsAppImageButtons } from "@/lib/meta-whatsapp.server";
+import { CRM_BASE_URL, WEBSITE_BASE_URL } from "@/lib/domain-config";
 
-const CRM_BASE = "https://servicevch.pages.dev";
-const VCH_WEBSITE = "https://virtualcarhire.pages.dev/our-fleet";
-const WELCOME_IMAGE_URL =
-  "https://servicevch.pages.dev/whatsapp/virtual-car-hire-welcome.jpg";
+const CRM_BASE = CRM_BASE_URL;
+const VCH_WEBSITE = `${WEBSITE_BASE_URL}/our-fleet`;
+const WELCOME_IMAGE_URL = `${CRM_BASE_URL}/whatsapp/virtual-car-hire-welcome.jpg`;
 const AUTO_SURGEON_ADDRESS =
   "The Auto Surgeon, Unit 3 Squirrels Trading Estate, Viveash Close, Hayes UB3 4RZ";
 const AUTO_SURGEON_MAP =

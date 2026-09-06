@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { getRuntimeEnv } from "@/integrations/supabase/config";
 import { sendWhatsAppText } from "@/lib/meta-whatsapp.server";
+import { CRM_BASE_URL } from "@/lib/domain-config";
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -45,7 +46,7 @@ async function sendTelegramClosureAlert(params: {
     `<b>Phone:</b> ${escapeHtml(phone)}\n` +
     "<b>Reason:</b> Customer did not respond to the follow-up\n\n" +
     `<b>Complete conversation:</b>\n${escapeHtml(params.transcript).slice(0, 6000)}\n\n` +
-    `<a href=\"https://servicevch.pages.dev/whatsapp-leads?lead=${encodeURIComponent(leadId)}\">Open in CRM →</a>`;
+    `<a href=\"${CRM_BASE_URL}/whatsapp-leads?lead=${encodeURIComponent(leadId)}\">Open in CRM →</a>`;
   try {
     const response = await fetch(
       `https://api.telegram.org/bot${encodeURIComponent(token)}/sendMessage`,
