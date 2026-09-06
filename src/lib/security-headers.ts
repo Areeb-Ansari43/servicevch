@@ -1,17 +1,16 @@
-const ALLOWED_BROWSER_ORIGINS = new Set([
-  "https://virtualcarhire.pages.dev",
-  "https://servicevch.pages.dev",
-]);
+import { ALLOWED_BROWSER_ORIGINS, CONNECT_SRC_ORIGINS } from "./domain-config";
+
+export { ALLOWED_BROWSER_ORIGINS };
 
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "base-uri 'self'",
   "object-src 'none'",
-  "script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com",
+  "script-src 'self' https://static.cloudflareinsights.com",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com",
   "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com data:",
   "img-src 'self' data: blob: https://media.base44.com https://files.manuscdn.com https://*.supabase.co",
-  "connect-src 'self' https://virtualcarhire.pages.dev https://servicevch.pages.dev https://*.supabase.co https://static.cloudflareinsights.com https://api.vapi.ai wss://*.vapi.ai",
+  `connect-src 'self' ${CONNECT_SRC_ORIGINS.join(" ")}`,
   "media-src 'self' blob: https://*.vapi.ai",
   "form-action 'self' https://wa.me https://api.whatsapp.com",
   "frame-src 'self'",

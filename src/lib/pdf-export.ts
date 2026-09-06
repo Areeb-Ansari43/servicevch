@@ -1,6 +1,7 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { ServiceRecord, Vehicle } from "./fleet-data";
+import { WEBSITE_DOMAIN } from "./domain-config";
 
 const ORANGE: [number, number, number] = [255, 106, 0];
 const INK: [number, number, number] = [15, 17, 21];
@@ -30,7 +31,7 @@ function footer(doc: jsPDF) {
     doc.setFontSize(8);
     doc.setTextColor(120, 120, 120);
     doc.text(
-      `Generated ${new Date().toLocaleString("en-GB")}  ·  Page ${i} of ${pages}  ·  virtualcarhire.pages.dev`,
+      `Generated ${new Date().toLocaleString("en-GB")}  ·  Page ${i} of ${pages}  ·  ${WEBSITE_DOMAIN}`,
       doc.internal.pageSize.getWidth() / 2,
       doc.internal.pageSize.getHeight() - 20,
       { align: "center" },

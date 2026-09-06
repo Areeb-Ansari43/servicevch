@@ -11,6 +11,7 @@ import { ChatSimulator } from "@/components/chat-simulator";
 import { LeadThread } from "@/components/lead-thread";
 import { getLeadConversation } from "@/lib/chat.functions";
 import { GenerationsView } from "@/components/generations-view";
+import { WEBSITE_BASE_URL } from "@/lib/domain-config";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -1119,7 +1120,7 @@ function Sidebar({
           <p className="mt-3 text-center text-[11px] text-[#8b95a8]">
             Powered by{" "}
             <a
-              href="https://virtualcarhire.pages.dev/"
+              href={WEBSITE_BASE_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="font-semibold text-[#ff6a00] hover:text-[#ff8a3d]"

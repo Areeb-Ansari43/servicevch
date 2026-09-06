@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getRuntimeEnv } from "@/integrations/supabase/config";
 import { handleAgentWebhookRequest } from "./public/agent-webhook";
+import { CRM_BASE_URL } from "@/lib/domain-config";
 
 type JsonRecord = Record<string, any>;
 
@@ -257,7 +258,7 @@ export const Route = createFileRoute("/api/webhook")({
           }
           try {
             const response = await handleAgentWebhookRequest(
-              new Request("https://servicevch.pages.dev/api/public/agent-webhook", {
+              new Request(`${CRM_BASE_URL}/api/public/agent-webhook`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(normalized),
