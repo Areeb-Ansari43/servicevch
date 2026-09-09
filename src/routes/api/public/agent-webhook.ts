@@ -1078,17 +1078,12 @@ async function generateReply(
     // customer handoff; the deterministic fallback above keeps the workflow moving.
     const model = (getRuntimeEnv("GEMINI_MODEL") ?? "gemini-2.0-flash-001").trim();
     let generation = await callModel("v1beta", model);
-    // Gemini's free tier returns transient 503 (overloaded) / 429 (rate limited)
-    // errors fairly often under load. Retry a couple of times with a short
-    // backoff before giving up to the scripted fallback — most of these clear
-    // up within a second or two, and retrying here is far cheaper than every
-    // customer message silently degrading to canned text.
-    for (
-      let attempt = 0;
-      attempt < 2 && (generation.response.status === 503 || generation.response.status === 429);
-      attempt++
-    ) {
-      await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+    // One quick retry catches a genuinely momentary blip. Anything past that is
+    // a sustained outage, and waiting through repeated Gemini retries only makes
+    // the customer wait longer for the same result — better to fail over to a
+    // second provider (Groq) immediately below than to keep hammering Gemini.
+    if (generation.response.status === 503 || generation.response.status === 429) {
+      await new Promise((resolve) => setTimeout(resolve, 300));
       generation = await callModel("v1beta", model);
     }
     if (!generation.response.ok) {
@@ -1098,6 +1093,54 @@ async function generateReply(
         responseBody: generation.body.slice(0, 2000),
         model: generation.model,
       });
+      // Gemini is down or overloaded — try Groq (a different provider, so an
+      // outage on one is very unlikely to also affect the other) before ever
+      // giving the customer a scripted, non-AI fallback reply.
+      const groqKey = getRuntimeEnv("GROQ_API_KEY");
+      if (groqKey) {
+        const groqModel = (getRuntimeEnv("GROQ_MODEL") ?? "llama-3.3-70b-versatile").trim();
+        try {
+          const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${groqKey.trim()}`,
+            },
+            body: JSON.stringify({
+              model: groqModel,
+              messages: [
+                { role: "system", content: system },
+                { role: "user", content: userText },
+              ],
+              response_format: { type: "json_object" },
+              temperature: 0.2,
+            }),
+          });
+          const groqBody = await groqRes.text();
+          if (groqRes.ok) {
+            const groqData = JSON.parse(groqBody) as {
+              choices?: { message?: { content?: string } }[];
+            };
+            const groqText = groqData.choices?.[0]?.message?.content ?? "";
+            const parsed = parseAiReply(groqText);
+            if (parsed.reply) {
+              console.log("[agent-webhook] Used Groq fallback after Gemini failure", {
+                geminiStatus: generation.response.status,
+                groqModel,
+              });
+              return parsed;
+            }
+          } else {
+            console.error("[agent-webhook] Groq fallback API error", {
+              status: groqRes.status,
+              body: groqBody.slice(0, 2000),
+              model: groqModel,
+            });
+          }
+        } catch (groqError) {
+          console.error("[agent-webhook] Groq fallback exception", groqError);
+        }
+      }
       await alertAiDegraded(
         `gemini_http_${generation.response.status}`,
         generation.model,
