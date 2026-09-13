@@ -6,8 +6,8 @@ export function formatPortalInviteUrl(token: string): string {
   return `https://virtualcarhire.pages.dev/portal/signup?invite=${token}`;
 }
 
-export function canSendPortalInvite(driver: Pick<DriverTrack, "email">): boolean {
-  return Boolean(driver.email && driver.email.trim().length > 0);
+export function formatPortalInviteMessage(driverName: string, inviteUrl: string): string {
+  return `Hello ${driverName}, thank you for joining Virtual Car Hire. Please make an account using this link: ${inviteUrl}. This is our portal where you can track all your rent — whatever rent is coming, you'll be opted into service and rent reminders by email. Please look through there and create an account. If you have any trouble, please contact us straight away.`;
 }
 
 export function getPortalStatusLabel(driver: Pick<DriverTrack, "invite_status">): string {
@@ -24,11 +24,13 @@ describe("Driver Portal Invite Logic", () => {
     expect(url).toBe("https://virtualcarhire.pages.dev/portal/signup?invite=123e4567-e89b-12d3-a456-426614174000");
   });
 
-  test("requires driver email to send portal invite", () => {
-    expect(canSendPortalInvite({ email: "driver@example.com" })).toBe(true);
-    expect(canSendPortalInvite({ email: "  " })).toBe(false);
-    expect(canSendPortalInvite({ email: null })).toBe(false);
-    expect(canSendPortalInvite({ email: undefined })).toBe(false);
+  test("generates portal invite without requiring email upfront", () => {
+    const token = crypto.randomUUID();
+    const url = formatPortalInviteUrl(token);
+    const message = formatPortalInviteMessage("John Doe", url);
+    expect(url).toContain("https://virtualcarhire.pages.dev/portal/signup?invite=");
+    expect(message).toContain("Hello John Doe, thank you for joining Virtual Car Hire");
+    expect(message).toContain("Please make an account using this link:");
   });
 
   test("returns correct status label for invite status states", () => {

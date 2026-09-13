@@ -112,11 +112,88 @@ export type Database = {
           },
         ];
       };
+      driver_charges: {
+        Row: {
+          amount: number;
+          created_at: string;
+          description: string;
+          driver_id: string;
+          id: string;
+          user_id: string | null;
+        };
+        Insert: {
+          amount?: number;
+          created_at?: string;
+          description: string;
+          driver_id: string;
+          id?: string;
+          user_id?: string | null;
+        };
+        Update: {
+          amount?: number;
+          created_at?: string;
+          description?: string;
+          driver_id?: string;
+          id?: string;
+          user_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "driver_charges_driver_id_fkey";
+            columns: ["driver_id"];
+            isOneToOne: false;
+            referencedRelation: "driver_tracks";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      driver_notifications: {
+        Row: {
+          created_at: string;
+          driver_id: string;
+          id: string;
+          message: string;
+          read: boolean;
+          title: string;
+          type: string;
+          user_id: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          driver_id: string;
+          id?: string;
+          message: string;
+          read?: boolean;
+          title: string;
+          type: string;
+          user_id?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          driver_id?: string;
+          id?: string;
+          message?: string;
+          read?: boolean;
+          title?: string;
+          type?: string;
+          user_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "driver_notifications_driver_id_fkey";
+            columns: ["driver_id"];
+            isOneToOne: false;
+            referencedRelation: "driver_tracks";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       driver_tracks: {
         Row: {
           active: boolean;
           allowance: number;
           auth_user_id: string | null;
+          balance_due: number;
           created_at: string;
           current_mileage: number;
           driver_name: string;
@@ -127,15 +204,19 @@ export type Database = {
           phone: string | null;
           rate_pence: number;
           reg: string;
+          rent_due_day: string;
+          rent_status: string;
           start_date: string;
           start_mileage: number;
           user_id: string;
           vehicle_id: string | null;
+          weekly_rent: number;
         };
         Insert: {
           active?: boolean;
           allowance?: number;
           auth_user_id?: string | null;
+          balance_due?: number;
           created_at?: string;
           current_mileage?: number;
           driver_name: string;
@@ -146,15 +227,19 @@ export type Database = {
           phone?: string | null;
           rate_pence?: number;
           reg: string;
+          rent_due_day?: string;
+          rent_status?: string;
           start_date?: string;
           start_mileage?: number;
           user_id: string;
           vehicle_id?: string | null;
+          weekly_rent?: number;
         };
         Update: {
           active?: boolean;
           allowance?: number;
           auth_user_id?: string | null;
+          balance_due?: number;
           created_at?: string;
           current_mileage?: number;
           driver_name?: string;
@@ -165,10 +250,13 @@ export type Database = {
           phone?: string | null;
           rate_pence?: number;
           reg?: string;
+          rent_due_day?: string;
+          rent_status?: string;
           start_date?: string;
           start_mileage?: number;
           user_id?: string;
           vehicle_id?: string | null;
+          weekly_rent?: number;
         };
         Relationships: [
           {
