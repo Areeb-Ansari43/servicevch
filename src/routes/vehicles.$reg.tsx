@@ -13,6 +13,7 @@ import {
   regSlug,
 } from "@/routes/index";
 import { NotFoundPanel } from "@/components/not-found-panel";
+import { RouteErrorBoundary } from "@/components/error-boundary";
 
 export const Route = createFileRoute("/vehicles/$reg")({
   head: ({ params }) => ({
@@ -32,8 +33,19 @@ export const Route = createFileRoute("/vehicles/$reg")({
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  component: VehicleDetailPage,
+  component: VehicleDetailPageWithBoundary,
 });
+
+function VehicleDetailPageWithBoundary() {
+  return (
+    <RouteErrorBoundary
+      fallbackTitle="Vehicle Profile Error"
+      fallbackMessage="An unexpected error occurred while loading this vehicle profile. Please try reloading."
+    >
+      <VehicleDetailPage />
+    </RouteErrorBoundary>
+  );
+}
 
 const STATUS_OPTIONS: Vehicle["status"][] = ["Active", "In Service", "Rented", "Off Road"];
 
@@ -43,16 +55,33 @@ function VehicleDetailPage() {
   const navigate = useNavigate();
   const { reg } = useParams({ from: "/vehicles/$reg" });
   const [authed, setAuthed] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
   const [savingStatus, setSavingStatus] = useState(false);
   const [statusError, setStatusError] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (!data.session) navigate({ to: "/login" });
-      else setAuthed(true);
-    });
+    supabase.auth
+      .getSession()
+      .then(({ data, error }) => {
+        if (error) {
+          console.error("[Auth] getSession error on vehicle detail:", error);
+          setAuthError(error.message);
+          navigate({ to: "/login" });
+          return;
+        }
+        if (!data?.session) {
+          navigate({ to: "/login" });
+        } else {
+          setAuthed(true);
+        }
+      })
+      .catch((err) => {
+        console.error("[Auth] getSession exception on vehicle detail:", err);
+        setAuthError(err?.message ?? "Session validation failed");
+        navigate({ to: "/login" });
+      });
   }, [navigate]);
 
   const { vehicles, services, loading, saveVehicle, deleteVehicle } = useFleetData();
@@ -81,7 +110,36 @@ function VehicleDetailPage() {
     }
   };
 
-  if (!authed) return null;
+  if (!authed) {
+    return (
+      <div
+        className="relative flex min-h-screen items-center justify-center px-4 text-[#eef2f8]"
+        style={{ background: T.bg }}
+      >
+        <div className="flex flex-col items-center text-center">
+          <div className="mb-4 flex h-14 w-14 animate-pulse items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-gradient-to-br from-[#ff7a1a] to-[#ff9d52] text-white shadow-[0_18px_40px_-12px_rgba(255,106,0,0.7)]">
+            <img
+              src="/vch-logo.png"
+              alt="Virtual Car Hire"
+              className="h-full w-full object-contain p-0.5"
+            />
+          </div>
+          <div className="flex items-center gap-2 text-sm font-semibold text-[#ff8a3d]">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#ff8a3d] border-t-transparent" />
+            <span>Loading vehicle profile…</span>
+          </div>
+          {authError && (
+            <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs text-red-200">
+              {authError}.{" "}
+              <a href="/login" className="font-semibold underline">
+                Return to login
+              </a>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen text-[#e7eaf0]" style={{ background: T.bg }}>

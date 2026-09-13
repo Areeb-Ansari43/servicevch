@@ -30,6 +30,7 @@ export const CONNECT_SRC_ORIGINS = [
   CRM_BASE_URL,
   WEBSITE_BASE_URL,
   "https://*.supabase.co",
+  "wss://*.supabase.co",
   "https://static.cloudflareinsights.com",
   "https://api.vapi.ai",
   "wss://*.vapi.ai",
