@@ -41,9 +41,12 @@ export type MonthlyLog = {
   date: string;
 };
 
+export type InviteStatus = "none" | "pending" | "accepted";
+
 export type DriverTrack = {
   id: string;
   driver_name: string;
+  email?: string | null;
   phone?: string | null;
   vehicle_id: string;
   registration: string;
@@ -52,6 +55,9 @@ export type DriverTrack = {
   allowance: number;
   excess_rate: number;
   start_date: string;
+  invite_token?: string | null;
+  invite_status?: InviteStatus | null;
+  auth_user_id?: string | null;
   monthly_logs: MonthlyLog[];
 };
 
@@ -119,6 +125,7 @@ const sFromRow = (r: any): ServiceRecord => ({
 const dFromRow = (r: any, logs: MonthlyLog[]): DriverTrack => ({
   id: r.id,
   driver_name: r.driver_name,
+  email: r.email ?? "",
   phone: r.phone ?? "",
   vehicle_id: r.vehicle_id ?? "",
   registration: r.reg,
@@ -127,6 +134,9 @@ const dFromRow = (r: any, logs: MonthlyLog[]): DriverTrack => ({
   allowance: r.allowance,
   excess_rate: r.rate_pence,
   start_date: r.start_date,
+  invite_token: r.invite_token ?? null,
+  invite_status: (r.invite_status as InviteStatus) ?? "none",
+  auth_user_id: r.auth_user_id ?? null,
   monthly_logs: logs,
 });
 
@@ -308,6 +318,7 @@ export function useFleetData() {
         vehicle_id: d.vehicle_id || null,
         reg: d.registration,
         driver_name: d.driver_name,
+        email: d.email?.trim() || null,
         phone: d.phone?.trim() || null,
         start_date: d.start_date,
         start_mileage: d.start_mileage,
@@ -316,8 +327,8 @@ export function useFleetData() {
         rate_pence: d.excess_rate,
       };
       let { error } = await (supabase.from("driver_tracks") as any).insert(driverPayload);
-      if (error && /phone|column/i.test(error.message)) {
-        const { phone: _phone, ...legacyPayload } = driverPayload;
+      if (error && /email|phone|column/i.test(error.message)) {
+        const { email: _email, phone: _phone, ...legacyPayload } = driverPayload;
         ({ error } = await (supabase.from("driver_tracks") as any).insert(legacyPayload));
       }
       if (error) throw new Error(error.message);
@@ -391,6 +402,7 @@ export function useFleetData() {
     async (d: DriverTrack) => {
       const payload: any = {
         driver_name: d.driver_name,
+        email: d.email?.trim() || null,
         phone: d.phone?.trim() || null,
         vehicle_id: d.vehicle_id || null,
         reg: d.registration,
@@ -400,6 +412,24 @@ export function useFleetData() {
       const { error } = await supabase.from("driver_tracks").update(payload).eq("id", d.id);
       if (error) throw new Error(error.message);
       await refresh();
+    },
+    [refresh],
+  );
+
+  const generatePortalInvite = useCallback(
+    async (driverId: string) => {
+      const newToken = crypto.randomUUID();
+      const { error } = await supabase
+        .from("driver_tracks")
+        .update({
+          invite_token: newToken,
+          invite_status: "pending",
+        })
+        .eq("id", driverId);
+
+      if (error) throw new Error(error.message);
+      await refresh();
+      return newToken;
     },
     [refresh],
   );
@@ -440,6 +470,7 @@ export function useFleetData() {
     deleteService,
     addDriver,
     editDriver,
+    generatePortalInvite,
     deleteDriver,
     updateDriverMileage,
     closeMonth,
