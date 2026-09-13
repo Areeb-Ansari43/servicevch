@@ -67,15 +67,16 @@ export function ApexAssistant(props: {
   return (
     <>
       {/* Voice launcher (if any) */}
-      <div className="fixed bottom-6 right-6 z-[80] flex flex-col items-end gap-3">
+      <div className="fixed bottom-20 right-4 z-30 hidden sm:flex flex-col items-end gap-3">
         <VapiVoiceButton />
       </div>
 
       {/* Glass side panel */}
       <div
-        className={`fixed bottom-20 right-3 z-[90] flex h-[min(640px,72vh)] w-[calc(100vw-1.5rem)] max-w-md flex-col overflow-hidden rounded-[28px] border border-white/15 bg-[#0b0d12]/88 shadow-[0_24px_90px_rgba(0,0,0,0.55)] backdrop-blur-2xl transition-all duration-200 sm:right-6 sm:w-[min(420px,calc(100vw-3rem))] ${open ? "translate-y-0 scale-100 opacity-100" : "pointer-events-none translate-y-4 scale-[0.98] opacity-0"}`}
+        className={`fixed bottom-16 sm:bottom-20 inset-x-3 sm:inset-auto sm:right-6 z-[90] flex h-[min(620px,76vh)] max-w-md flex-col overflow-hidden rounded-t-3xl sm:rounded-[28px] border border-white/15 bg-[#0b0d12]/92 shadow-[0_24px_90px_rgba(0,0,0,0.65)] backdrop-blur-2xl transition-all duration-200 sm:w-[min(420px,calc(100vw-3rem))] ${open ? "translate-y-0 scale-100 opacity-100" : "pointer-events-none translate-y-6 scale-[0.98] opacity-0"}`}
         aria-hidden={!open}
       >
+        <div className="mx-auto mt-2 h-1.5 w-12 rounded-full bg-white/20 sm:hidden" />
         <div className="flex items-center gap-3 border-b border-white/10 bg-white/[0.04] px-5 py-4">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#ff6a00] to-[#ff9d4d] text-white">
             <svg

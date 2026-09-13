@@ -503,6 +503,20 @@ const Icon = {
       <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
     </svg>
   ),
+  User: (p: { className?: string }) => (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={p.className}
+    >
+      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
+  ),
 };
 
 function serviceStyle(type: string) {
@@ -759,6 +773,20 @@ export function FleetShell({ view }: { view: View }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [apexOpen, setApexOpen] = useState(false);
+  const [isOffline, setIsOffline] = useState(() =>
+    typeof navigator !== "undefined" ? !navigator.onLine : false,
+  );
+
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
   const data = useFleetData();
 
@@ -856,6 +884,14 @@ export function FleetShell({ view }: { view: View }) {
       style={{ background: T.bg }}
     >
       <div className="vch-glow" />
+      {isOffline && (
+        <div className="sticky top-0 z-50 flex items-center justify-center gap-2 bg-amber-500/90 px-4 py-2 text-center text-xs font-bold text-slate-950 shadow-md backdrop-blur-md">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="h-4 w-4 shrink-0">
+            <path d="M1 1l22 22M16.72 11.06A10.94 10.94 0 0119 12.55M5 12.55a10.94 10.94 0 015.17-2.39M10.71 5.05A16 16 0 0122.58 9M1.42 9a15.91 15.91 0 014.7-2.88M8.53 16.11a6 6 0 016.95 0M12 20h.01" />
+          </svg>
+          <span>You are offline — viewing cached fleet data</span>
+        </div>
+      )}
       <Sidebar
         view={view}
         setView={(next) => {
@@ -868,7 +904,7 @@ export function FleetShell({ view }: { view: View }) {
         onClose={() => setMobileNavOpen(false)}
         onOpenApex={() => setApexOpen((prev) => !prev)}
       />
-      <div className="relative z-10 ml-0 lg:ml-64">
+      <div className="relative z-10 ml-0 lg:ml-64 pb-24 lg:pb-6">
         <Topbar vehicles={data.vehicles} goto={go} onMenu={() => setMobileNavOpen(true)} />
         <main className="mx-auto w-full max-w-[1400px] p-3 sm:p-5 xl:p-6">
           {data.loading ? (
@@ -957,6 +993,12 @@ export function FleetShell({ view }: { view: View }) {
         </main>
       </div>
 
+      <MobileBottomNav
+        currentView={view}
+        goto={go}
+        onOpenApex={() => setApexOpen(true)}
+      />
+
       <ApexAssistant
         vehicles={data.vehicles}
         services={data.services}
@@ -1034,23 +1076,59 @@ function Sidebar({
   onClose: () => void;
   onOpenApex: () => void;
 }) {
-  const items: {
+  type NavItem = {
     id: View;
     label: string;
     Icon: (p: { className?: string }) => React.ReactElement;
-  }[] = [
+  };
+
+  const fleetItems: NavItem[] = [
     { id: "dashboard", label: "Dashboard", Icon: Icon.Dashboard },
     { id: "vehicles", label: "Vehicles", Icon: Icon.Car },
     { id: "services", label: "Service History", Icon: Icon.Wrench },
-    { id: "mileage", label: "Driver Mileage", Icon: Icon.Gauge },
-    { id: "drivers", label: "Drivers", Icon: Icon.Chat },
-    { id: "leads", label: "WhatsApp Leads", Icon: Icon.Chat },
-    { id: "accidents", label: "Accident Cases", Icon: Icon.Crash },
-    { id: "generations", label: "Generations", Icon: Icon.Calendar },
+    { id: "generations", label: "Reservations / Contracts", Icon: Icon.Calendar },
     { id: "add", label: "Add Vehicle", Icon: Icon.Plus },
   ];
+
+  const driverItems: NavItem[] = [
+    { id: "drivers", label: "Drivers", Icon: Icon.User },
+    { id: "mileage", label: "Driver Mileage", Icon: Icon.Gauge },
+    { id: "leads", label: "WhatsApp Leads", Icon: Icon.Chat },
+    { id: "accidents", label: "Accident Cases", Icon: Icon.Crash },
+  ];
+
   const email = account?.email ?? "";
   const initial = (email.trim()[0] ?? "V").toUpperCase();
+
+  const renderNavItem = (it: NavItem) => {
+    const active = view === it.id;
+    return (
+      <button
+        key={it.id}
+        onClick={() => setView(it.id)}
+        className="flex w-full items-center gap-3 rounded-full px-4 py-2.5 text-left text-sm transition-colors min-h-[44px]"
+        style={
+          active
+            ? {
+                background: T.orangeSoft,
+                color: T.orange,
+                fontWeight: 600,
+                boxShadow: "inset 0 0 0 1px rgba(255,106,0,0.28)",
+              }
+            : { color: "#c5cbd6" }
+        }
+        onMouseEnter={(e) => {
+          if (!active) e.currentTarget.style.background = T.panel2;
+        }}
+        onMouseLeave={(e) => {
+          if (!active) e.currentTarget.style.background = "transparent";
+        }}
+      >
+        <it.Icon className="h-4 w-4 shrink-0" />
+        <span>{it.label}</span>
+      </button>
+    );
+  };
 
   return (
     <>
@@ -1097,36 +1175,21 @@ function Sidebar({
           </button>
         </div>
 
-        <nav className="flex-1 space-y-1.5 overflow-y-auto px-3 py-2">
-          {items.map((it) => {
-            const active = view === it.id;
-            return (
-              <button
-                key={it.id}
-                onClick={() => setView(it.id)}
-                className="flex w-full items-center gap-3 rounded-full px-4 py-3 text-left text-sm transition-colors"
-                style={
-                  active
-                    ? {
-                        background: T.orangeSoft,
-                        color: T.orange,
-                        fontWeight: 600,
-                        boxShadow: "inset 0 0 0 1px rgba(255,106,0,0.28)",
-                      }
-                    : { color: "#c5cbd6" }
-                }
-                onMouseEnter={(e) => {
-                  if (!active) e.currentTarget.style.background = T.panel2;
-                }}
-                onMouseLeave={(e) => {
-                  if (!active) e.currentTarget.style.background = "transparent";
-                }}
-              >
-                <it.Icon className="h-4 w-4 shrink-0" />
-                <span>{it.label}</span>
-              </button>
-            );
-          })}
+        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2">
+          {/* FLEET SECTION */}
+          <div className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[#7d8799]">
+            Fleet
+          </div>
+          <div className="space-y-1">{fleetItems.map(renderNavItem)}</div>
+
+          {/* DIVIDER */}
+          <div className="my-3 border-t border-white/[0.08]" />
+
+          {/* DRIVERS SECTION */}
+          <div className="px-3 pt-1 pb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[#7d8799]">
+            Drivers
+          </div>
+          <div className="space-y-1">{driverItems.map(renderNavItem)}</div>
         </nav>
 
         <div className="border-t p-3" style={{ borderColor: T.border }}>
@@ -1188,6 +1251,224 @@ function Sidebar({
           </p>
         </div>
       </aside>
+    </>
+  );
+}
+
+function MobileBottomNav({
+  currentView,
+  goto,
+  onOpenApex,
+}: {
+  currentView: View;
+  goto: (v: View) => void;
+  onOpenApex: () => void;
+}) {
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  type PrimaryTab = {
+    id: View;
+    label: string;
+    Icon: (p: { className?: string }) => React.ReactElement;
+  };
+
+  const primaryTabs: PrimaryTab[] = [
+    { id: "dashboard", label: "Dashboard", Icon: Icon.Dashboard },
+    { id: "vehicles", label: "Vehicles", Icon: Icon.Car },
+    { id: "services", label: "Service", Icon: Icon.Wrench },
+    { id: "drivers", label: "Drivers", Icon: Icon.User },
+  ];
+
+  type SecondaryItem = {
+    id: View;
+    label: string;
+    description: string;
+    Icon: (p: { className?: string }) => React.ReactElement;
+  };
+
+  const secondaryItems: SecondaryItem[] = [
+    {
+      id: "leads",
+      label: "WhatsApp Leads",
+      description: "Inbound chats & lead triage",
+      Icon: Icon.Chat,
+    },
+    {
+      id: "mileage",
+      label: "Driver Mileage",
+      description: "Log and track monthly miles",
+      Icon: Icon.Gauge,
+    },
+    {
+      id: "accidents",
+      label: "Accident Cases",
+      description: "Incident logs & reports",
+      Icon: Icon.Crash,
+    },
+    {
+      id: "generations",
+      label: "Reservations / Contracts",
+      description: "Permission letters & contracts",
+      Icon: Icon.Calendar,
+    },
+    {
+      id: "add",
+      label: "Add Vehicle",
+      description: "Add new vehicle to fleet",
+      Icon: Icon.Plus,
+    },
+  ];
+
+  const isSecondaryActive = secondaryItems.some((item) => item.id === currentView);
+
+  return (
+    <>
+      {/* Fixed Bottom Tab Bar for Mobile */}
+      <nav
+        className="fixed bottom-0 inset-x-0 z-50 flex items-center justify-around border-t bg-[#0c101b]/95 backdrop-blur-2xl px-1 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] lg:hidden shadow-2xl"
+        style={{ borderColor: T.border }}
+        aria-label="Mobile Navigation"
+      >
+        {primaryTabs.map((tab) => {
+          const active = currentView === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => {
+                setMoreOpen(false);
+                goto(tab.id);
+              }}
+              className="flex flex-1 flex-col items-center justify-center py-1 text-[11px] font-medium transition-colors min-h-[48px] touch-manipulation"
+              style={{ color: active ? T.orange : "#9aa5b8" }}
+            >
+              <tab.Icon
+                className={`h-5 w-5 mb-0.5 ${active ? "scale-110 transition-transform text-[#ff8a3d]" : ""}`}
+              />
+              <span className={active ? "font-bold text-[#ff8a3d]" : ""}>{tab.label}</span>
+            </button>
+          );
+        })}
+
+        <button
+          onClick={() => setMoreOpen(true)}
+          className="flex flex-1 flex-col items-center justify-center py-1 text-[11px] font-medium transition-colors min-h-[48px] touch-manipulation"
+          style={{ color: isSecondaryActive || moreOpen ? T.orange : "#9aa5b8" }}
+        >
+          <Icon.Menu
+            className={`h-5 w-5 mb-0.5 ${isSecondaryActive || moreOpen ? "scale-110 transition-transform text-[#ff8a3d]" : ""}`}
+          />
+          <span className={isSecondaryActive || moreOpen ? "font-bold text-[#ff8a3d]" : ""}>
+            More
+          </span>
+        </button>
+      </nav>
+
+      {/* "More" Bottom Sheet Drawer */}
+      {moreOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end bg-black/70 backdrop-blur-sm lg:hidden animate-in fade-in duration-200"
+          onClick={() => setMoreOpen(false)}
+        >
+          <div
+            className="w-full max-h-[85vh] overflow-y-auto rounded-t-3xl border-t border-white/15 bg-[#0f1422] p-5 pb-[max(2rem,env(safe-area-inset-bottom))] shadow-2xl animate-in slide-in-from-bottom duration-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Sheet Drag Handle */}
+            <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-white/20" />
+
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-white">More Options</h3>
+                <p className="text-xs text-[#8b95a8]">Quick access to remaining fleet features</p>
+              </div>
+              <button
+                onClick={() => setMoreOpen(false)}
+                className="rounded-full border p-2 text-[#8b95a8] hover:bg-white/10 hover:text-white min-h-[44px] min-w-[44px] flex items-center justify-center"
+                style={{ borderColor: T.borderSoft }}
+              >
+                <Icon.X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Apex AI Button in More Menu */}
+            <button
+              onClick={() => {
+                setMoreOpen(false);
+                onOpenApex();
+              }}
+              className="mb-4 flex w-full items-center gap-3 rounded-2xl border border-[#ff6a00]/40 bg-[#ff6a00]/15 p-3.5 text-left text-sm font-semibold text-white shadow-md active:scale-[0.98] transition-transform min-h-[52px]"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#ff6a00] to-[#ff9d4d] text-white shadow-sm">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-5 w-5"
+                >
+                  <path d="M12 3l1.8 4.9L19 9.7l-4.4 3 .5 5.3-3.1-2.5-3.1 2.5.5-5.3-4.4-3 5.2-1.8z" />
+                </svg>
+              </span>
+              <div className="flex-1">
+                <div className="font-bold text-white">Apex AI Assistant</div>
+                <div className="text-xs text-[#ffb27e]">Ask anything about your fleet</div>
+              </div>
+            </button>
+
+            <div className="space-y-2">
+              {secondaryItems.map((item) => {
+                const active = currentView === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setMoreOpen(false);
+                      goto(item.id);
+                    }}
+                    className="flex w-full items-center gap-3.5 rounded-2xl border p-3.5 text-left transition-colors min-h-[52px] touch-manipulation"
+                    style={
+                      active
+                        ? {
+                            background: T.orangeSoft,
+                            borderColor: "rgba(255,106,0,0.4)",
+                          }
+                        : {
+                            background: T.panel,
+                            borderColor: T.borderSoft,
+                          }
+                    }
+                  >
+                    <div
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border"
+                      style={
+                        active
+                          ? {
+                              borderColor: T.orange,
+                              color: T.orange,
+                              background: "rgba(255,106,0,0.15)",
+                            }
+                          : { borderColor: T.borderSoft, color: "#aeb8c9", background: T.panel2 }
+                      }
+                    >
+                      <item.Icon className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div
+                        className={`text-sm font-bold ${active ? "text-[#ff8a3d]" : "text-white"}`}
+                      >
+                        {item.label}
+                      </div>
+                      <div className="text-xs text-[#8b95a8]">{item.description}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -2535,14 +2816,15 @@ export function EditVehicleModal({
   const [v, setV] = useState<Vehicle>(vehicle);
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border p-6"
-        style={{ borderColor: T.border, background: T.panel }}
+        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-t-3xl sm:rounded-2xl border border-white/15 bg-[#10141d] p-5 sm:p-6 shadow-2xl animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200"
+        style={{ borderColor: T.border }}
         onClick={(e) => e.stopPropagation()}
       >
+        <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/20 sm:hidden" />
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold">Edit Vehicle</h2>
           <button onClick={onClose} className="text-[#8b95a8] hover:text-white">
@@ -3069,17 +3351,18 @@ function ServiceDetailsModal({
   const st = serviceStyle(service.service_type);
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border p-6 shadow-2xl"
-        style={{ borderColor: T.border, background: "#10141d" }}
+        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-t-3xl sm:rounded-2xl border border-white/15 bg-[#10141d] p-5 sm:p-6 shadow-2xl animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200"
+        style={{ borderColor: T.border }}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label="Service record details"
       >
+        <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/20 sm:hidden" />
         <div className="mb-6 flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
             <div
@@ -3483,14 +3766,15 @@ function AddDriverModal({
 
   return (
     <div
-      className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4"
+      className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg rounded-2xl border p-5 shadow-2xl"
-        style={{ borderColor: T.border, background: "#10141d" }}
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-3xl sm:rounded-2xl border border-white/15 bg-[#10141d] p-5 shadow-2xl animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200"
+        style={{ borderColor: T.border }}
         onClick={(e) => e.stopPropagation()}
       >
+        <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/20 sm:hidden" />
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-base font-bold text-white">Add New Driver</h3>
           <button onClick={onClose} className="text-[#8b95a8] hover:text-white">
@@ -3606,14 +3890,15 @@ function EditDriverModal({
 
   return (
     <div
-      className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4"
+      className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg rounded-2xl border p-5 shadow-2xl"
-        style={{ borderColor: T.border, background: "#10141d" }}
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-3xl sm:rounded-2xl border border-white/15 bg-[#10141d] p-5 shadow-2xl animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200"
+        style={{ borderColor: T.border }}
         onClick={(e) => e.stopPropagation()}
       >
+        <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/20 sm:hidden" />
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-base font-bold text-white">Edit Driver Details</h3>
           <button onClick={onClose} className="text-[#8b95a8] hover:text-white">
@@ -3748,15 +4033,16 @@ function DriverPreviewModal({
   }, [lead?.id, loadConversation]);
   return (
     <div
-      className="fixed inset-0 z-[96] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-md"
+      className="fixed inset-0 z-[96] flex items-end sm:items-center justify-center bg-slate-950/75 p-0 sm:p-4 backdrop-blur-md animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
         role="dialog"
         aria-modal="true"
-        className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-[26px] border border-white/15 bg-[#0d1320]/90 shadow-2xl backdrop-blur-2xl"
+        className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl sm:rounded-[26px] border border-white/15 bg-[#0d1320]/95 shadow-2xl backdrop-blur-2xl animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
+        <div className="mx-auto mt-2 h-1.5 w-12 rounded-full bg-white/20 sm:hidden" />
         <div className="flex items-start gap-4 border-b border-white/10 bg-white/[0.04] p-5">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#ff6a00]/15 text-[#ff8a3d]">
             <Icon.Chat className="h-6 w-6" />
@@ -4128,14 +4414,15 @@ function UpdateMileageModal({
   const invalid = num < driver.start_mileage;
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-xl border p-6"
-        style={{ borderColor: T.border, background: T.panel }}
+        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-3xl sm:rounded-xl border border-white/15 bg-[#10141d] p-5 sm:p-6 shadow-2xl animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200"
+        style={{ borderColor: T.border }}
         onClick={(e) => e.stopPropagation()}
       >
+        <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/20 sm:hidden" />
         <h2 className="mb-1 text-lg font-bold">Update Current Mileage</h2>
         <p className="mb-4 text-sm text-[#8b95a8]">
           Driver: <span className="font-semibold text-white">{driver.driver_name}</span> ·{" "}
@@ -4193,14 +4480,15 @@ function EndOfMonthModal({
   const invalid = num <= driver.start_mileage;
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-xl border p-6"
-        style={{ borderColor: T.border, background: T.panel }}
+        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-3xl sm:rounded-xl border border-white/15 bg-[#10141d] p-5 sm:p-6 shadow-2xl animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200"
+        style={{ borderColor: T.border }}
         onClick={(e) => e.stopPropagation()}
       >
+        <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/20 sm:hidden" />
         <h2 className="mb-1 text-lg font-bold">End of Month Miles</h2>
         <p className="mb-4 text-sm text-[#8b95a8]">
           Enter the driver's odometer reading at the end of this month.
@@ -4277,14 +4565,15 @@ function EndOfMonthModal({
 function LogsModal({ driver, onClose }: { driver: DriverTrack; onClose: () => void }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl border p-6"
-        style={{ borderColor: T.border, background: T.panel }}
+        className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-t-3xl sm:rounded-xl border border-white/15 bg-[#10141d] p-5 sm:p-6 shadow-2xl animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200"
+        style={{ borderColor: T.border }}
         onClick={(e) => e.stopPropagation()}
       >
+        <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/20 sm:hidden" />
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h2 className="text-lg font-bold">Logged Miles · {driver.driver_name}</h2>
