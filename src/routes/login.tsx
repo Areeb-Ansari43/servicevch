@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { requestLoginCode, verifyLoginCode } from "@/lib/auth-otp.functions";
 import { WEBSITE_BASE_URL } from "@/lib/domain-config";
+import { RouteErrorBoundary } from "@/components/error-boundary";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -15,8 +16,19 @@ export const Route = createFileRoute("/login")({
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  component: LoginPage,
+  component: LoginPageWithBoundary,
 });
+
+function LoginPageWithBoundary() {
+  return (
+    <RouteErrorBoundary
+      fallbackTitle="Sign In Unavailable"
+      fallbackMessage="An error occurred on the login page. Please reload or try again."
+    >
+      <LoginPage />
+    </RouteErrorBoundary>
+  );
+}
 
 function PoweredBy() {
   return (
@@ -49,9 +61,22 @@ function LoginPage() {
 
   useEffect(() => {
     let cancelled = false;
-    supabase.auth.getSession().then(({ data }) => {
-      if (!cancelled && data.session) navigate({ to: "/" });
-    });
+    supabase.auth
+      .getSession()
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          console.error("[Login] Session check error:", error);
+          return;
+        }
+        if (data?.session) {
+          console.info("[Login] Active session found, redirecting to /");
+          navigate({ to: "/" });
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) console.error("[Login] Exception checking session:", err);
+      });
     return () => {
       cancelled = true;
     };
@@ -70,11 +95,14 @@ function LoginPage() {
       return;
     }
     setLoading(true);
+    console.info("[Login] Requesting login code for:", email.trim());
     try {
       await requestLoginCode({ data: { email: email.trim(), password } });
+      console.info("[Login] Login code sent successfully");
       setStage("otp");
       setInfo("We emailed a 6-digit verification code to the authorised account.");
     } catch (err: any) {
+      console.error("[Login] requestLoginCode failed:", err);
       setError(
         err?.message?.includes("Invalid credentials")
           ? "Invalid credentials."
@@ -90,16 +118,20 @@ function LoginPage() {
     submittedRef.current = true;
     setError(null);
     setLoading(true);
+    console.info("[Login] Verifying OTP code...");
     try {
       const res = await verifyLoginCode({ data: { code } });
+      console.info("[Login] OTP code verified by server, minting session token...");
       const { error: vErr } = await supabase.auth.verifyOtp({
         token_hash: res.token_hash,
         type: "magiclink",
       });
       if (vErr) throw new Error(vErr.message);
+      console.info("[Login] Session established successfully, redirecting to dashboard");
       setFeedback("success");
       setTimeout(() => navigate({ to: "/" }), 640);
     } catch (err: any) {
+      console.error("[Login] Verification failed:", err);
       setFeedback("error");
       setError(err?.message ?? "Verification failed.");
       setTimeout(() => {

@@ -12,6 +12,7 @@ import { LeadThread } from "@/components/lead-thread";
 import { getLeadConversation } from "@/lib/chat.functions";
 import { GenerationsView } from "@/components/generations-view";
 import { WEBSITE_BASE_URL } from "@/lib/domain-config";
+import { RouteErrorBoundary } from "@/components/error-boundary";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -737,7 +738,14 @@ export const VIEW_PATH: Record<View, string> = {
 export const regSlug = (reg: string) => reg.replace(/\s+/g, "").toUpperCase();
 
 function FleetApp() {
-  return <FleetShell view="dashboard" />;
+  return (
+    <RouteErrorBoundary
+      fallbackTitle="Dashboard Error"
+      fallbackMessage="An unexpected error occurred while loading the dashboard. Please try reloading."
+    >
+      <FleetShell view="dashboard" />
+    </RouteErrorBoundary>
+  );
 }
 
 export function FleetShell({ view }: { view: View }) {
@@ -746,6 +754,7 @@ export function FleetShell({ view }: { view: View }) {
   const navigate = useNavigate();
   const [authed, setAuthed] = useState(false);
   const [account, setAccount] = useState<{ email: string } | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -762,17 +771,37 @@ export function FleetShell({ view }: { view: View }) {
       setAccount({ email: "admin@virtualcarhire.com" });
       return;
     }
-    supabase.auth.getSession().then(({ data }) => {
-      if (cancelled) return;
-      if (!data.session) navigate({ to: "/login" });
-      else {
-        setAuthed(true);
-        setAccount({ email: data.session.user.email ?? "" });
+    supabase.auth
+      .getSession()
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          console.error("[Auth] Error fetching session:", error);
+          setAuthError(error.message);
+          navigate({ to: "/login" });
+          return;
+        }
+        if (!data?.session) {
+          console.info("[Auth] No active session found, redirecting to /login");
+          navigate({ to: "/login" });
+        } else {
+          setAuthed(true);
+          setAccount({ email: data.session.user.email ?? "" });
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error("[Auth] Exception during session check:", err);
+        setAuthError(err?.message ?? "Session validation failed");
+        navigate({ to: "/login" });
+      });
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
+      if (!session && !((window as any).__MOCK_AUTH__)) {
+        navigate({ to: "/login" });
       }
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
-      if (!session && !((window as any).__MOCK_AUTH__)) navigate({ to: "/login" });
-    });
+
     return () => {
       cancelled = true;
       sub.subscription.unsubscribe();
@@ -790,7 +819,36 @@ export function FleetShell({ view }: { view: View }) {
     navigate({ to: "/login", replace: true });
   };
 
-  if (!authed) return null;
+  if (!authed) {
+    return (
+      <div
+        className="relative flex min-h-screen items-center justify-center px-4 text-[#eef2f8]"
+        style={{ background: T.bg }}
+      >
+        <div className="flex flex-col items-center text-center">
+          <div className="mb-4 flex h-14 w-14 animate-pulse items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-gradient-to-br from-[#ff7a1a] to-[#ff9d52] text-white shadow-[0_18px_40px_-12px_rgba(255,106,0,0.7)]">
+            <img
+              src="/vch-logo.png"
+              alt="Virtual Car Hire"
+              className="h-full w-full object-contain p-0.5"
+            />
+          </div>
+          <div className="flex items-center gap-2 text-sm font-semibold text-[#ff8a3d]">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#ff8a3d] border-t-transparent" />
+            <span>Authenticating session…</span>
+          </div>
+          {authError && (
+            <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs text-red-200">
+              {authError}.{" "}
+              <a href="/login" className="font-semibold underline">
+                Return to login
+              </a>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
