@@ -3441,6 +3441,31 @@ function ServiceDetailsModal({
 }
 
 /* ---------------- Drivers ---------------- */
+function portalStatusBadge(driver: DriverTrack) {
+  const status = driver.invite_status ?? "none";
+  if (status === "accepted") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+        Portal active
+      </span>
+    );
+  }
+  if (status === "pending") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-sky-400/30 bg-sky-400/10 px-2 py-0.5 text-[10px] font-bold text-sky-300">
+        <span className="h-1.5 w-1.5 rounded-full bg-sky-400 animate-pulse" />
+        Invite sent
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-slate-500/30 bg-slate-500/10 px-2 py-0.5 text-[10px] font-bold text-slate-400">
+      Not invited
+    </span>
+  );
+}
+
 function DriversView({
   vehicles,
   drivers,
@@ -3461,6 +3486,7 @@ function DriversView({
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [editingDriver, setEditingDriver] = useState<DriverTrack | null>(null);
   const [previewDriver, setPreviewDriver] = useState<DriverTrack | null>(null);
+  const [inviteModalDriver, setInviteModalDriver] = useState<DriverTrack | null>(null);
 
   const totalDrivers = drivers.length;
   const activeDrivers = drivers.length; // Active driver tracks
@@ -3590,6 +3616,7 @@ function DriversView({
                 <th className="px-4 py-3 font-bold">Contact</th>
                 <th className="px-4 py-3 font-bold">Vehicle</th>
                 <th className="px-4 py-3 font-bold">Start Date</th>
+                <th className="px-4 py-3 font-bold">Portal Status</th>
                 <th className="px-4 py-3 font-bold">Status</th>
                 <th className="px-4 py-3 text-right font-bold">Actions</th>
               </tr>
@@ -3626,7 +3653,10 @@ function DriversView({
                         </div>
                       </td>
                       <td className="px-4 py-3 font-medium text-[#c5ccda]">
-                        {driver.phone || "No phone saved"}
+                        <div>{driver.phone || "No phone saved"}</div>
+                        {driver.email && (
+                          <div className="text-[10px] text-[#8b95a8]">{driver.email}</div>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
@@ -3637,6 +3667,7 @@ function DriversView({
                         </div>
                       </td>
                       <td className="px-4 py-3 text-[#9aa5b8]">{driver.start_date || "—"}</td>
+                      <td className="px-4 py-3">{portalStatusBadge(driver)}</td>
                       <td className="px-4 py-3">
                         <span className="inline-flex rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
                           Active
@@ -3644,6 +3675,19 @@ function DriversView({
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setInviteModalDriver(driver)}
+                            title="Send Portal Invite"
+                            className="inline-flex items-center gap-1 rounded-md border border-[#ff6a00]/40 bg-[#ff6a00]/15 px-2 py-1 text-[11px] font-bold text-[#ff8a3d] hover:bg-[#ff6a00]/25"
+                          >
+                            <Icon.Bolt className="h-3 w-3" />
+                            {driver.invite_status === "pending"
+                              ? "Re-invite"
+                              : driver.invite_status === "accepted"
+                                ? "Portal Link"
+                                : "Invite"}
+                          </button>
                           <button
                             type="button"
                             onClick={() => setPreviewDriver(driver)}
@@ -3716,12 +3760,40 @@ function DriversView({
         />
       )}
 
+      {/* Send Portal Invite Modal */}
+      {inviteModalDriver && (
+        <PortalInviteModal
+          driver={inviteModalDriver}
+          onClose={() => setInviteModalDriver(null)}
+          onGenerateInvite={async () => {
+            try {
+              const token = await data.generatePortalInvite(inviteModalDriver.id);
+              toast(`Portal invite link generated for ${inviteModalDriver.driver_name}`);
+              return token;
+            } catch (err: any) {
+              toast(err?.message ?? "Failed to generate portal invite", "error");
+              throw err;
+            }
+          }}
+          onEditEmail={() => {
+            const driverToEdit = inviteModalDriver;
+            setInviteModalDriver(null);
+            setEditingDriver(driverToEdit);
+          }}
+        />
+      )}
+
       {/* Driver WhatsApp History Preview Modal */}
       {previewDriver && (
         <DriverPreviewModal
           driver={previewDriver}
           vehicle={vehicles.find((item) => item.id === previewDriver.vehicle_id)}
           onClose={() => setPreviewDriver(null)}
+          onSendInvite={() => {
+            const d = previewDriver;
+            setPreviewDriver(null);
+            setInviteModalDriver(d);
+          }}
         />
       )}
     </div>
@@ -3738,6 +3810,7 @@ function AddDriverModal({
   onSave: (driver: Omit<DriverTrack, "id" | "monthly_logs">) => Promise<void>;
 }) {
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [vehicleId, setVehicleId] = useState("");
   const [allowance, setAllowance] = useState("5000");
@@ -3752,6 +3825,7 @@ function AddDriverModal({
     setSaving(true);
     await onSave({
       driver_name: name.trim(),
+      email: email.trim(),
       phone: phone.trim(),
       vehicle_id: selectedVehicle.id,
       registration: selectedVehicle.registration,
@@ -3789,6 +3863,15 @@ function AddDriverModal({
               onChange={(e) => setName(e.target.value)}
               className={inputCls}
               placeholder="e.g. John Smith"
+            />
+          </Field>
+          <Field label="Email Address">
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className={inputCls}
+              placeholder="e.g. driver@example.com"
             />
           </Field>
           <Field label="Phone Number *">
@@ -3864,6 +3947,7 @@ function EditDriverModal({
   onSave: (driver: DriverTrack) => Promise<void>;
 }) {
   const [name, setName] = useState(driver.driver_name);
+  const [email, setEmail] = useState(driver.email || "");
   const [phone, setPhone] = useState(driver.phone || "");
   const [vehicleId, setVehicleId] = useState(driver.vehicle_id);
   const [allowance, setAllowance] = useState(String(driver.allowance));
@@ -3879,6 +3963,7 @@ function EditDriverModal({
     await onSave({
       ...driver,
       driver_name: name.trim(),
+      email: email.trim(),
       phone: phone.trim(),
       vehicle_id: selectedVehicle ? selectedVehicle.id : driver.vehicle_id,
       registration: selectedVehicle ? selectedVehicle.registration : driver.registration,
@@ -3912,6 +3997,15 @@ function EditDriverModal({
               value={name}
               onChange={(e) => setName(e.target.value)}
               className={inputCls}
+            />
+          </Field>
+          <Field label="Email Address">
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className={inputCls}
+              placeholder="e.g. driver@example.com"
             />
           </Field>
           <Field label="Phone Number">
@@ -3988,14 +4082,187 @@ function phoneKeysMatch(
   return a.length >= 8 && b.length >= 8 && a.slice(-8) === b.slice(-8);
 }
 
+function PortalInviteModal({
+  driver,
+  onClose,
+  onGenerateInvite,
+  onEditEmail,
+}: {
+  driver: DriverTrack;
+  onClose: () => void;
+  onGenerateInvite: () => Promise<string>;
+  onEditEmail: () => void;
+}) {
+  const [token, setToken] = useState<string | null>(driver.invite_token ?? null);
+  const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const hasEmail = Boolean(driver.email && driver.email.trim());
+  const inviteUrl = token ? `https://virtualcarhire.pages.dev/portal/signup?invite=${token}` : "";
+
+  const handleGenerate = async () => {
+    if (!hasEmail) return;
+    setLoading(true);
+    try {
+      const newToken = await onGenerateInvite();
+      setToken(newToken);
+      setCopied(false);
+    } catch {
+      // error toast handled in parent
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCopy = async () => {
+    if (!inviteUrl) return;
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 3000);
+    } catch {
+      // ignore copy error
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[95] flex items-end sm:items-center justify-center bg-black/75 p-0 sm:p-4 backdrop-blur-md animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-3xl sm:rounded-2xl border border-white/15 bg-[#10141d] p-5 shadow-2xl animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200"
+        style={{ borderColor: T.border }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/20 sm:hidden" />
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#ff6a00]/20 text-[#ff8a3d]">
+              <Icon.Bolt className="h-4 w-4" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-white">Driver Portal Invite</h3>
+              <p className="text-xs text-[#8b95a8]">{driver.driver_name}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-[#8b95a8] hover:text-white">
+            <Icon.X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {!hasEmail ? (
+          <div className="space-y-4 text-xs">
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-200">
+              <div className="flex items-start gap-2.5">
+                <Icon.Alert className="h-5 w-5 shrink-0 text-amber-400 mt-0.5" />
+                <div>
+                  <div className="font-bold text-amber-300">Email Address Required</div>
+                  <p className="mt-1 leading-relaxed text-amber-200/90">
+                    Staff must add an email address for <span className="font-bold text-white">{driver.driver_name}</span> before generating a portal invite link.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg border px-4 py-2 text-xs font-semibold text-[#8b95a8] hover:bg-white/10 hover:text-white"
+                style={{ borderColor: T.border }}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={onEditEmail}
+                className="rounded-lg bg-[#ff6a00] px-4 py-2 text-xs font-semibold text-white hover:bg-[#e05d00]"
+              >
+                Add Email Address
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4 text-xs">
+            <div className="rounded-xl border p-3.5 space-y-2" style={{ borderColor: T.borderSoft, background: T.panel }}>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-[#8b95a8]">Email on file:</span>
+                <span className="font-semibold text-white">{driver.email}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-[#8b95a8]">Portal Status:</span>
+                {portalStatusBadge(driver)}
+              </div>
+            </div>
+
+            {inviteUrl ? (
+              <div className="space-y-2">
+                <Label>Shareable Signup Link</Label>
+                <div className="flex items-center gap-2">
+                  <input
+                    readOnly
+                    value={inviteUrl}
+                    className="w-full rounded-lg border py-2 px-3 text-xs font-mono text-white select-all focus:outline-none"
+                    style={{ borderColor: T.border, background: T.panel2 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCopy}
+                    className="shrink-0 rounded-lg bg-[#ff6a00] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#e05d00]"
+                  >
+                    {copied ? "Copied!" : "Copy Link"}
+                  </button>
+                </div>
+                <p className="text-[11px] text-[#8b95a8]">
+                  Share this unique link with {driver.driver_name} via WhatsApp or email to let them create their portal account.
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-[#8b95a8]">
+                Click below to generate a unique signup invitation link for {driver.driver_name}.
+              </p>
+            )}
+
+            <div className="flex items-center justify-between border-t pt-4" style={{ borderColor: T.border }}>
+              <button
+                type="button"
+                onClick={handleGenerate}
+                disabled={loading}
+                className="rounded-lg border border-[#ff6a00]/40 bg-[#ff6a00]/15 px-3.5 py-2 text-xs font-bold text-[#ff8a3d] hover:bg-[#ff6a00]/25 disabled:opacity-50"
+              >
+                {loading
+                  ? "Generating..."
+                  : inviteUrl
+                    ? "Generate Fresh Token (Re-invite)"
+                    : "Generate Invite Link"}
+              </button>
+
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg border px-4 py-2 text-xs font-semibold hover:bg-white/10"
+                style={{ borderColor: T.border }}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function DriverPreviewModal({
   driver,
   vehicle,
   onClose,
+  onSendInvite,
 }: {
   driver: DriverTrack;
   vehicle?: Vehicle;
   onClose: () => void;
+  onSendInvite?: () => void;
 }) {
   const { leads, loading: leadsLoading } = useLeadsData();
   const loadConversation = useServerFn(getLeadConversation);
@@ -4048,14 +4315,29 @@ function DriverPreviewModal({
             <Icon.Chat className="h-6 w-6" />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-lg font-bold text-white">{driver.driver_name}</h2>
-            <p className="text-sm text-[#aeb8c9]">{driver.phone || "No phone saved"}</p>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-bold text-white">{driver.driver_name}</h2>
+              {portalStatusBadge(driver)}
+            </div>
+            <p className="text-sm text-[#aeb8c9]">
+              {driver.phone || "No phone saved"} {driver.email ? `· ${driver.email}` : ""}
+            </p>
             <p className="mt-1 text-xs text-[#7f8aa0]">
               {vehicle
                 ? `${simplifyVehicleName(vehicle)} · ${vehicle.registration}`
                 : driver.registration}
             </p>
           </div>
+          {onSendInvite && (
+            <button
+              type="button"
+              onClick={onSendInvite}
+              className="inline-flex items-center gap-1 rounded-lg bg-[#ff6a00] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#e05d00]"
+            >
+              <Icon.Bolt className="h-3.5 w-3.5" />
+              Portal Invite
+            </button>
+          )}
           <button
             onClick={onClose}
             aria-label="Close driver preview"

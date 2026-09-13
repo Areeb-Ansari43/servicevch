@@ -116,10 +116,15 @@ export type Database = {
         Row: {
           active: boolean;
           allowance: number;
+          auth_user_id: string | null;
           created_at: string;
           current_mileage: number;
           driver_name: string;
+          email: string | null;
           id: string;
+          invite_status: string | null;
+          invite_token: string | null;
+          phone: string | null;
           rate_pence: number;
           reg: string;
           start_date: string;
@@ -130,10 +135,15 @@ export type Database = {
         Insert: {
           active?: boolean;
           allowance?: number;
+          auth_user_id?: string | null;
           created_at?: string;
           current_mileage?: number;
           driver_name: string;
+          email?: string | null;
           id?: string;
+          invite_status?: string | null;
+          invite_token?: string | null;
+          phone?: string | null;
           rate_pence?: number;
           reg: string;
           start_date?: string;
@@ -144,10 +154,15 @@ export type Database = {
         Update: {
           active?: boolean;
           allowance?: number;
+          auth_user_id?: string | null;
           created_at?: string;
           current_mileage?: number;
           driver_name?: string;
+          email?: string | null;
           id?: string;
+          invite_status?: string | null;
+          invite_token?: string | null;
+          phone?: string | null;
           rate_pence?: number;
           reg?: string;
           start_date?: string;
