@@ -2,16 +2,17 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
 import { getRuntimeEnv } from "@/integrations/supabase/config";
-import { sendWhatsAppText, sendWhatsAppImageButtons } from "@/lib/meta-whatsapp.server";
+import { sendWhatsAppText, sendWhatsAppImageButtons, sendWhatsAppImage } from "@/lib/meta-whatsapp.server";
 import { CRM_BASE_URL, WEBSITE_BASE_URL } from "@/lib/domain-config";
 
 const CRM_BASE = CRM_BASE_URL;
 const VCH_WEBSITE = `${WEBSITE_BASE_URL}/our-fleet`;
 const WELCOME_IMAGE_URL = `${CRM_BASE_URL}/whatsapp/virtual-car-hire-welcome.jpg`;
+const AUTO_SURGEON_STOREFRONT_IMAGE_URL = `${CRM_BASE_URL}/whatsapp/auto-surgeon-storefront.jpg`;
 const AUTO_SURGEON_ADDRESS =
-  "The Auto Surgeon, Unit 3 Squirrels Trading Estate, Viveash Close, Hayes UB3 4RZ";
+  "The Auto Surgeon, Unit 3, Squirrels Trading Estate, Viveash Close, Hayes, UB3 4RZ.";
 const AUTO_SURGEON_MAP =
-  "https://www.google.com/maps/search/?api=1&query=The+Auto+Surgeon+Unit+3+Squirrels+Trading+Estate+Viveash+Close+Hayes+UB3+4RZ";
+  "https://www.google.com/maps/search/?api=1&query=Unit+3+Squirrels+Trading+Estate+Viveash+Close+Hayes+UB3+4RZ";
 const WELCOME_MENU =
   "👋 Hello, and welcome to Virtual Car Hire\n" +
   "🚘 London's number one PCO car hire company with 4.8 stars across Google and Trustpilot.\n\n" +
@@ -126,6 +127,7 @@ type CarEligibility = {
     mileage: number;
     contractWeeks: number;
   };
+  awaitingAnotherCar?: boolean;
 };
 
 type AiResult = {
@@ -975,6 +977,85 @@ async function sendWelcomeMenu(phone: unknown, date = new Date()) {
   };
 }
 
+async function callGroqFallback(
+  system: string,
+  userText: string,
+  geminiErrorReason: string,
+): Promise<AiResult | null> {
+  const groqKeyBindings = ["GROQ_API_KEY", "GROQ_API_TOKEN", "VITE_GROQ_API_KEY"];
+  const groqKeyBinding = groqKeyBindings.find((b) => Boolean(getRuntimeEnv(b)));
+  const groqKey = groqKeyBinding ? getRuntimeEnv(groqKeyBinding) : undefined;
+
+  if (!groqKey) {
+    console.error("[agent-webhook] Groq fallback skipped: no GROQ_API_KEY configured", {
+      geminiErrorReason,
+      checkedBindings: groqKeyBindings,
+    });
+    return null;
+  }
+
+  const groqModel = (getRuntimeEnv("GROQ_MODEL") ?? "llama-3.3-70b-versatile").trim();
+  console.info("[agent-webhook] Attempting Groq fallback", {
+    geminiErrorReason,
+    groqModel,
+    groqKeyBinding,
+  });
+
+  try {
+    const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${groqKey.trim()}`,
+      },
+      body: JSON.stringify({
+        model: groqModel,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: userText },
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.2,
+      }),
+    });
+    const groqBody = await groqRes.text();
+    if (groqRes.ok) {
+      const groqData = JSON.parse(groqBody) as {
+        choices?: { message?: { content?: string } }[];
+      };
+      const groqText = groqData.choices?.[0]?.message?.content ?? "";
+      const parsed = parseAiReply(groqText);
+      if (parsed.reply) {
+        console.log("[agent-webhook] Groq fallback succeeded", {
+          geminiErrorReason,
+          groqModel,
+        });
+        return { ...parsed, reason: `groq_fallback_used_after_${geminiErrorReason}` };
+      } else {
+        console.error("[agent-webhook] Groq fallback returned empty reply", {
+          geminiErrorReason,
+          groqModel,
+          groqBody: groqBody.slice(0, 500),
+        });
+      }
+    } else {
+      console.error("[agent-webhook] Groq fallback API error", {
+        status: groqRes.status,
+        statusText: groqRes.statusText,
+        body: groqBody.slice(0, 1000),
+        groqModel,
+        geminiErrorReason,
+      });
+    }
+  } catch (groqError) {
+    console.error("[agent-webhook] Groq fallback exception", {
+      error: groqError instanceof Error ? groqError.message : String(groqError),
+      geminiErrorReason,
+    });
+  }
+  return null;
+}
+
 async function generateReply(
   history: Turn[],
   latest: string,
@@ -1037,10 +1118,15 @@ async function generateReply(
     });
     if (!geminiKey) {
       console.error(
-        "[agent-webhook] AI generation skipped: no supported Gemini API key binding is configured",
+        "[agent-webhook] Gemini API error: missing API key (no supported binding configured)",
         { supportedBindings: geminiKeyBindings },
       );
       await alertAiDegraded("gemini_api_key_missing", "unknown");
+      const groqResult = await callGroqFallback(system, userText, "gemini_api_key_missing");
+      if (groqResult) return groqResult;
+      console.error(
+        "[agent-webhook] Scripted fallback used as last resort (Gemini key missing, Groq failed)",
+      );
       return { ...fallback, reason: "gemini_api_key_missing" };
     }
     const responseSchema = {
@@ -1074,14 +1160,13 @@ async function generateReply(
       );
       return { response, body: await response.text(), model, apiVersion };
     };
-    // Use one stable low-latency model request. Do not turn a model 404 into a
-    // customer handoff; the deterministic fallback above keeps the workflow moving.
-    const model = (getRuntimeEnv("GEMINI_MODEL") ?? "gemini-2.0-flash-001").trim();
+    let configuredModel = (getRuntimeEnv("GEMINI_MODEL") ?? "gemini-2.5-flash").trim();
+    if (configuredModel.includes("3.6")) {
+      console.warn("[agent-webhook] Swapping invalid Gemini model 'gemini-3.6-flash' for stable model 'gemini-2.5-flash'");
+      configuredModel = "gemini-2.5-flash";
+    }
+    const model = configuredModel;
     let generation = await callModel("v1beta", model);
-    // One quick retry catches a genuinely momentary blip. Anything past that is
-    // a sustained outage, and waiting through repeated Gemini retries only makes
-    // the customer wait longer for the same result — better to fail over to a
-    // second provider (Groq) immediately below than to keep hammering Gemini.
     if (generation.response.status === 503 || generation.response.status === 429) {
       await new Promise((resolve) => setTimeout(resolve, 300));
       generation = await callModel("v1beta", model);
@@ -1093,58 +1178,21 @@ async function generateReply(
         responseBody: generation.body.slice(0, 2000),
         model: generation.model,
       });
-      // Gemini is down or overloaded — try Groq (a different provider, so an
-      // outage on one is very unlikely to also affect the other) before ever
-      // giving the customer a scripted, non-AI fallback reply.
-      const groqKey = getRuntimeEnv("GROQ_API_KEY");
-      if (groqKey) {
-        const groqModel = (getRuntimeEnv("GROQ_MODEL") ?? "llama-3.3-70b-versatile").trim();
-        try {
-          const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${groqKey.trim()}`,
-            },
-            body: JSON.stringify({
-              model: groqModel,
-              messages: [
-                { role: "system", content: system },
-                { role: "user", content: userText },
-              ],
-              response_format: { type: "json_object" },
-              temperature: 0.2,
-            }),
-          });
-          const groqBody = await groqRes.text();
-          if (groqRes.ok) {
-            const groqData = JSON.parse(groqBody) as {
-              choices?: { message?: { content?: string } }[];
-            };
-            const groqText = groqData.choices?.[0]?.message?.content ?? "";
-            const parsed = parseAiReply(groqText);
-            if (parsed.reply) {
-              console.log("[agent-webhook] Used Groq fallback after Gemini failure", {
-                geminiStatus: generation.response.status,
-                groqModel,
-              });
-              return parsed;
-            }
-          } else {
-            console.error("[agent-webhook] Groq fallback API error", {
-              status: groqRes.status,
-              body: groqBody.slice(0, 2000),
-              model: groqModel,
-            });
-          }
-        } catch (groqError) {
-          console.error("[agent-webhook] Groq fallback exception", groqError);
-        }
-      }
       await alertAiDegraded(
         `gemini_http_${generation.response.status}`,
         generation.model,
         generation.body,
+      );
+      const groqResult = await callGroqFallback(
+        system,
+        userText,
+        `gemini_http_${generation.response.status}`,
+      );
+      if (groqResult) return groqResult;
+
+      console.error(
+        "[agent-webhook] Scripted fallback used as last resort (Gemini HTTP status failure, Groq failed)",
+        { geminiStatus: generation.response.status },
       );
       return { ...fallback, reason: `gemini_http_${generation.response.status}` };
     }
@@ -1158,28 +1206,45 @@ async function generateReply(
         .join("")
         .trim() ?? "";
     if (!contentText) {
-      console.error("[agent-webhook] Gemini returned no text", {
+      console.error("[agent-webhook] Gemini API error: empty or blocked response", {
         promptFeedback: data.promptFeedback,
       });
       const emptyReason = data.promptFeedback?.blockReason
         ? `gemini_blocked_${data.promptFeedback.blockReason}`
         : "gemini_empty_response";
       await alertAiDegraded(emptyReason, model);
+      const groqResult = await callGroqFallback(system, userText, emptyReason);
+      if (groqResult) return groqResult;
+
+      console.error(
+        "[agent-webhook] Scripted fallback used as last resort (Gemini empty/blocked response, Groq failed)",
+      );
       return { ...fallback, reason: emptyReason };
     }
     const parsed = parseAiReply(contentText);
-    if (!parsed.reply) return fallback;
+    if (!parsed.reply) {
+      const groqResult = await callGroqFallback(system, userText, "gemini_parse_error");
+      if (groqResult) return groqResult;
+      console.error("[agent-webhook] Scripted fallback used as last resort (Gemini parse error, Groq failed)");
+      return fallback;
+    }
     console.info("[agent-webhook] AI generation complete", {
       replyLength: parsed.reply.length,
       needsHuman: parsed.needs_human,
     });
     return parsed;
   } catch (error) {
-    console.error("[agent-webhook] AI failure", error);
+    console.error("[agent-webhook] Gemini API exception", error);
     await alertAiDegraded(
       "gemini_exception",
       "unknown",
       error instanceof Error ? error.message : String(error),
+    );
+    const groqResult = await callGroqFallback(system, userText, "gemini_exception");
+    if (groqResult) return groqResult;
+
+    console.error(
+      "[agent-webhook] Scripted fallback used as last resort (Gemini exception, Groq failed)",
     );
     return { ...fallback, reason: "gemini_exception" };
   }
@@ -2417,15 +2482,23 @@ export async function handleAgentWebhookRequest(request: Request) {
 
   if (option === 1 || option === 2 || option === 3) {
     if (option === 2) {
-      // Send the address as its own message first so it's a single, easy-to-copy
-      // bubble the customer can forward straight to a recovery company.
+      // Send exactly 3 separate messages in this order:
+      // 1. Photo of garage storefront
+      // 2. Plain text full address
+      // 3. Clickable Google Maps link
+      await sendWhatsAppImage({
+        phone: phone ?? chatId,
+        url: AUTO_SURGEON_STOREFRONT_IMAGE_URL,
+        caption: "The Auto Surgeon Garage",
+      });
       await sendWhatsAppText({ phone: phone ?? chatId, text: AUTO_SURGEON_ADDRESS });
+      await sendWhatsAppText({ phone: phone ?? chatId, text: AUTO_SURGEON_MAP });
     }
     const reply =
       option === 1
         ? `Car Enquiry\n\n${CAR_ELIGIBILITY_PROMPT}`
         : option === 2
-          ? `🛠️ Emergency Breakdown\n\nPlease arrange for the vehicle to be dropped off at our garage. The address is above, and you can tap and hold it to copy and forward to your recovery provider.\n\nOnce the address has been sent, contact your own breakdown recovery provider, such as a local recovery company or RAC. Virtual Car Hire does not provide the recovery vehicle.\n\nPlease park the vehicle in front of The Auto Surgeon and send:\n1. One clear photo of the vehicle parked in front of the garage.\n2. Either a photo or video showing the key being placed in the letter box.\n\nI will check both pieces of evidence before we close the case.`
+          ? `🛠️ Emergency Breakdown\n\nPlease arrange for the vehicle to be dropped off at our garage. The address and location map link are above, and you can tap and hold them to copy and forward to your recovery provider.\n\nOnce the address has been sent, contact your own breakdown recovery provider, such as a local recovery company or RAC. Virtual Car Hire does not provide the recovery vehicle.\n\nPlease park the vehicle in front of The Auto Surgeon and send:\n1. One clear photo of the vehicle parked in front of the garage.\n2. Either a photo or video showing the key being placed in the letter box.\n\nI will check both pieces of evidence before we close the case.`
           : "🚨 Accident Support\n\nWe are sorry to hear you have been in an accident. We are here to help guide you through the next steps safely.\n\nTo get started, please provide your full name and vehicle registration number together. We will cross-check both against our active CRM records before collecting the accident details.";
     const intent =
       option === 1 ? "book_car" : option === 2 ? "emergency_breakdown" : "report_accident";
@@ -3108,12 +3181,84 @@ export async function handleAgentWebhookRequest(request: Request) {
 
   if (
     !option &&
+    (carEligibility.awaitingAnotherCar ||
+      lastAgentMessage.toLowerCase().includes("would you like to look at another car"))
+  ) {
+    if (isNegativeConfirmation(content)) {
+      const reply = "That's fine, we'll end the chat here. Thank you for contacting Virtual Car Hire!";
+      const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
+      if (outbound.sent) {
+        await insertWithSessionFallback(db, "messages", {
+          user_id: userId,
+          lead_id: leadId,
+          sender: "ai_agent",
+          content: reply,
+          session_id: sessionId,
+        });
+      }
+      await db
+        .from("whatsapp_leads")
+        .update({
+          status: "closed",
+          ai_paused: true,
+          closed_at: new Date().toISOString(),
+          car_enquiry_data: { ...carEligibility, awaitingAnotherCar: false, closed: true },
+          ai_summary: reply,
+          last_message_at: new Date().toISOString(),
+        } as never)
+        .eq("id", leadId);
+      return json({
+        ok: true,
+        lead_id: leadId,
+        reply: outbound.sent ? reply : null,
+        closed: true,
+        outbound,
+        needs_human: false,
+      });
+    } else if (isPositiveConfirmation(content)) {
+      const nextEligibility: CarEligibility = {
+        ...carEligibility,
+        selectedVehicle: undefined,
+        awaitingAnotherCar: false,
+      };
+      const reply = formatCustomerFleet((fleet ?? []) as FleetVehicle[]);
+      const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
+      if (outbound.sent) {
+        await insertWithSessionFallback(db, "messages", {
+          user_id: userId,
+          lead_id: leadId,
+          sender: "ai_agent",
+          content: reply,
+          session_id: sessionId,
+        });
+      }
+      await db
+        .from("whatsapp_leads")
+        .update({
+          car_enquiry_data: nextEligibility,
+          ai_summary: reply,
+          last_message_at: new Date().toISOString(),
+        } as never)
+        .eq("id", leadId);
+      return json({
+        ok: true,
+        lead_id: leadId,
+        reply: outbound.sent ? reply : null,
+        outbound,
+        eligibility: nextEligibility,
+        needs_human: !outbound.sent,
+      });
+    }
+  }
+
+  if (
+    !option &&
     isTermsResponse(content) &&
     (lastAgentMessage.toLowerCase().includes("happy to proceed") ||
       lastAgentMessage.toLowerCase().includes("are you fully aware"))
   ) {
     const answer = content.trim();
-    if (/^yes/i.test(answer)) {
+    if (isPositiveConfirmation(answer)) {
       const selected = carEligibility.selectedVehicle;
       const vehicleDesc = selected
         ? `${selected.make} ${selected.model} (${selected.year ?? "year to confirm"}), ${selected.weeklyRate}, ${selected.mileage.toLocaleString("en-GB")} miles/month, ${selected.contractWeeks}-week contract.`
@@ -3133,6 +3278,37 @@ export async function handleAgentWebhookRequest(request: Request) {
         .update({ ai_summary: reply, last_message_at: new Date().toISOString() } as never)
         .eq("id", leadId);
       return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound });
+    } else if (isNegativeConfirmation(answer)) {
+      const reply = "That's completely fine — would you like to look at another car?";
+      const nextEligibility: CarEligibility = {
+        ...carEligibility,
+        awaitingAnotherCar: true,
+      };
+      const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
+      if (outbound.sent)
+        await insertWithSessionFallback(db, "messages", {
+          user_id: userId,
+          lead_id: leadId,
+          sender: "ai_agent",
+          content: reply,
+          session_id: sessionId,
+        });
+      await db
+        .from("whatsapp_leads")
+        .update({
+          car_enquiry_data: nextEligibility,
+          ai_summary: reply,
+          last_message_at: new Date().toISOString(),
+        } as never)
+        .eq("id", leadId);
+      return json({
+        ok: true,
+        lead_id: leadId,
+        reply: outbound.sent ? reply : null,
+        outbound,
+        eligibility: nextEligibility,
+        needs_human: !outbound.sent,
+      });
     }
   }
 

@@ -320,6 +320,31 @@ describe("Confirmation Response Parsing", () => {
   });
 });
 
+describe("Car Enquiry Flow - Terms Response Verification", () => {
+  test("isTermsResponse behavior for positive and negative answers", () => {
+    expect(isPositiveConfirmation("No")).toBe(false);
+    expect(isNegativeConfirmation("No")).toBe(true);
+    expect(isNegativeConfirmation("nope")).toBe(true);
+    expect(isPositiveConfirmation("Yes")).toBe(true);
+  });
+});
+
+describe("Auto Surgeon Address and Maps Constants", () => {
+  test("address and map link match exact required format", () => {
+    const AUTO_SURGEON_ADDRESS =
+      "The Auto Surgeon, Unit 3, Squirrels Trading Estate, Viveash Close, Hayes, UB3 4RZ.";
+    const AUTO_SURGEON_MAP =
+      "https://www.google.com/maps/search/?api=1&query=Unit+3+Squirrels+Trading+Estate+Viveash+Close+Hayes+UB3+4RZ";
+
+    expect(AUTO_SURGEON_ADDRESS).toBe(
+      "The Auto Surgeon, Unit 3, Squirrels Trading Estate, Viveash Close, Hayes, UB3 4RZ.",
+    );
+    expect(AUTO_SURGEON_MAP).toBe(
+      "https://www.google.com/maps/search/?api=1&query=Unit+3+Squirrels+Trading+Estate+Viveash+Close+Hayes+UB3+4RZ",
+    );
+  });
+});
+
 describe("Meta Phone Number Normalization", () => {
   test("converts UK 11-digit numbers starting with 0 to international 44 format", () => {
     expect(normalizeMetaPhone("07123456789")).toBe("447123456789");
