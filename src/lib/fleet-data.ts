@@ -147,7 +147,7 @@ const sFromRow = (r: any): ServiceRecord => ({
 
 const cFromRow = (r: any): DriverCharge => ({
   id: r.id,
-  driver_id: r.driver_id,
+  driver_id: r.driver_id ?? r.user_id,
   amount: Number(r.amount ?? 0),
   description: r.description,
   created_at: r.created_at,
@@ -307,10 +307,11 @@ export function useFleetData() {
 
     const chargesByDriver = new Map<string, DriverCharge[]>();
     for (const c of cRes.data ?? []) {
-      if (!c.driver_id) continue;
-      const arr = chargesByDriver.get(c.driver_id) ?? [];
+      const targetDriverId = c.driver_id ?? c.user_id;
+      if (!targetDriverId) continue;
+      const arr = chargesByDriver.get(targetDriverId) ?? [];
       arr.push(cFromRow(c));
-      chargesByDriver.set(c.driver_id, arr);
+      chargesByDriver.set(targetDriverId, arr);
     }
 
     setDrivers((dRes.data ?? []).map((r) => dFromRow(r, logsByTrack.get(r.id) ?? [], chargesByDriver.get(r.id) ?? [])));
@@ -340,6 +341,11 @@ export function useFleetData() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "mileage_logs" },
+        () => void refresh(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "driver_charges" },
         () => void refresh(),
       )
       .subscribe((status) => {
@@ -539,6 +545,28 @@ export function useFleetData() {
 
   const editDriver = useCallback(
     async (d: DriverTrack) => {
+      setDrivers((prev) =>
+        prev.map((item) =>
+          item.id === d.id
+            ? {
+                ...item,
+                driver_name: d.driver_name,
+                email: d.email,
+                phone: d.phone,
+                vehicle_id: d.vehicle_id,
+                registration: d.registration,
+                start_date: d.start_date,
+                allowance: d.allowance,
+                excess_rate: d.excess_rate,
+                weekly_rent: d.weekly_rent,
+                rent_due_day: d.rent_due_day,
+                rent_status: d.rent_status,
+                balance_due: d.balance_due,
+              }
+            : item,
+        ),
+      );
+
       const payload: any = {
         driver_name: d.driver_name,
         email: d.email?.trim() || null,
@@ -570,6 +598,14 @@ export function useFleetData() {
         newBalance = currentBalance === 0 ? weeklyRent : currentBalance + weeklyRent;
       }
 
+      setDrivers((prev) =>
+        prev.map((item) =>
+          item.id === driverId
+            ? { ...item, rent_status: newStatus, balance_due: newBalance }
+            : item,
+        ),
+      );
+
       const { error } = await supabase
         .from("driver_tracks")
         .update({
@@ -589,6 +625,26 @@ export function useFleetData() {
       const { data: userData } = await supabase.auth.getUser();
       const userId = userData.user?.id || null;
 
+      const newCharge: DriverCharge = {
+        id: crypto.randomUUID(),
+        driver_id: driverId,
+        amount,
+        description,
+        created_at: new Date().toISOString(),
+      };
+
+      setDrivers((prev) =>
+        prev.map((item) =>
+          item.id === driverId
+            ? {
+                ...item,
+                balance_due: Number(item.balance_due || 0) + amount,
+                charges: [newCharge, ...(item.charges || [])],
+              }
+            : item,
+        ),
+      );
+
       const { data: driverTrack } = await supabase
         .from("driver_tracks")
         .select("balance_due")
@@ -598,12 +654,20 @@ export function useFleetData() {
       const currentBal = Number(driverTrack?.balance_due ?? 0);
       const newBal = currentBal + amount;
 
-      const { error: chargeErr } = await supabase.from("driver_charges").insert({
-        user_id: userId,
+      let { error: chargeErr } = await supabase.from("driver_charges").insert({
         driver_id: driverId,
         amount,
         description,
-      });
+        ...(userId ? { user_id: userId } : {}),
+      } as any);
+
+      if (chargeErr && /user_id/i.test(chargeErr.message)) {
+        ({ error: chargeErr } = await supabase.from("driver_charges").insert({
+          driver_id: driverId,
+          amount,
+          description,
+        } as any));
+      }
 
       if (chargeErr) throw new Error(chargeErr.message);
 
@@ -700,6 +764,7 @@ export function useFleetData() {
 
   const deleteDriver = useCallback(
     async (id: string) => {
+      setDrivers((prev) => prev.filter((d) => d.id !== id));
       const { data: track } = await supabase
         .from("driver_tracks")
         .select("vehicle_id")

@@ -3831,7 +3831,7 @@ function DriversView({
       {/* Edit Driver Modal */}
       {editingDriver && (
         <EditDriverModal
-          driver={editingDriver}
+          driver={data.drivers.find((d) => d.id === editingDriver.id) ?? editingDriver}
           vehicles={vehicles}
           data={data}
           toast={toast}
@@ -4050,6 +4050,14 @@ function EditDriverModal({
   const [allowance, setAllowance] = useState(String(driver.allowance));
   const [excessRate, setExcessRate] = useState(String(driver.excess_rate));
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setBalanceDue(String(driver.balance_due || 0));
+  }, [driver.balance_due]);
+
+  useEffect(() => {
+    setRentStatus(driver.rent_status || "unpaid");
+  }, [driver.rent_status]);
 
   // Add charge inline state
   const [chargeAmount, setChargeAmount] = useState("");
