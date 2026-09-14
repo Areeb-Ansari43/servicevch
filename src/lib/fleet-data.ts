@@ -581,7 +581,11 @@ export function useFleetData() {
         rent_status: d.rent_status,
         balance_due: d.balance_due,
       };
-      const { error } = await supabase.from("driver_tracks").update(payload).eq("id", d.id);
+      let { error } = await supabase.from("driver_tracks").update(payload).eq("id", d.id);
+      if (error && /email|phone|column/i.test(error.message)) {
+        const { email: _email, phone: _phone, ...legacyPayload } = payload;
+        ({ error } = await supabase.from("driver_tracks").update(legacyPayload).eq("id", d.id));
+      }
       if (error) throw new Error(error.message);
       await refresh();
     },
