@@ -524,6 +524,19 @@ const Icon = {
       <circle cx="12" cy="7" r="4" />
     </svg>
   ),
+  Shield: (p: { className?: string }) => (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={p.className}
+    >
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+    </svg>
+  ),
 };
 
 function serviceStyle(type: string) {
@@ -3696,7 +3709,8 @@ function DriversView({
                       <td className="px-4 py-3">
                         <button
                           type="button"
-                          onClick={async () => {
+                          onClick={async (e) => {
+                            e.stopPropagation();
                             try {
                               await data.toggleRentStatus(
                                 driver.id,
@@ -3769,11 +3783,11 @@ function DriversView({
                               e.stopPropagation();
                               setEditingDriver(driver);
                             }}
-                            title="Edit Driver"
+                            title="Driver Settings & Profile"
                             className="rounded-md border p-1.5 text-[#8b95a8] hover:bg-white/10 hover:text-white"
                             style={{ borderColor: T.borderSoft }}
                           >
-                            <Icon.Wrench className="h-3.5 w-3.5" />
+                            <Icon.Cog className="h-3.5 w-3.5" />
                           </button>
                           <button
                             type="button"
