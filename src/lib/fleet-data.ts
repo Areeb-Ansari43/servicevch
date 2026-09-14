@@ -43,6 +43,24 @@ export type MonthlyLog = {
 
 export type InviteStatus = "none" | "pending" | "accepted";
 
+export type DriverCharge = {
+  id: string;
+  driver_id: string;
+  amount: number;
+  description: string;
+  created_at: string;
+};
+
+export type DriverNotification = {
+  id: string;
+  driver_id: string;
+  type: string;
+  title: string;
+  message: string;
+  read: boolean;
+  created_at: string;
+};
+
 export type DriverTrack = {
   id: string;
   driver_name: string;
@@ -58,6 +76,11 @@ export type DriverTrack = {
   invite_token?: string | null;
   invite_status?: InviteStatus | null;
   auth_user_id?: string | null;
+  weekly_rent: number;
+  rent_due_day: string;
+  rent_status: "paid" | "unpaid";
+  balance_due: number;
+  charges: DriverCharge[];
   monthly_logs: MonthlyLog[];
 };
 
@@ -122,7 +145,15 @@ const sFromRow = (r: any): ServiceRecord => ({
   description: r.notes ?? "",
 });
 
-const dFromRow = (r: any, logs: MonthlyLog[]): DriverTrack => ({
+const cFromRow = (r: any): DriverCharge => ({
+  id: r.id,
+  driver_id: r.driver_id,
+  amount: Number(r.amount ?? 0),
+  description: r.description,
+  created_at: r.created_at,
+});
+
+const dFromRow = (r: any, logs: MonthlyLog[], charges: DriverCharge[] = []): DriverTrack => ({
   id: r.id,
   driver_name: r.driver_name,
   email: r.email ?? "",
@@ -137,6 +168,11 @@ const dFromRow = (r: any, logs: MonthlyLog[]): DriverTrack => ({
   invite_token: r.invite_token ?? null,
   invite_status: (r.invite_status as InviteStatus) ?? "none",
   auth_user_id: r.auth_user_id ?? null,
+  weekly_rent: Number(r.weekly_rent ?? 0),
+  rent_due_day: r.rent_due_day ?? "Monday",
+  rent_status: (r.rent_status as "paid" | "unpaid") ?? "paid",
+  balance_due: Number(r.balance_due ?? 0),
+  charges,
   monthly_logs: logs,
 });
 
@@ -158,7 +194,7 @@ export function useFleetData() {
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
-    const [vRes, sRes, dRes, lRes] = await Promise.all([
+    const [vRes, sRes, dRes, lRes, cRes] = await Promise.all([
       supabase.from("vehicles").select("*").order("reg"),
       supabase.from("service_records").select("*").order("service_date", { ascending: false }),
       supabase
@@ -167,6 +203,7 @@ export function useFleetData() {
         .eq("active", true)
         .order("created_at", { ascending: false }),
       supabase.from("mileage_logs").select("*").order("period_end", { ascending: false }),
+      supabase.from("driver_charges").select("*").order("created_at", { ascending: false }),
     ]);
     setVehicles((vRes.data ?? []).map(vFromRow));
     setServices((sRes.data ?? []).map(sFromRow));
@@ -178,7 +215,15 @@ export function useFleetData() {
       logsByTrack.set(l.track_id, arr);
     }
 
-    setDrivers((dRes.data ?? []).map((r) => dFromRow(r, logsByTrack.get(r.id) ?? [])));
+    const chargesByDriver = new Map<string, DriverCharge[]>();
+    for (const c of cRes.data ?? []) {
+      if (!c.driver_id) continue;
+      const arr = chargesByDriver.get(c.driver_id) ?? [];
+      arr.push(cFromRow(c));
+      chargesByDriver.set(c.driver_id, arr);
+    }
+
+    setDrivers((dRes.data ?? []).map((r) => dFromRow(r, logsByTrack.get(r.id) ?? [], chargesByDriver.get(r.id) ?? [])));
     setLoading(false);
   }, []);
 
@@ -408,9 +453,135 @@ export function useFleetData() {
         reg: d.registration,
         allowance: d.allowance,
         rate_pence: d.excess_rate,
+        weekly_rent: d.weekly_rent,
+        rent_due_day: d.rent_due_day,
+        rent_status: d.rent_status,
+        balance_due: d.balance_due,
       };
       const { error } = await supabase.from("driver_tracks").update(payload).eq("id", d.id);
       if (error) throw new Error(error.message);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const toggleRentStatus = useCallback(
+    async (driverId: string, currentStatus: "paid" | "unpaid", weeklyRent: number, currentBalance: number) => {
+      const newStatus = currentStatus === "paid" ? "unpaid" : "paid";
+      let newBalance = currentBalance;
+      if (newStatus === "paid") {
+        // Marking as paid resets weekly rent portion of balance to 0 (subtract weeklyRent if balance > 0)
+        newBalance = Math.max(0, currentBalance - weeklyRent);
+      } else {
+        // Marking as unpaid adds weekly rent to balance due
+        newBalance = currentBalance + weeklyRent;
+      }
+
+      const { error } = await supabase
+        .from("driver_tracks")
+        .update({
+          rent_status: newStatus,
+          balance_due: newBalance,
+        })
+        .eq("id", driverId);
+
+      if (error) throw new Error(error.message);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const addDriverCharge = useCallback(
+    async (driverId: string, amount: number, description: string) => {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id || null;
+
+      const { data: driverTrack } = await supabase
+        .from("driver_tracks")
+        .select("balance_due")
+        .eq("id", driverId)
+        .single();
+
+      const currentBal = Number(driverTrack?.balance_due ?? 0);
+      const newBal = currentBal + amount;
+
+      const { error: chargeErr } = await supabase.from("driver_charges").insert({
+        user_id: userId,
+        driver_id: driverId,
+        amount,
+        description,
+      });
+
+      if (chargeErr) throw new Error(chargeErr.message);
+
+      const { error: trackErr } = await supabase
+        .from("driver_tracks")
+        .update({ balance_due: newBal })
+        .eq("id", driverId);
+
+      if (trackErr) throw new Error(trackErr.message);
+
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const sendDriverReminder = useCallback(
+    async (driver: DriverTrack, reminderType: string, customMessage?: string) => {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id || null;
+
+      const titleMap: Record<string, string> = {
+        mot: "MOT Renewal Reminder",
+        service: "Vehicle Service Reminder",
+        pco: "PCO License Expiry Reminder",
+      };
+
+      const title = titleMap[reminderType.toLowerCase()] ?? `${reminderType} Reminder`;
+      const defaultMessage = `Hello ${driver.driver_name}, this is a reminder regarding your vehicle ${driver.registration} for ${title}. Please check your portal for details or contact us if you have any questions.`;
+      const message = customMessage || defaultMessage;
+
+      // 1. Create notification entry for driver portal
+      const { error: notifErr } = await supabase.from("driver_notifications").insert({
+        user_id: userId,
+        driver_id: driver.id,
+        type: reminderType.toLowerCase(),
+        title,
+        message,
+      });
+
+      if (notifErr) console.warn("Could not save driver notification:", notifErr.message);
+
+      // 2. Email driver if email exists
+      if (driver.email && driver.email.trim()) {
+        const resendKey = (import.meta as any).env?.VITE_RESEND_API_KEY || (process as any).env?.RESEND_API_KEY;
+        if (resendKey) {
+          try {
+            await fetch("https://api.resend.com/emails", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${resendKey}`,
+              },
+              body: JSON.stringify({
+                from: "Virtual Car Hire <onboarding@resend.dev>",
+                to: [driver.email.trim()],
+                subject: `Virtual Car Hire: ${title}`,
+                html: `<div style="font-family:sans-serif;padding:20px;background:#0d1117;color:#fff;border-radius:10px;">
+                  <h2 style="color:#ff6a00;">${title}</h2>
+                  <p>Hello ${driver.driver_name},</p>
+                  <p>${message}</p>
+                  <br/>
+                  <p style="color:#8b95a8;font-size:12px;">Virtual Car Hire Fleet Management</p>
+                </div>`,
+              }),
+            });
+          } catch (e) {
+            console.warn("Failed sending reminder email via Resend:", e);
+          }
+        }
+      }
+
       await refresh();
     },
     [refresh],
@@ -470,6 +641,9 @@ export function useFleetData() {
     deleteService,
     addDriver,
     editDriver,
+    toggleRentStatus,
+    addDriverCharge,
+    sendDriverReminder,
     generatePortalInvite,
     deleteDriver,
     updateDriverMileage,

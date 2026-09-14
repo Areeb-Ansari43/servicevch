@@ -3615,16 +3615,17 @@ function DriversView({
                 <th className="px-4 py-3 font-bold">Driver</th>
                 <th className="px-4 py-3 font-bold">Contact</th>
                 <th className="px-4 py-3 font-bold">Vehicle</th>
-                <th className="px-4 py-3 font-bold">Start Date</th>
-                <th className="px-4 py-3 font-bold">Portal Status</th>
-                <th className="px-4 py-3 font-bold">Status</th>
+                <th className="px-4 py-3 font-bold">Weekly Rent</th>
+                <th className="px-4 py-3 font-bold">Rent Status</th>
+                <th className="px-4 py-3 font-bold">Balance Due</th>
+                <th className="px-4 py-3 font-bold">Portal</th>
                 <th className="px-4 py-3 text-right font-bold">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.06]">
               {filteredDrivers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-[#8b95a8]">
+                  <td colSpan={8} className="px-4 py-8 text-center text-[#8b95a8]">
                     No drivers match your search.
                   </td>
                 </tr>
@@ -3645,7 +3646,13 @@ function DriversView({
                             {initials}
                           </div>
                           <div>
-                            <div className="font-bold text-white">{driver.driver_name}</div>
+                            <button
+                              type="button"
+                              onClick={() => setEditingDriver(driver)}
+                              className="font-bold text-white hover:text-[#ff8a3d] text-left underline-offset-2 hover:underline"
+                            >
+                              {driver.driver_name}
+                            </button>
                             <div className="text-[10px] text-[#8b95a8]">
                               Allowance: {driver.allowance.toLocaleString()} mi
                             </div>
@@ -3654,8 +3661,10 @@ function DriversView({
                       </td>
                       <td className="px-4 py-3 font-medium text-[#c5ccda]">
                         <div>{driver.phone || "No phone saved"}</div>
-                        {driver.email && (
+                        {driver.email ? (
                           <div className="text-[10px] text-[#8b95a8]">{driver.email}</div>
+                        ) : (
+                          <div className="text-[10px] text-amber-500/80 italic">No email on file</div>
                         )}
                       </td>
                       <td className="px-4 py-3">
@@ -3666,13 +3675,50 @@ function DriversView({
                           </span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-[#9aa5b8]">{driver.start_date || "—"}</td>
-                      <td className="px-4 py-3">{portalStatusBadge(driver)}</td>
+                      <td className="px-4 py-3 text-[#9aa5b8]">
+                        <div className="font-semibold text-white">£{driver.weekly_rent || 0}/wk</div>
+                        <div className="text-[10px] text-[#8b95a8]">{driver.rent_due_day || "Monday"}</div>
+                      </td>
                       <td className="px-4 py-3">
-                        <span className="inline-flex rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
-                          Active
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await data.toggleRentStatus(
+                                driver.id,
+                                driver.rent_status,
+                                driver.weekly_rent,
+                                driver.balance_due,
+                              );
+                              toast(`Rent status for ${driver.driver_name} updated`);
+                            } catch (err: any) {
+                              toast(err?.message ?? "Failed to update rent status", "error");
+                            }
+                          }}
+                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold border transition-all ${
+                            driver.rent_status === "paid"
+                              ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25"
+                              : "border-red-500/40 bg-red-500/15 text-red-300 hover:bg-red-500/25"
+                          }`}
+                        >
+                          <span
+                            className={`h-1.5 w-1.5 rounded-full ${
+                              driver.rent_status === "paid" ? "bg-emerald-400" : "bg-red-400"
+                            }`}
+                          />
+                          {driver.rent_status === "paid" ? "Paid" : "Unpaid"}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 font-medium">
+                        <span
+                          className={
+                            driver.balance_due > 0 ? "font-bold text-red-400" : "text-[#9aa5b8]"
+                          }
+                        >
+                          £{driver.balance_due.toFixed(2)}
                         </span>
                       </td>
+                      <td className="px-4 py-3">{portalStatusBadge(driver)}</td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
@@ -3747,6 +3793,8 @@ function DriversView({
         <EditDriverModal
           driver={editingDriver}
           vehicles={vehicles}
+          data={data}
+          toast={toast}
           onClose={() => setEditingDriver(null)}
           onSave={async (updatedDriver) => {
             try {
@@ -3938,11 +3986,15 @@ function AddDriverModal({
 function EditDriverModal({
   driver,
   vehicles,
+  data,
+  toast,
   onClose,
   onSave,
 }: {
   driver: DriverTrack;
   vehicles: Vehicle[];
+  data: ReturnType<typeof useFleetData>;
+  toast: (m: string, t?: Toast["type"]) => void;
   onClose: () => void;
   onSave: (driver: DriverTrack) => Promise<void>;
 }) {
@@ -3950,9 +4002,21 @@ function EditDriverModal({
   const [email, setEmail] = useState(driver.email || "");
   const [phone, setPhone] = useState(driver.phone || "");
   const [vehicleId, setVehicleId] = useState(driver.vehicle_id);
+  const [weeklyRent, setWeeklyRent] = useState(String(driver.weekly_rent || 0));
+  const [rentDueDay, setRentDueDay] = useState(driver.rent_due_day || "Monday");
+  const [rentStatus, setRentStatus] = useState<"paid" | "unpaid">(driver.rent_status || "paid");
+  const [balanceDue, setBalanceDue] = useState(String(driver.balance_due || 0));
   const [allowance, setAllowance] = useState(String(driver.allowance));
   const [excessRate, setExcessRate] = useState(String(driver.excess_rate));
   const [saving, setSaving] = useState(false);
+
+  // Add charge inline state
+  const [chargeAmount, setChargeAmount] = useState("");
+  const [chargeDesc, setChargeDesc] = useState("");
+  const [addingCharge, setAddingCharge] = useState(false);
+
+  // Sending reminders state
+  const [sendingReminder, setSendingReminder] = useState<string | null>(null);
 
   const selectedVehicle = vehicles.find((v) => v.id === vehicleId);
 
@@ -3967,10 +4031,43 @@ function EditDriverModal({
       phone: phone.trim(),
       vehicle_id: selectedVehicle ? selectedVehicle.id : driver.vehicle_id,
       registration: selectedVehicle ? selectedVehicle.registration : driver.registration,
+      weekly_rent: parseFloat(weeklyRent) || 0,
+      rent_due_day: rentDueDay,
+      rent_status: rentStatus,
+      balance_due: parseFloat(balanceDue) || 0,
       allowance: parseInt(allowance) || 5000,
       excess_rate: parseInt(excessRate) || 20,
     });
     setSaving(false);
+  };
+
+  const handleAddCharge = async () => {
+    const amt = parseFloat(chargeAmount);
+    if (!amt || isNaN(amt) || !chargeDesc.trim()) return;
+    setAddingCharge(true);
+    try {
+      await data.addDriverCharge(driver.id, amt, chargeDesc.trim());
+      toast(`Added charge of £${amt.toFixed(2)} to ${driver.driver_name}'s balance`);
+      setChargeAmount("");
+      setChargeDesc("");
+      setBalanceDue(String(Number(balanceDue || 0) + amt));
+    } catch (err: any) {
+      toast(err?.message ?? "Failed to add charge", "error");
+    } finally {
+      setAddingCharge(false);
+    }
+  };
+
+  const handleSendReminder = async (type: "mot" | "service" | "pco") => {
+    setSendingReminder(type);
+    try {
+      await data.sendDriverReminder(driver, type);
+      toast(`${type.toUpperCase()} reminder sent to driver portal & email`);
+    } catch (err: any) {
+      toast(err?.message ?? "Failed to send reminder", "error");
+    } finally {
+      setSendingReminder(null);
+    }
   };
 
   return (
@@ -3979,48 +4076,215 @@ function EditDriverModal({
       onClick={onClose}
     >
       <div
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-3xl sm:rounded-2xl border border-white/15 bg-[#10141d] p-5 shadow-2xl animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200"
+        className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-t-3xl sm:rounded-2xl border border-white/15 bg-[#10141d] p-6 shadow-2xl animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200 space-y-5"
         style={{ borderColor: T.border }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/20 sm:hidden" />
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-base font-bold text-white">Edit Driver Details</h3>
+        <div className="mx-auto mb-1 h-1.5 w-12 rounded-full bg-white/20 sm:hidden" />
+        <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: T.border }}>
+          <div>
+            <h3 className="text-lg font-bold text-white">Driver File & Management</h3>
+            <p className="text-xs text-[#8b95a8]">{driver.driver_name} — {driver.registration}</p>
+          </div>
           <button onClick={onClose} className="text-[#8b95a8] hover:text-white">
             <Icon.X className="h-5 w-5" />
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-3 text-xs">
-          <Field label="Full Name *">
-            <input
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className={inputCls}
-            />
-          </Field>
-          <Field label="Email Address">
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className={inputCls}
-              placeholder="e.g. driver@example.com"
-            />
-          </Field>
-          <Field label="Phone Number">
-            <input value={phone} onChange={(e) => setPhone(e.target.value)} className={inputCls} />
-          </Field>
-          <Field label="Linked Vehicle">
-            <DarkSelect
-              value={vehicleId}
-              onChange={setVehicleId}
-              options={vehicles.map((v) => ({
-                value: v.id,
-                label: `${v.registration} — ${simplifyVehicleName(v)}`,
-              }))}
-            />
-          </Field>
+
+        {/* Action Alert Reminders */}
+        <div className="rounded-xl border p-4 space-y-2.5" style={{ borderColor: T.borderSoft, background: T.panel }}>
+          <div className="text-xs font-bold uppercase tracking-wider text-[#ff8a3d]">Quick Alert & Reminder Actions</div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={sendingReminder !== null}
+              onClick={() => handleSendReminder("mot")}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/25 disabled:opacity-50"
+            >
+              <Icon.Alert className="h-3.5 w-3.5" />
+              {sendingReminder === "mot" ? "Sending..." : "MOT Reminder"}
+            </button>
+            <button
+              type="button"
+              disabled={sendingReminder !== null}
+              onClick={() => handleSendReminder("service")}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-blue-500/40 bg-blue-500/15 px-3 py-1.5 text-xs font-semibold text-blue-300 hover:bg-blue-500/25 disabled:opacity-50"
+            >
+              <Icon.Wrench className="h-3.5 w-3.5" />
+              {sendingReminder === "service" ? "Sending..." : "Service Reminder"}
+            </button>
+            <button
+              type="button"
+              disabled={sendingReminder !== null}
+              onClick={() => handleSendReminder("pco")}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-purple-500/40 bg-purple-500/15 px-3 py-1.5 text-xs font-semibold text-purple-300 hover:bg-purple-500/25 disabled:opacity-50"
+            >
+              <Icon.Shield className="h-3.5 w-3.5" />
+              {sendingReminder === "pco" ? "Sending..." : "PCO Reminder"}
+            </button>
+          </div>
+          <p className="text-[11px] text-[#8b95a8]">
+            Sends a direct notification to the driver's portal dashboard and an email copy if an email address is connected.
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+          <Grid2>
+            <Field label="Full Name *">
+              <input
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Phone Number">
+              <input value={phone} onChange={(e) => setPhone(e.target.value)} className={inputCls} />
+            </Field>
+          </Grid2>
+
+          <Grid2>
+            <Field label="Email Address">
+              <div>
+                <input
+                  type="email"
+                  readOnly={Boolean(driver.auth_user_id || driver.email)}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className={`${inputCls} ${driver.auth_user_id || driver.email ? "opacity-75 cursor-not-allowed bg-white/5" : ""}`}
+                  placeholder="e.g. driver@example.com"
+                />
+                {driver.auth_user_id || driver.email ? (
+                  <span className="mt-1 text-[10px] text-emerald-400 block font-medium">
+                    ✓ Set by customer (website account login)
+                  </span>
+                ) : null}
+              </div>
+            </Field>
+
+            <Field label="Linked Vehicle">
+              <DarkSelect
+                value={vehicleId}
+                onChange={setVehicleId}
+                options={vehicles.map((v) => ({
+                  value: v.id,
+                  label: `${v.registration} — ${simplifyVehicleName(v)}`,
+                }))}
+              />
+            </Field>
+          </Grid2>
+
+          {/* Rent & Financial Tracking */}
+          <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: T.borderSoft, background: T.panel }}>
+            <div className="font-bold text-white text-xs">Rent & Account Balance</div>
+            <Grid2>
+              <Field label="Weekly Rent (£)">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={weeklyRent}
+                  onChange={(e) => setWeeklyRent(e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="Rent Due Day">
+                <DarkSelect
+                  value={rentDueDay}
+                  onChange={setRentDueDay}
+                  options={[
+                    { value: "Monday", label: "Monday" },
+                    { value: "Tuesday", label: "Tuesday" },
+                    { value: "Wednesday", label: "Wednesday" },
+                    { value: "Thursday", label: "Thursday" },
+                    { value: "Friday", label: "Friday" },
+                    { value: "Saturday", label: "Saturday" },
+                    { value: "Sunday", label: "Sunday" },
+                  ]}
+                />
+              </Field>
+            </Grid2>
+
+            <Grid2>
+              <Field label="Rent Status">
+                <DarkSelect
+                  value={rentStatus}
+                  onChange={(v) => setRentStatus(v as "paid" | "unpaid")}
+                  options={[
+                    { value: "paid", label: "Paid" },
+                    { value: "unpaid", label: "Unpaid" },
+                  ]}
+                />
+              </Field>
+              <Field label="Total Balance Due (£)">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={balanceDue}
+                  onChange={(e) => setBalanceDue(e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+            </Grid2>
+
+            {/* Itemised Charges Breakdown & Add Charge */}
+            <div className="border-t pt-3 space-y-2.5" style={{ borderColor: T.borderSoft }}>
+              <div className="font-semibold text-white text-xs">Itemised Charges Breakdown</div>
+              {driver.charges && driver.charges.length > 0 ? (
+                <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                  {driver.charges.map((c) => (
+                    <div
+                      key={c.id}
+                      className="flex justify-between items-center rounded-lg border p-2 text-xs"
+                      style={{ borderColor: T.borderSoft, background: T.panel2 }}
+                    >
+                      <div>
+                        <div className="font-medium text-white">{c.description}</div>
+                        <div className="text-[10px] text-[#8b95a8]">
+                          {new Date(c.created_at).toLocaleDateString("en-GB")}
+                        </div>
+                      </div>
+                      <div className="font-bold text-red-400">+£{Number(c.amount).toFixed(2)}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-[11px] text-[#8b95a8] italic">No extra charges recorded yet.</div>
+              )}
+
+              {/* Add Charge Input Form */}
+              <div className="rounded-lg border p-2.5 space-y-2" style={{ borderColor: T.border, background: T.panel2 }}>
+                <div className="text-[11px] font-bold text-[#ff8a3d]">Add New Charge (e.g. Maintenance, Tolls)</div>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={chargeAmount}
+                    onChange={(e) => setChargeAmount(e.target.value)}
+                    placeholder="Amount (£)"
+                    className="w-28 rounded-lg border py-1.5 px-2 text-xs text-white"
+                    style={{ borderColor: T.border, background: T.panel }}
+                  />
+                  <input
+                    type="text"
+                    value={chargeDesc}
+                    onChange={(e) => setChargeDesc(e.target.value)}
+                    placeholder="Short description (e.g. Maintenance — brake pads)"
+                    className="flex-1 rounded-lg border py-1.5 px-2 text-xs text-white"
+                    style={{ borderColor: T.border, background: T.panel }}
+                  />
+                  <button
+                    type="button"
+                    disabled={addingCharge || !chargeAmount || !chargeDesc.trim()}
+                    onClick={handleAddCharge}
+                    className="rounded-lg bg-[#ff6a00] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#e05d00] disabled:opacity-50 shrink-0"
+                  >
+                    {addingCharge ? "Adding..." : "Add Charge"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <Grid2>
             <Field label="Monthly Allowance (mi)">
               <input
@@ -4039,7 +4303,8 @@ function EditDriverModal({
               />
             </Field>
           </Grid2>
-          <div className="flex justify-end gap-2 border-t pt-3" style={{ borderColor: T.border }}>
+
+          <div className="flex justify-end gap-2 border-t pt-4" style={{ borderColor: T.border }}>
             <button
               type="button"
               onClick={onClose}
@@ -4053,7 +4318,7 @@ function EditDriverModal({
               disabled={saving || !name.trim()}
               className="rounded-lg bg-[#ff6a00] px-4 py-2 font-semibold text-white hover:bg-[#e05d00] disabled:opacity-50"
             >
-              {saving ? "Saving…" : "Save Changes"}
+              {saving ? "Saving…" : "Save Driver File"}
             </button>
           </div>
         </form>
@@ -4086,38 +4351,49 @@ function PortalInviteModal({
   driver,
   onClose,
   onGenerateInvite,
-  onEditEmail,
 }: {
   driver: DriverTrack;
   onClose: () => void;
   onGenerateInvite: () => Promise<string>;
-  onEditEmail: () => void;
+  onEditEmail?: () => void;
 }) {
   const [token, setToken] = useState<string | null>(driver.invite_token ?? null);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const hasEmail = Boolean(driver.email && driver.email.trim());
   const inviteUrl = token ? `https://virtualcarhire.pages.dev/portal/signup?invite=${token}` : "";
+  const defaultMessage = `Hello ${driver.driver_name}, thank you for joining Virtual Car Hire. Please make an account using this link: ${inviteUrl}. This is our portal where you can track all your rent — whatever rent is coming, you'll be opted into service and rent reminders by email. Please look through there and create an account. If you have any trouble, please contact us straight away.`;
 
-  const handleGenerate = async () => {
-    if (!hasEmail) return;
-    setLoading(true);
-    try {
-      const newToken = await onGenerateInvite();
-      setToken(newToken);
-      setCopied(false);
-    } catch {
-      // error toast handled in parent
-    } finally {
-      setLoading(false);
+  const [messageTemplate, setMessageTemplate] = useState(defaultMessage);
+
+  useEffect(() => {
+    if (inviteUrl) {
+      setMessageTemplate(
+        `Hello ${driver.driver_name}, thank you for joining Virtual Car Hire. Please make an account using this link: ${inviteUrl}. This is our portal where you can track all your rent — whatever rent is coming, you'll be opted into service and rent reminders by email. Please look through there and create an account. If you have any trouble, please contact us straight away.`
+      );
     }
-  };
+  }, [inviteUrl, driver.driver_name]);
 
-  const handleCopy = async () => {
-    if (!inviteUrl) return;
+  useEffect(() => {
+    // Auto generate token if missing on modal open
+    if (!token && !loading) {
+      void (async () => {
+        setLoading(true);
+        try {
+          const t = await onGenerateInvite();
+          setToken(t);
+        } catch {
+          // Toast handled in parent
+        } finally {
+          setLoading(false);
+        }
+      })();
+    }
+  }, [token, loading, onGenerateInvite]);
+
+  const handleCopyMessage = async () => {
     try {
-      await navigator.clipboard.writeText(inviteUrl);
+      await navigator.clipboard.writeText(messageTemplate);
       setCopied(true);
       setTimeout(() => setCopied(false), 3000);
     } catch {
@@ -4142,7 +4418,7 @@ function PortalInviteModal({
               <Icon.Bolt className="h-4 w-4" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white">Driver Portal Invite</h3>
+              <h3 className="text-base font-bold text-white">Generate Link</h3>
               <p className="text-xs text-[#8b95a8]">{driver.driver_name}</p>
             </div>
           </div>
@@ -4151,103 +4427,66 @@ function PortalInviteModal({
           </button>
         </div>
 
-        {!hasEmail ? (
-          <div className="space-y-4 text-xs">
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-200">
-              <div className="flex items-start gap-2.5">
-                <Icon.Alert className="h-5 w-5 shrink-0 text-amber-400 mt-0.5" />
-                <div>
-                  <div className="font-bold text-amber-300">Email Address Required</div>
-                  <p className="mt-1 leading-relaxed text-amber-200/90">
-                    Staff must add an email address for <span className="font-bold text-white">{driver.driver_name}</span> before generating a portal invite link.
-                  </p>
-                </div>
-              </div>
+        <div className="space-y-4 text-xs">
+          <div className="rounded-xl border p-3.5 space-y-2" style={{ borderColor: T.borderSoft, background: T.panel }}>
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-[#8b95a8]">Driver:</span>
+              <span className="font-semibold text-white">{driver.driver_name}</span>
             </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-lg border px-4 py-2 text-xs font-semibold text-[#8b95a8] hover:bg-white/10 hover:text-white"
-                style={{ borderColor: T.border }}
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                onClick={onEditEmail}
-                className="rounded-lg bg-[#ff6a00] px-4 py-2 text-xs font-semibold text-white hover:bg-[#e05d00]"
-              >
-                Add Email Address
-              </button>
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-[#8b95a8]">Vehicle:</span>
+              <span className="font-semibold text-white">{driver.registration}</span>
+            </div>
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-[#8b95a8]">Portal Status:</span>
+              {portalStatusBadge(driver)}
             </div>
           </div>
-        ) : (
-          <div className="space-y-4 text-xs">
-            <div className="rounded-xl border p-3.5 space-y-2" style={{ borderColor: T.borderSoft, background: T.panel }}>
-              <div className="flex justify-between items-center text-xs">
-                <span className="text-[#8b95a8]">Email on file:</span>
-                <span className="font-semibold text-white">{driver.email}</span>
-              </div>
-              <div className="flex justify-between items-center text-xs">
-                <span className="text-[#8b95a8]">Portal Status:</span>
-                {portalStatusBadge(driver)}
-              </div>
-            </div>
 
-            {inviteUrl ? (
-              <div className="space-y-2">
-                <Label>Shareable Signup Link</Label>
-                <div className="flex items-center gap-2">
-                  <input
-                    readOnly
-                    value={inviteUrl}
-                    className="w-full rounded-lg border py-2 px-3 text-xs font-mono text-white select-all focus:outline-none"
-                    style={{ borderColor: T.border, background: T.panel2 }}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleCopy}
-                    className="shrink-0 rounded-lg bg-[#ff6a00] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#e05d00]"
-                  >
-                    {copied ? "Copied!" : "Copy Link"}
-                  </button>
-                </div>
-                <p className="text-[11px] text-[#8b95a8]">
-                  Share this unique link with {driver.driver_name} via WhatsApp or email to let them create their portal account.
-                </p>
-              </div>
-            ) : (
-              <p className="text-xs text-[#8b95a8]">
-                Click below to generate a unique signup invitation link for {driver.driver_name}.
-              </p>
-            )}
-
-            <div className="flex items-center justify-between border-t pt-4" style={{ borderColor: T.border }}>
-              <button
-                type="button"
-                onClick={handleGenerate}
-                disabled={loading}
-                className="rounded-lg border border-[#ff6a00]/40 bg-[#ff6a00]/15 px-3.5 py-2 text-xs font-bold text-[#ff8a3d] hover:bg-[#ff6a00]/25 disabled:opacity-50"
-              >
-                {loading
-                  ? "Generating..."
-                  : inviteUrl
-                    ? "Generate Fresh Token (Re-invite)"
-                    : "Generate Invite Link"}
-              </button>
-
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-lg border px-4 py-2 text-xs font-semibold hover:bg-white/10"
-                style={{ borderColor: T.border }}
-              >
-                Done
-              </button>
-            </div>
+          <div className="space-y-2">
+            <Label>Signup Link</Label>
+            <input
+              readOnly
+              value={loading ? "Generating signup link..." : inviteUrl}
+              className="w-full rounded-lg border py-2 px-3 text-xs font-mono text-white select-all focus:outline-none"
+              style={{ borderColor: T.border, background: T.panel2 }}
+            />
           </div>
-        )}
+
+          <div className="space-y-2">
+            <Label>Pre-filled Message Template (Editable)</Label>
+            <textarea
+              rows={5}
+              value={messageTemplate}
+              onChange={(e) => setMessageTemplate(e.target.value)}
+              className="w-full rounded-lg border p-3 text-xs text-white placeholder:text-[#5b6478] focus:border-[#ff6a00] focus:outline-none leading-relaxed"
+              style={{ borderColor: T.border, background: T.panel2 }}
+            />
+            <p className="text-[11px] text-[#8b95a8]">
+              Copy this pre-filled invitation message to manually paste into WhatsApp, Email, or SMS for {driver.driver_name}.
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between border-t pt-4" style={{ borderColor: T.border }}>
+            <button
+              type="button"
+              onClick={handleCopyMessage}
+              disabled={loading || !inviteUrl}
+              className="rounded-lg bg-[#ff6a00] px-4 py-2 text-xs font-bold text-white hover:bg-[#e05d00] disabled:opacity-50"
+            >
+              {copied ? "Copied Message!" : "Copy message"}
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border px-4 py-2 text-xs font-semibold hover:bg-white/10 text-[#8b95a8] hover:text-white"
+              style={{ borderColor: T.border }}
+            >
+              Done
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
