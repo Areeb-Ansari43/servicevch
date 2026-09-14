@@ -3831,7 +3831,7 @@ function DriversView({
       {/* Edit Driver Modal */}
       {editingDriver && (
         <EditDriverModal
-          driver={editingDriver}
+          driver={drivers.find((d) => d.id === editingDriver.id) || editingDriver}
           vehicles={vehicles}
           data={data}
           toast={toast}
@@ -3901,6 +3901,11 @@ function AddDriverModal({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [vehicleId, setVehicleId] = useState("");
+  const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [weeklyRent, setWeeklyRent] = useState("200");
+  const [rentDueDay, setRentDueDay] = useState("Monday");
+  const [rentStatus, setRentStatus] = useState<"paid" | "unpaid">("unpaid");
+  const [balanceDue, setBalanceDue] = useState("200");
   const [allowance, setAllowance] = useState("5000");
   const [excessRate, setExcessRate] = useState("20");
   const [saving, setSaving] = useState(false);
@@ -3911,19 +3916,30 @@ function AddDriverModal({
     e.preventDefault();
     if (!name.trim() || !selectedVehicle) return;
     setSaving(true);
-    await onSave({
-      driver_name: name.trim(),
-      email: email.trim(),
-      phone: phone.trim(),
-      vehicle_id: selectedVehicle.id,
-      registration: selectedVehicle.registration,
-      start_mileage: selectedVehicle.current_mileage,
-      current_mileage: selectedVehicle.current_mileage,
-      allowance: parseInt(allowance) || 5000,
-      excess_rate: parseInt(excessRate) || 20,
-      start_date: new Date().toISOString().slice(0, 10),
-    });
-    setSaving(false);
+    try {
+      const rentAmt = parseFloat(weeklyRent) || 0;
+      await onSave({
+        driver_name: name.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        vehicle_id: selectedVehicle.id,
+        registration: selectedVehicle.registration,
+        start_mileage: selectedVehicle.current_mileage,
+        current_mileage: selectedVehicle.current_mileage,
+        allowance: parseInt(allowance) || 5000,
+        excess_rate: parseInt(excessRate) || 20,
+        start_date: startDate,
+        weekly_rent: rentAmt,
+        rent_due_day: rentDueDay,
+        rent_status: rentStatus,
+        balance_due: parseFloat(balanceDue) ?? rentAmt,
+      });
+      onClose();
+    } catch {
+      // Error notification handled by parent onSave catch handler
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -3974,7 +3990,15 @@ function AddDriverModal({
           <Field label="Linked Vehicle *">
             <DarkSelect
               value={vehicleId}
-              onChange={setVehicleId}
+              onChange={(val) => {
+                setVehicleId(val);
+                const newV = vehicles.find((v) => v.id === val);
+                if (newV) {
+                  const price = getVehicleWeeklyPrice(newV.make, newV.model);
+                  setWeeklyRent(String(price));
+                  setBalanceDue(String(price));
+                }
+              }}
               placeholder="Choose a vehicle…"
               options={vehicles.map((v) => ({
                 value: v.id,
@@ -3982,6 +4006,51 @@ function AddDriverModal({
               }))}
             />
           </Field>
+          <Grid2>
+            <Field label="Rent Start Date">
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Weekly Rent (£)">
+              <input
+                type="number"
+                step="0.01"
+                value={weeklyRent}
+                onChange={(e) => setWeeklyRent(e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+          </Grid2>
+          <Grid2>
+            <Field label="Rent Due Day">
+              <DarkSelect
+                value={rentDueDay}
+                onChange={setRentDueDay}
+                options={[
+                  { value: "Monday", label: "Monday" },
+                  { value: "Tuesday", label: "Tuesday" },
+                  { value: "Wednesday", label: "Wednesday" },
+                  { value: "Thursday", label: "Thursday" },
+                  { value: "Friday", label: "Friday" },
+                  { value: "Saturday", label: "Saturday" },
+                  { value: "Sunday", label: "Sunday" },
+                ]}
+              />
+            </Field>
+            <Field label="Total Balance Due (£)">
+              <input
+                type="number"
+                step="0.01"
+                value={balanceDue}
+                onChange={(e) => setBalanceDue(e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+          </Grid2>
           <Grid2>
             <Field label="Monthly Allowance (mi)">
               <input
@@ -4065,22 +4134,28 @@ function EditDriverModal({
     e.preventDefault();
     if (!name.trim()) return;
     setSaving(true);
-    await onSave({
-      ...driver,
-      driver_name: name.trim(),
-      email: email.trim(),
-      phone: phone.trim(),
-      vehicle_id: selectedVehicle ? selectedVehicle.id : driver.vehicle_id,
-      registration: selectedVehicle ? selectedVehicle.registration : driver.registration,
-      start_date: startDate,
-      weekly_rent: parseFloat(weeklyRent) || 0,
-      rent_due_day: rentDueDay,
-      rent_status: rentStatus,
-      balance_due: parseFloat(balanceDue) || 0,
-      allowance: parseInt(allowance) || 5000,
-      excess_rate: parseInt(excessRate) || 20,
-    });
-    setSaving(false);
+    try {
+      await onSave({
+        ...driver,
+        driver_name: name.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        vehicle_id: selectedVehicle ? selectedVehicle.id : driver.vehicle_id,
+        registration: selectedVehicle ? selectedVehicle.registration : driver.registration,
+        start_date: startDate,
+        weekly_rent: parseFloat(weeklyRent) || 0,
+        rent_due_day: rentDueDay,
+        rent_status: rentStatus,
+        balance_due: parseFloat(balanceDue) || 0,
+        allowance: parseInt(allowance) || 5000,
+        excess_rate: parseInt(excessRate) || 20,
+      });
+      onClose();
+    } catch (err: any) {
+      toast(err?.message ?? "Failed to save driver file", "error");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleAddCharge = async () => {
