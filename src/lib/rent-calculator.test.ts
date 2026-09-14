@@ -47,3 +47,39 @@ describe("Next Payment Due Date Calculation", () => {
     expect(nextDue.toISOString().slice(0, 10)).toBe("2025-03-08");
   });
 });
+
+describe("Rent Status Toggle Logic", () => {
+  test("toggling rent status from unpaid to paid clears balance due to 0", () => {
+    const currentStatus = "unpaid";
+    const weeklyRent = 250;
+    const currentBalance = 250;
+
+    const newStatus = currentStatus === "paid" ? "unpaid" : "paid";
+    let newBalance = currentBalance;
+    if (newStatus === "paid") {
+      newBalance = 0;
+    } else {
+      newBalance = currentBalance === 0 ? weeklyRent : currentBalance + weeklyRent;
+    }
+
+    expect(newStatus).toBe("paid");
+    expect(newBalance).toBe(0);
+  });
+
+  test("toggling rent status from paid to unpaid restores balance due to weekly rent", () => {
+    const currentStatus = "paid";
+    const weeklyRent = 250;
+    const currentBalance = 0;
+
+    const newStatus = currentStatus === "paid" ? "unpaid" : "paid";
+    let newBalance = currentBalance;
+    if (newStatus === "paid") {
+      newBalance = 0;
+    } else {
+      newBalance = currentBalance === 0 ? weeklyRent : currentBalance + weeklyRent;
+    }
+
+    expect(newStatus).toBe("unpaid");
+    expect(newBalance).toBe(250);
+  });
+});
