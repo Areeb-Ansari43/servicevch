@@ -153,6 +153,96 @@ const cFromRow = (r: any): DriverCharge => ({
   created_at: r.created_at,
 });
 
+export const WEBSITE_CATALOG = [
+  { make: "Mercedes", model: "E300", fuel: "Plug-in-Hybrid", price: 340, year: "2021–24" },
+  { make: "Mercedes", model: "Vito", fuel: "Petrol", price: 380, year: "2021–24" },
+  { make: "Mercedes", model: "V-Class", fuel: "Petrol", price: 450, year: "2022–24" },
+  { make: "Mercedes", model: "EQS", fuel: "Electric", price: 500, year: "2022–24" },
+  { make: "Mercedes", model: "E220", fuel: "Petrol", price: 310, year: "2020–24" },
+  { make: "Mercedes", model: "EQE", fuel: "Electric", price: 440, year: "2023–24" },
+  { make: "Toyota", model: "Corolla Estate", fuel: "Plug-in-Hybrid", price: 220, year: "2021–24" },
+  { make: "Toyota", model: "Auris Estate", fuel: "Plug-in-Hybrid", price: 210, year: "2019–22" },
+  { make: "Toyota", model: "Prius", fuel: "Plug-in-Hybrid", price: 200, year: "2020–24" },
+  { make: "Tesla", model: "Model 3", fuel: "Electric", price: 260, year: "2021–24" },
+  { make: "Jaguar", model: "I-Pace", fuel: "Electric", price: 330, year: "2020–24" },
+  { make: "Hyundai", model: "IONIQ", fuel: "Plug-in-Hybrid", price: 220, year: "2020–23" },
+  { make: "MG", model: "MG5 EV", fuel: "Electric", price: 200, year: "2022–24" },
+  { make: "Ford", model: "Tourneo Custom", fuel: "Electric", price: 410, year: "2025" },
+  { make: "MG", model: "MG S9 PHEV SUV", fuel: "Plug-in-Hybrid", price: 350, year: "2024–25" },
+  { make: "Volkswagen", model: "Multivan PHEV", fuel: "Plug-in-Hybrid", price: 350, year: "2024–25" },
+];
+
+export function getVehicleWeeklyPrice(make?: string | null, model?: string | null): number {
+  if (!make && !model) return 200;
+  const combined = `${make ?? ""} ${model ?? ""}`.toLowerCase();
+
+  if (/eqe/i.test(combined)) return 440;
+  if (/eqs/i.test(combined)) return 500;
+  if (/v-class|vclass/i.test(combined)) return 450;
+  if (/vito/i.test(combined)) return 380;
+  if (/e300|e\s*300/i.test(combined)) return 340;
+  if (/e220|e\s*220/i.test(combined)) return 310;
+  if (/tourneo/i.test(combined)) return 410;
+  if (/i-pace|ipace/i.test(combined)) return 330;
+  if (/model 3|model3/i.test(combined)) return 260;
+  if (/corolla/i.test(combined)) return 220;
+  if (/auris/i.test(combined)) return 210;
+  if (/prius/i.test(combined)) return 200;
+  if (/ioniq/i.test(combined)) return 220;
+  if (/mg5|mg 5/i.test(combined)) return 200;
+  if (/multivan/i.test(combined)) return 350;
+
+  const mClean = (make ?? "").toLowerCase();
+  const modClean = (model ?? "").toLowerCase();
+  const found = WEBSITE_CATALOG.find(
+    (c) =>
+      c.make.toLowerCase() === mClean &&
+      (c.model.toLowerCase().includes(modClean) || modClean.includes(c.model.toLowerCase())),
+  );
+  return found ? found.price : 200;
+}
+
+export function calculateNextPaymentDueDate(
+  startDateStr?: string | null,
+  dueDayName?: string | null,
+  refDate: Date = new Date(),
+): Date {
+  const daysMap: Record<string, number> = {
+    sunday: 0,
+    monday: 1,
+    tuesday: 2,
+    wednesday: 3,
+    thursday: 4,
+    friday: 5,
+    saturday: 6,
+  };
+
+  const targetDay = daysMap[(dueDayName || "Monday").trim().toLowerCase()] ?? 1;
+
+  // Base date: today at start of day
+  const today = new Date(refDate);
+  today.setHours(0, 0, 0, 0);
+
+  let baseDate = new Date(today);
+
+  if (startDateStr) {
+    const parsedStart = new Date(startDateStr);
+    if (!isNaN(parsedStart.getTime())) {
+      parsedStart.setHours(0, 0, 0, 0);
+      if (parsedStart > today) {
+        baseDate = parsedStart;
+      }
+    }
+  }
+
+  const currentDay = baseDate.getDay();
+  const daysUntil = (targetDay - currentDay + 7) % 7;
+
+  const nextDue = new Date(baseDate);
+  nextDue.setDate(baseDate.getDate() + daysUntil);
+  return nextDue;
+}
+
 const dFromRow = (r: any, logs: MonthlyLog[], charges: DriverCharge[] = []): DriverTrack => ({
   id: r.id,
   driver_name: r.driver_name,
@@ -170,7 +260,7 @@ const dFromRow = (r: any, logs: MonthlyLog[], charges: DriverCharge[] = []): Dri
   auth_user_id: r.auth_user_id ?? null,
   weekly_rent: Number(r.weekly_rent ?? 0),
   rent_due_day: r.rent_due_day ?? "Monday",
-  rent_status: (r.rent_status as "paid" | "unpaid") ?? "paid",
+  rent_status: (r.rent_status as "paid" | "unpaid") ?? "unpaid",
   balance_due: Number(r.balance_due ?? 0),
   charges,
   monthly_logs: logs,
@@ -370,6 +460,10 @@ export function useFleetData() {
         current_mileage: d.start_mileage,
         allowance: d.allowance,
         rate_pence: d.excess_rate,
+        weekly_rent: d.weekly_rent ?? 0,
+        rent_due_day: d.rent_due_day ?? "Monday",
+        rent_status: d.rent_status ?? "unpaid",
+        balance_due: d.balance_due ?? (d.weekly_rent ?? 0),
       };
       let { error } = await (supabase.from("driver_tracks") as any).insert(driverPayload);
       if (error && /email|phone|column/i.test(error.message)) {
@@ -451,6 +545,7 @@ export function useFleetData() {
         phone: d.phone?.trim() || null,
         vehicle_id: d.vehicle_id || null,
         reg: d.registration,
+        start_date: d.start_date,
         allowance: d.allowance,
         rate_pence: d.excess_rate,
         weekly_rent: d.weekly_rent,
@@ -470,11 +565,9 @@ export function useFleetData() {
       const newStatus = currentStatus === "paid" ? "unpaid" : "paid";
       let newBalance = currentBalance;
       if (newStatus === "paid") {
-        // Marking as paid resets weekly rent portion of balance to 0 (subtract weeklyRent if balance > 0)
-        newBalance = Math.max(0, currentBalance - weeklyRent);
+        newBalance = 0;
       } else {
-        // Marking as unpaid adds weekly rent to balance due
-        newBalance = currentBalance + weeklyRent;
+        newBalance = currentBalance === 0 ? weeklyRent : currentBalance + weeklyRent;
       }
 
       const { error } = await supabase

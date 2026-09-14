@@ -2,7 +2,14 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
-import { useFleetData, type Vehicle, type ServiceRecord, type DriverTrack } from "@/lib/fleet-data";
+import {
+  useFleetData,
+  getVehicleWeeklyPrice,
+  calculateNextPaymentDueDate,
+  type Vehicle,
+  type ServiceRecord,
+  type DriverTrack,
+} from "@/lib/fleet-data";
 import { simplifyVehicleName, vehicleArtworkPath } from "@/lib/vehicle-display";
 import { exportServiceHistoryPdf } from "@/lib/pdf-export";
 import { useLeadsData } from "@/lib/leads-data";
@@ -3639,7 +3646,7 @@ function DriversView({
                     .slice(0, 2)
                     .toUpperCase();
                   return (
-                    <tr key={driver.id} className="transition-colors hover:bg-white/[0.04]">
+                    <tr key={driver.id} onClick={() => setEditingDriver(driver)} className="cursor-pointer transition-colors hover:bg-white/[0.04]">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2.5">
                           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#ff6a00] to-[#ff9d4d] text-xs font-bold text-white shadow-sm">
@@ -3677,7 +3684,14 @@ function DriversView({
                       </td>
                       <td className="px-4 py-3 text-[#9aa5b8]">
                         <div className="font-semibold text-white">£{driver.weekly_rent || 0}/wk</div>
-                        <div className="text-[10px] text-[#8b95a8]">{driver.rent_due_day || "Monday"}</div>
+                        <div className="text-[10px] text-[#8b95a8]">
+                          {driver.rent_due_day || "Monday"} (Next:{" "}
+                          {calculateNextPaymentDueDate(driver.start_date, driver.rent_due_day).toLocaleDateString("en-GB", {
+                            day: "numeric",
+                            month: "short",
+                          })}
+                          )
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <button
@@ -3723,7 +3737,10 @@ function DriversView({
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             type="button"
-                            onClick={() => setInviteModalDriver(driver)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setInviteModalDriver(driver);
+                            }}
                             title="Send Portal Invite"
                             className="inline-flex items-center gap-1 rounded-md border border-[#ff6a00]/40 bg-[#ff6a00]/15 px-2 py-1 text-[11px] font-bold text-[#ff8a3d] hover:bg-[#ff6a00]/25"
                           >
@@ -3736,7 +3753,10 @@ function DriversView({
                           </button>
                           <button
                             type="button"
-                            onClick={() => setPreviewDriver(driver)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPreviewDriver(driver);
+                            }}
                             title="View WhatsApp Chat History"
                             className="rounded-md border p-1.5 text-[#8b95a8] hover:bg-white/10 hover:text-white"
                             style={{ borderColor: T.borderSoft }}
@@ -3745,7 +3765,10 @@ function DriversView({
                           </button>
                           <button
                             type="button"
-                            onClick={() => setEditingDriver(driver)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingDriver(driver);
+                            }}
                             title="Edit Driver"
                             className="rounded-md border p-1.5 text-[#8b95a8] hover:bg-white/10 hover:text-white"
                             style={{ borderColor: T.borderSoft }}
@@ -3754,7 +3777,10 @@ function DriversView({
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleDelete(driver)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(driver);
+                            }}
                             title="Delete Driver"
                             className="rounded-md border border-red-500/30 bg-red-500/10 p-1.5 text-red-400 hover:bg-red-500/20 hover:text-red-300"
                           >
@@ -4002,9 +4028,10 @@ function EditDriverModal({
   const [email, setEmail] = useState(driver.email || "");
   const [phone, setPhone] = useState(driver.phone || "");
   const [vehicleId, setVehicleId] = useState(driver.vehicle_id);
+  const [startDate, setStartDate] = useState(driver.start_date || new Date().toISOString().slice(0, 10));
   const [weeklyRent, setWeeklyRent] = useState(String(driver.weekly_rent || 0));
   const [rentDueDay, setRentDueDay] = useState(driver.rent_due_day || "Monday");
-  const [rentStatus, setRentStatus] = useState<"paid" | "unpaid">(driver.rent_status || "paid");
+  const [rentStatus, setRentStatus] = useState<"paid" | "unpaid">(driver.rent_status || "unpaid");
   const [balanceDue, setBalanceDue] = useState(String(driver.balance_due || 0));
   const [allowance, setAllowance] = useState(String(driver.allowance));
   const [excessRate, setExcessRate] = useState(String(driver.excess_rate));
@@ -4031,6 +4058,7 @@ function EditDriverModal({
       phone: phone.trim(),
       vehicle_id: selectedVehicle ? selectedVehicle.id : driver.vehicle_id,
       registration: selectedVehicle ? selectedVehicle.registration : driver.registration,
+      start_date: startDate,
       weekly_rent: parseFloat(weeklyRent) || 0,
       rent_due_day: rentDueDay,
       rent_status: rentStatus,
@@ -4083,8 +4111,13 @@ function EditDriverModal({
         <div className="mx-auto mb-1 h-1.5 w-12 rounded-full bg-white/20 sm:hidden" />
         <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: T.border }}>
           <div>
-            <h3 className="text-lg font-bold text-white">Driver File & Management</h3>
-            <p className="text-xs text-[#8b95a8]">{driver.driver_name} — {driver.registration}</p>
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-bold text-white">Driver File & Management</h3>
+              {portalStatusBadge(driver)}
+            </div>
+            <p className="text-xs text-[#8b95a8]">
+              {driver.driver_name} — {selectedVehicle ? `${selectedVehicle.registration} (${simplifyVehicleName(selectedVehicle)})` : driver.registration}
+            </p>
           </div>
           <button onClick={onClose} className="text-[#8b95a8] hover:text-white">
             <Icon.X className="h-5 w-5" />
@@ -4165,7 +4198,14 @@ function EditDriverModal({
             <Field label="Linked Vehicle">
               <DarkSelect
                 value={vehicleId}
-                onChange={setVehicleId}
+                onChange={(val) => {
+                  setVehicleId(val);
+                  const newV = vehicles.find((v) => v.id === val);
+                  if (newV) {
+                    const price = getVehicleWeeklyPrice(newV.make, newV.model);
+                    setWeeklyRent(String(price));
+                  }
+                }}
                 options={vehicles.map((v) => ({
                   value: v.id,
                   label: `${v.registration} — ${simplifyVehicleName(v)}`,
@@ -4178,6 +4218,14 @@ function EditDriverModal({
           <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: T.borderSoft, background: T.panel }}>
             <div className="font-bold text-white text-xs">Rent & Account Balance</div>
             <Grid2>
+              <Field label="Rent Start Date">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
               <Field label="Weekly Rent (£)">
                 <input
                   type="number"
@@ -4187,6 +4235,9 @@ function EditDriverModal({
                   className={inputCls}
                 />
               </Field>
+            </Grid2>
+
+            <Grid2>
               <Field label="Rent Due Day">
                 <DarkSelect
                   value={rentDueDay}
@@ -4201,6 +4252,16 @@ function EditDriverModal({
                     { value: "Sunday", label: "Sunday" },
                   ]}
                 />
+              </Field>
+              <Field label="Next Payment Due Date">
+                <div className="rounded-lg border px-3 py-2 text-xs font-semibold text-emerald-400 bg-emerald-500/10 border-emerald-500/20">
+                  {calculateNextPaymentDueDate(startDate, rentDueDay).toLocaleDateString("en-GB", {
+                    weekday: "long",
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </div>
               </Field>
             </Grid2>
 
@@ -4672,6 +4733,7 @@ function MileageView({
       return;
     }
     try {
+      const autoRent = getVehicleWeeklyPrice(selected.make, selected.model);
       await data.addDriver({
         driver_name: driverName.trim(),
         vehicle_id: selected.id,
@@ -4681,6 +4743,10 @@ function MileageView({
         allowance: parseInt(allowance) || 5000,
         excess_rate: parseInt(excessRate) || 20,
         start_date: startDate,
+        weekly_rent: autoRent,
+        rent_due_day: "Monday",
+        rent_status: "unpaid",
+        balance_due: autoRent,
       });
       toast(`Tracking started for ${driverName}`);
       setDriverName("");
