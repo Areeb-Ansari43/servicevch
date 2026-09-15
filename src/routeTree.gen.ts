@@ -10,10 +10,12 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WhatsappLeadsRouteImport } from './routes/whatsapp-leads'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as GenerationsRouteImport } from './routes/generations'
 import { Route as DriversRouteImport } from './routes/drivers'
 import { Route as DriverMileageRouteImport } from './routes/driver-mileage'
+import { Route as AuditLogsRouteImport } from './routes/audit-logs'
 import { Route as AddVehicleRouteImport } from './routes/add-vehicle'
 import { Route as AccidentCasesRouteImport } from './routes/accident-cases'
 import { Route as IndexRouteImport } from './routes/index'
@@ -31,6 +33,11 @@ import { Route as ApiJobsInactivityRouteImport } from './routes/api/jobs/inactiv
 const WhatsappLeadsRoute = WhatsappLeadsRouteImport.update({
   id: '/whatsapp-leads',
   path: '/whatsapp-leads',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -51,6 +58,11 @@ const DriversRoute = DriversRouteImport.update({
 const DriverMileageRoute = DriverMileageRouteImport.update({
   id: '/driver-mileage',
   path: '/driver-mileage',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuditLogsRoute = AuditLogsRouteImport.update({
+  id: '/audit-logs',
+  path: '/audit-logs',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AddVehicleRoute = AddVehicleRouteImport.update({
@@ -123,10 +135,12 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/accident-cases': typeof AccidentCasesRoute
   '/add-vehicle': typeof AddVehicleRoute
+  '/audit-logs': typeof AuditLogsRoute
   '/driver-mileage': typeof DriverMileageRoute
   '/drivers': typeof DriversRoute
   '/generations': typeof GenerationsRoute
   '/login': typeof LoginRoute
+  '/settings': typeof SettingsRoute
   '/whatsapp-leads': typeof WhatsappLeadsRoute
   '/api/webhook': typeof ApiWebhookRoute
   '/service-history/new': typeof ServiceHistoryNewRoute
@@ -143,10 +157,12 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/accident-cases': typeof AccidentCasesRoute
   '/add-vehicle': typeof AddVehicleRoute
+  '/audit-logs': typeof AuditLogsRoute
   '/driver-mileage': typeof DriverMileageRoute
   '/drivers': typeof DriversRoute
   '/generations': typeof GenerationsRoute
   '/login': typeof LoginRoute
+  '/settings': typeof SettingsRoute
   '/whatsapp-leads': typeof WhatsappLeadsRoute
   '/api/webhook': typeof ApiWebhookRoute
   '/service-history/new': typeof ServiceHistoryNewRoute
@@ -164,10 +180,12 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/accident-cases': typeof AccidentCasesRoute
   '/add-vehicle': typeof AddVehicleRoute
+  '/audit-logs': typeof AuditLogsRoute
   '/driver-mileage': typeof DriverMileageRoute
   '/drivers': typeof DriversRoute
   '/generations': typeof GenerationsRoute
   '/login': typeof LoginRoute
+  '/settings': typeof SettingsRoute
   '/whatsapp-leads': typeof WhatsappLeadsRoute
   '/api/webhook': typeof ApiWebhookRoute
   '/service-history/new': typeof ServiceHistoryNewRoute
@@ -186,10 +204,12 @@ export interface FileRouteTypes {
     | '/'
     | '/accident-cases'
     | '/add-vehicle'
+    | '/audit-logs'
     | '/driver-mileage'
     | '/drivers'
     | '/generations'
     | '/login'
+    | '/settings'
     | '/whatsapp-leads'
     | '/api/webhook'
     | '/service-history/new'
@@ -206,10 +226,12 @@ export interface FileRouteTypes {
     | '/'
     | '/accident-cases'
     | '/add-vehicle'
+    | '/audit-logs'
     | '/driver-mileage'
     | '/drivers'
     | '/generations'
     | '/login'
+    | '/settings'
     | '/whatsapp-leads'
     | '/api/webhook'
     | '/service-history/new'
@@ -226,10 +248,12 @@ export interface FileRouteTypes {
     | '/'
     | '/accident-cases'
     | '/add-vehicle'
+    | '/audit-logs'
     | '/driver-mileage'
     | '/drivers'
     | '/generations'
     | '/login'
+    | '/settings'
     | '/whatsapp-leads'
     | '/api/webhook'
     | '/service-history/new'
@@ -247,10 +271,12 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AccidentCasesRoute: typeof AccidentCasesRoute
   AddVehicleRoute: typeof AddVehicleRoute
+  AuditLogsRoute: typeof AuditLogsRoute
   DriverMileageRoute: typeof DriverMileageRoute
   DriversRoute: typeof DriversRoute
   GenerationsRoute: typeof GenerationsRoute
   LoginRoute: typeof LoginRoute
+  SettingsRoute: typeof SettingsRoute
   WhatsappLeadsRoute: typeof WhatsappLeadsRoute
   ApiWebhookRoute: typeof ApiWebhookRoute
   ServiceHistoryNewRoute: typeof ServiceHistoryNewRoute
@@ -271,6 +297,13 @@ declare module '@tanstack/react-router' {
       path: '/whatsapp-leads'
       fullPath: '/whatsapp-leads'
       preLoaderRoute: typeof WhatsappLeadsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -299,6 +332,13 @@ declare module '@tanstack/react-router' {
       path: '/driver-mileage'
       fullPath: '/driver-mileage'
       preLoaderRoute: typeof DriverMileageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/audit-logs': {
+      id: '/audit-logs'
+      path: '/audit-logs'
+      fullPath: '/audit-logs'
+      preLoaderRoute: typeof AuditLogsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/add-vehicle': {
@@ -399,10 +439,12 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccidentCasesRoute: AccidentCasesRoute,
   AddVehicleRoute: AddVehicleRoute,
+  AuditLogsRoute: AuditLogsRoute,
   DriverMileageRoute: DriverMileageRoute,
   DriversRoute: DriversRoute,
   GenerationsRoute: GenerationsRoute,
   LoginRoute: LoginRoute,
+  SettingsRoute: SettingsRoute,
   WhatsappLeadsRoute: WhatsappLeadsRoute,
   ApiWebhookRoute: ApiWebhookRoute,
   ServiceHistoryNewRoute: ServiceHistoryNewRoute,
