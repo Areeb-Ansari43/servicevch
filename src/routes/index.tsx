@@ -4120,6 +4120,14 @@ function EditDriverModal({
   const [excessRate, setExcessRate] = useState(String(driver.excess_rate));
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    setBalanceDue(String(driver.balance_due || 0));
+  }, [driver.balance_due]);
+
+  useEffect(() => {
+    setRentStatus(driver.rent_status || "unpaid");
+  }, [driver.rent_status]);
+
   // Add charge inline state
   const [chargeAmount, setChargeAmount] = useState("");
   const [chargeDesc, setChargeDesc] = useState("");
