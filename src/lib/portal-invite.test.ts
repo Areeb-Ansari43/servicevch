@@ -46,4 +46,15 @@ describe("Driver Portal Invite Logic", () => {
     expect(token1).not.toBe(token2);
     expect(formatPortalInviteUrl(token1)).not.toBe(formatPortalInviteUrl(token2));
   });
+
+  test("generating portal invite produces a unique UUID token on each invocation", () => {
+    const generatePortalInviteFn = () => crypto.randomUUID();
+
+    const token1 = generatePortalInviteFn();
+    const token2 = generatePortalInviteFn();
+
+    expect(token1).not.toBe(token2);
+    expect(token1).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    expect(token2).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+  });
 });

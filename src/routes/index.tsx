@@ -4515,8 +4515,8 @@ function PortalInviteModal({
   onGenerateInvite: () => Promise<string>;
   onEditEmail?: () => void;
 }) {
-  const [token, setToken] = useState<string | null>(driver.invite_token ?? null);
-  const [loading, setLoading] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
 
   const inviteUrl = token ? `https://virtualcarhire.pages.dev/portal/signup?invite=${token}` : "";
@@ -4532,22 +4532,33 @@ function PortalInviteModal({
     }
   }, [inviteUrl, driver.driver_name]);
 
+  const onGenerateRef = useRef(onGenerateInvite);
   useEffect(() => {
-    // Auto generate token if missing on modal open
-    if (!token && !loading) {
-      void (async () => {
-        setLoading(true);
-        try {
-          const t = await onGenerateInvite();
+    onGenerateRef.current = onGenerateInvite;
+  }, [onGenerateInvite]);
+
+  useEffect(() => {
+    // Generate a fresh unique token once on modal mount (Re-invite / Invite)
+    let isMounted = true;
+    void (async () => {
+      setLoading(true);
+      try {
+        const t = await onGenerateRef.current();
+        if (isMounted) {
           setToken(t);
-        } catch {
-          // Toast handled in parent
-        } finally {
+        }
+      } catch {
+        // Toast handled in parent
+      } finally {
+        if (isMounted) {
           setLoading(false);
         }
-      })();
-    }
-  }, [token, loading, onGenerateInvite]);
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleCopyMessage = async () => {
     try {
