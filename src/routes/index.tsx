@@ -18,6 +18,7 @@ import { ChatSimulator } from "@/components/chat-simulator";
 import { LeadThread } from "@/components/lead-thread";
 import { getLeadConversation } from "@/lib/chat.functions";
 import { GenerationsView } from "@/components/generations-view";
+import { type AuditLogEntry } from "@/lib/audit-logger";
 import { WEBSITE_BASE_URL } from "@/lib/domain-config";
 import { RouteErrorBoundary } from "@/components/error-boundary";
 
@@ -175,6 +176,77 @@ export const T = {
 
 /* ---------------- Icons ---------------- */
 const Icon = {
+  ChevronUp: (p: { className?: string }) => (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={p.className}
+    >
+      <polyline points="18 15 12 9 6 15" />
+    </svg>
+  ),
+  Key: (p: { className?: string }) => (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={p.className}
+    >
+      <path d="M21 2l-2 2m-1.5 1.5l-3 3m-2 2l-3 3m2-2l-3 3m-2-2l-3 3m2-2l-3 3" />
+      <circle cx="7.5" cy="16.5" r="4.5" />
+    </svg>
+  ),
+  RotateCcw: (p: { className?: string }) => (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={p.className}
+    >
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+    </svg>
+  ),
+  Shield: (p: { className?: string }) => (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={p.className}
+    >
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+    </svg>
+  ),
+  FileText: (p: { className?: string }) => (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={p.className}
+    >
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="16" y1="13" x2="8" y2="13" />
+      <line x1="16" y1="17" x2="8" y2="17" />
+      <polyline points="10 9 9 9 8 9" />
+    </svg>
+  ),
   Wrench: (p: { className?: string }) => (
     <svg
       viewBox="0 0 24 24"
@@ -637,6 +709,559 @@ function DarkSelect({
   );
 }
 
+function UserSettingsView({
+  account,
+  toast,
+}: {
+  account: { email: string } | null;
+  toast: (m: string, t?: Toast["type"]) => void;
+}) {
+  const email = account?.email || "admin@virtualcarhire.com";
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [updatingPassword, setUpdatingPassword] = useState(false);
+  const [passwordSuccess, setPasswordSuccess] = useState(false);
+
+  const [startView, setStartView] = useState(() => {
+    if (typeof localStorage !== "undefined") {
+      return localStorage.getItem("vch_pref_start_view") || "/";
+    }
+    return "/";
+  });
+
+  const [rentAlerts, setRentAlerts] = useState(() => {
+    if (typeof localStorage !== "undefined") {
+      return localStorage.getItem("vch_pref_rent_alerts") !== "disabled";
+    }
+    return true;
+  });
+
+  const handlePasswordUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPassword) {
+      toast("Please enter a new password", "error");
+      return;
+    }
+    if (newPassword.length < 6) {
+      toast("Password must be at least 6 characters long", "error");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast("Passwords do not match", "error");
+      return;
+    }
+
+    try {
+      setUpdatingPassword(true);
+      setPasswordSuccess(false);
+
+      if (typeof window !== "undefined" && (window as any).__MOCK_AUTH__) {
+        await new Promise((r) => setTimeout(r, 600));
+        setPasswordSuccess(true);
+        setNewPassword("");
+        setConfirmPassword("");
+        toast("Password updated successfully (mock session)");
+        return;
+      }
+
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      setPasswordSuccess(true);
+      setNewPassword("");
+      setConfirmPassword("");
+      toast("Password updated successfully");
+    } catch (err: any) {
+      toast(err?.message || "Failed to update password", "error");
+    } finally {
+      setUpdatingPassword(false);
+    }
+  };
+
+  const handleSavePreferences = () => {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("vch_pref_start_view", startView);
+      localStorage.setItem("vch_pref_rent_alerts", rentAlerts ? "enabled" : "disabled");
+    }
+    toast("Preferences saved successfully");
+  };
+
+  return (
+    <div className="mx-auto max-w-4xl space-y-6 pb-12">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-white">User Settings</h1>
+        <p className="mt-1 text-xs text-[#9aa5b8]">
+          Manage your CRM staff account profile, credentials, and workspace preferences.
+        </p>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* ACCOUNT PROFILE CARD */}
+        <div
+          className="rounded-2xl border p-5"
+          style={{ borderColor: T.border, background: T.panel }}
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-[#ff6a00] to-[#ff9d4d] text-lg font-bold text-white shadow-md">
+              {email ? email[0].toUpperCase() : "A"}
+            </div>
+            <div>
+              <div className="text-base font-bold text-white">{email}</div>
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-[#ff6a00]/30 bg-[#ff6a00]/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#ff8a3d]">
+                Fleet Admin
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 space-y-3 border-t pt-4" style={{ borderColor: T.borderSoft }}>
+            <div className="flex justify-between text-xs">
+              <span style={{ color: T.muted }}>Account Type</span>
+              <span className="font-semibold text-white">CRM Staff Operator</span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span style={{ color: T.muted }}>Access Role</span>
+              <span className="font-semibold text-[#ff8a3d]">Full Administrator</span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span style={{ color: T.muted }}>Authentication Provider</span>
+              <span className="font-semibold text-white">Supabase Auth</span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span style={{ color: T.muted }}>Status</span>
+              <span className="inline-flex items-center gap-1 font-semibold text-emerald-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Active Session
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* CHANGE PASSWORD CARD */}
+        <div
+          className="rounded-2xl border p-5"
+          style={{ borderColor: T.border, background: T.panel }}
+        >
+          <div className="flex items-center gap-2">
+            <Icon.Key className="h-5 w-5 text-[#ff6a00]" />
+            <h2 className="text-base font-bold text-white">Change Password</h2>
+          </div>
+          <p className="mt-1 text-xs text-[#9aa5b8]">
+            Update your account password securely via Supabase Auth.
+          </p>
+
+          <form onSubmit={handlePasswordUpdate} className="mt-4 space-y-3">
+            <div>
+              <label className="block text-xs font-semibold text-[#9aa5b8] mb-1">
+                New Password
+              </label>
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Enter new password (min 6 chars)"
+                className="w-full rounded-xl border bg-black/40 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-[#ff6a00] focus:outline-none"
+                style={{ borderColor: T.borderSoft }}
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-[#9aa5b8] mb-1">
+                Confirm New Password
+              </label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Confirm new password"
+                className="w-full rounded-xl border bg-black/40 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-[#ff6a00] focus:outline-none"
+                style={{ borderColor: T.borderSoft }}
+              />
+            </div>
+
+            {passwordSuccess && (
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-xs text-emerald-300">
+                ✓ Password changed successfully!
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={updatingPassword}
+              className="mt-2 w-full rounded-xl bg-gradient-to-r from-[#ff6a00] to-[#ff9d4d] px-4 py-2.5 text-xs font-bold text-white shadow-md transition hover:opacity-90 disabled:opacity-50"
+            >
+              {updatingPassword ? "Updating Password..." : "Update Password"}
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {/* APP PREFERENCES */}
+      <div
+        className="rounded-2xl border p-5"
+        style={{ borderColor: T.border, background: T.panel }}
+      >
+        <div className="flex items-center gap-2">
+          <Icon.Cog className="h-5 w-5 text-[#ff6a00]" />
+          <h2 className="text-base font-bold text-white">Account Preferences</h2>
+        </div>
+        <p className="mt-1 text-xs text-[#9aa5b8]">
+          Customize default navigation behavior and automated portal notifications.
+        </p>
+
+        <div className="mt-5 grid gap-4 md:grid-cols-2">
+          <div>
+            <label className="block text-xs font-semibold text-[#9aa5b8] mb-1">
+              Default Landing View
+            </label>
+            <select
+              value={startView}
+              onChange={(e) => setStartView(e.target.value)}
+              className="w-full rounded-xl border bg-black/40 px-3 py-2 text-xs text-white focus:border-[#ff6a00] focus:outline-none"
+              style={{ borderColor: T.borderSoft }}
+            >
+              <option value="/">Dashboard</option>
+              <option value="/vehicles">Vehicles</option>
+              <option value="/drivers">Drivers</option>
+              <option value="/whatsapp-leads">WhatsApp Leads</option>
+              <option value="/driver-mileage">Driver Mileage</option>
+              <option value="/accident-cases">Accident Cases</option>
+              <option value="/audit-logs">Audit Logs</option>
+            </select>
+          </div>
+
+          <div className="flex items-center justify-between rounded-xl border p-3" style={{ borderColor: T.borderSoft, background: T.panel2 }}>
+            <div>
+              <div className="text-xs font-semibold text-white">Rent Alert Toasts</div>
+              <div className="text-[11px] text-[#8b95a8]">
+                Display system alerts for overdue driver rent
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setRentAlerts(!rentAlerts)}
+              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                rentAlerts ? "bg-[#ff6a00]" : "bg-zinc-700"
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  rentAlerts ? "translate-x-4" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-5 flex justify-end">
+          <button
+            onClick={handleSavePreferences}
+            className="rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
+          >
+            Save Preferences
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AuditLogsView({
+  toast,
+}: {
+  toast: (m: string, t?: Toast["type"]) => void;
+}) {
+  const [logs, setLogs] = useState<AuditLogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("all");
+
+  const loadLogs = useCallback(async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("audit_logs")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw new Error(error.message);
+      setLogs((data as any) || []);
+    } catch (err: any) {
+      console.error("Error loading audit logs:", err);
+      toast(err?.message || "Failed to load audit logs", "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    loadLogs();
+
+    const channel = supabase
+      .channel("audit_logs_realtime_view")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "audit_logs" },
+        (payload) => {
+          setLogs((prev) => [payload.new as any, ...prev]);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [loadLogs]);
+
+  const filteredLogs = useMemo(() => {
+    return logs.filter((log) => {
+      // Category filter
+      if (categoryFilter !== "all") {
+        if (categoryFilter === "driver" && !log.action_type.startsWith("driver")) return false;
+        if (categoryFilter === "rent" && log.action_type !== "rent_updated") return false;
+        if (categoryFilter === "charge" && log.action_type !== "charge_added") return false;
+        if (categoryFilter === "invite" && log.action_type !== "invite_sent") return false;
+        if (categoryFilter === "vehicle" && !log.action_type.startsWith("vehicle")) return false;
+      }
+
+      // Date filter
+      if (dateFilter !== "all" && log.created_at) {
+        const logDate = new Date(log.created_at).getTime();
+        const now = Date.now();
+        if (dateFilter === "today") {
+          const startOfToday = new Date().setHours(0, 0, 0, 0);
+          if (logDate < startOfToday) return false;
+        } else if (dateFilter === "7days") {
+          if (now - logDate > 7 * 24 * 60 * 60 * 1000) return false;
+        } else if (dateFilter === "30days") {
+          if (now - logDate > 30 * 24 * 60 * 60 * 1000) return false;
+        }
+      }
+
+      // Text search query
+      if (search.trim()) {
+        const q = search.toLowerCase();
+        const actorMatch = log.actor?.toLowerCase().includes(q);
+        const actionMatch = log.action_type?.toLowerCase().includes(q);
+        const targetMatch = log.target_id?.toLowerCase().includes(q);
+        const detailsStr = JSON.stringify(log.details || {}).toLowerCase();
+        const detailsMatch = detailsStr.includes(q);
+        return actorMatch || actionMatch || targetMatch || detailsMatch;
+      }
+
+      return true;
+    });
+  }, [logs, categoryFilter, dateFilter, search]);
+
+  const actionBadge = (actionType: string) => {
+    let colorCls = "border-zinc-500/30 bg-zinc-500/10 text-zinc-300";
+    let label = actionType;
+
+    switch (actionType) {
+      case "driver_created":
+        colorCls = "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
+        label = "Driver Created";
+        break;
+      case "driver_edited":
+        colorCls = "border-blue-500/30 bg-blue-500/10 text-blue-300";
+        label = "Driver Edited";
+        break;
+      case "driver_deleted":
+        colorCls = "border-red-500/30 bg-red-500/10 text-red-300";
+        label = "Driver Deleted";
+        break;
+      case "rent_updated":
+        colorCls = "border-amber-500/30 bg-amber-500/10 text-amber-300";
+        label = "Rent Status Updated";
+        break;
+      case "charge_added":
+        colorCls = "border-purple-500/30 bg-purple-500/10 text-purple-300";
+        label = "Charge Added";
+        break;
+      case "invite_sent":
+        colorCls = "border-cyan-500/30 bg-cyan-500/10 text-cyan-300";
+        label = "Portal Invite Sent";
+        break;
+      case "vehicle_added":
+        colorCls = "border-teal-500/30 bg-teal-500/10 text-teal-300";
+        label = "Vehicle Added";
+        break;
+      case "vehicle_edited":
+        colorCls = "border-indigo-500/30 bg-indigo-500/10 text-indigo-300";
+        label = "Vehicle Edited";
+        break;
+      case "vehicle_deleted":
+        colorCls = "border-rose-500/30 bg-rose-500/10 text-rose-300";
+        label = "Vehicle Deleted";
+        break;
+    }
+
+    return (
+      <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${colorCls}`}>
+        {label}
+      </span>
+    );
+  };
+
+  const formatDetails = (details: Record<string, any> | null) => {
+    if (!details || Object.keys(details).length === 0) {
+      return <span className="text-zinc-500">—</span>;
+    }
+
+    const items: string[] = [];
+    if (details.driver_name) items.push(`Driver: ${details.driver_name}`);
+    if (details.reg) items.push(`Reg: ${details.reg.toUpperCase()}`);
+    if (details.amount !== undefined) items.push(`Amount: £${details.amount}`);
+    if (details.description) items.push(`Description: "${details.description}"`);
+    if (details.previous_status && details.new_status) {
+      items.push(`Rent: ${details.previous_status.toUpperCase()} ➔ ${details.new_status.toUpperCase()}`);
+    }
+    if (details.make || details.model) items.push(`Vehicle: ${details.make || ""} ${details.model || ""}`.trim());
+
+    if (items.length > 0) {
+      return <span className="text-xs font-medium text-[#c8d0dd]">{items.join(" · ")}</span>;
+    }
+
+    return <span className="font-mono text-[11px] text-[#8b95a8]">{JSON.stringify(details)}</span>;
+  };
+
+  return (
+    <div className="mx-auto max-w-6xl space-y-6 pb-12">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold tracking-tight text-white">System Audit Logs</h1>
+            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold text-emerald-400">
+              Append-Only
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-[#9aa5b8]">
+            Complete record of driver mutations, rent payment changes, charges, invites, and vehicle updates.
+          </p>
+        </div>
+
+        <button
+          onClick={loadLogs}
+          className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10"
+          style={{ borderColor: T.border, background: T.panel }}
+        >
+          <Icon.RotateCcw className="h-3.5 w-3.5" />
+          Refresh Logs
+        </button>
+      </div>
+
+      {/* FILTER BAR */}
+      <div
+        className="grid gap-3 rounded-2xl border p-4 sm:grid-cols-3"
+        style={{ borderColor: T.border, background: T.panel }}
+      >
+        <div>
+          <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8b95a8] mb-1">
+            Search Keyword / Driver / Reg
+          </label>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search logs by keyword..."
+            className="w-full rounded-xl border bg-black/40 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-[#ff6a00] focus:outline-none"
+            style={{ borderColor: T.borderSoft }}
+          />
+        </div>
+
+        <div>
+          <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8b95a8] mb-1">
+            Action Category
+          </label>
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="w-full rounded-xl border bg-black/40 px-3 py-2 text-xs text-white focus:border-[#ff6a00] focus:outline-none"
+            style={{ borderColor: T.borderSoft }}
+          >
+            <option value="all">All Actions</option>
+            <option value="driver">Driver Actions</option>
+            <option value="rent">Rent Updates</option>
+            <option value="charge">Charges Added</option>
+            <option value="invite">Portal Invites</option>
+            <option value="vehicle">Vehicle Actions</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8b95a8] mb-1">
+            Time Period
+          </label>
+          <select
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            className="w-full rounded-xl border bg-black/40 px-3 py-2 text-xs text-white focus:border-[#ff6a00] focus:outline-none"
+            style={{ borderColor: T.borderSoft }}
+          >
+            <option value="all">All Time</option>
+            <option value="today">Today</option>
+            <option value="7days">Last 7 Days</option>
+            <option value="30days">Last 30 Days</option>
+          </select>
+        </div>
+      </div>
+
+      {/* LOGS TABLE / LIST */}
+      <div
+        className="overflow-hidden rounded-2xl border"
+        style={{ borderColor: T.border, background: T.panel }}
+      >
+        {loading ? (
+          <div className="p-12 text-center text-xs text-[#9aa5b8]">Loading audit log records…</div>
+        ) : filteredLogs.length === 0 ? (
+          <div className="p-12 text-center text-xs text-[#9aa5b8]">
+            No audit log entries matching your search criteria.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="border-b bg-black/30 text-[10px] font-bold uppercase tracking-wider text-[#8b95a8]" style={{ borderColor: T.borderSoft }}>
+                <tr>
+                  <th className="px-4 py-3">Timestamp</th>
+                  <th className="px-4 py-3">Actor</th>
+                  <th className="px-4 py-3">Action</th>
+                  <th className="px-4 py-3">Details / Target</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y" style={{ borderColor: T.borderSoft }}>
+                {filteredLogs.map((log) => (
+                  <tr key={log.id} className="transition-colors hover:bg-white/[0.02]">
+                    <td className="whitespace-nowrap px-4 py-3 text-[#8b95a8]">
+                      {new Date(log.created_at).toLocaleString("en-GB", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                      })}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 font-medium text-white">
+                      {log.actor || "Fleet Admin"}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      {actionBadge(log.action_type)}
+                    </td>
+                    <td className="px-4 py-3">
+                      {formatDetails(log.details)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ServiceTypePicker({
   value,
   onChange,
@@ -754,7 +1379,9 @@ export type View =
   | "drivers"
   | "leads"
   | "accidents"
-  | "generations";
+  | "generations"
+  | "settings"
+  | "audit-logs";
 
 export const VIEW_PATH: Record<View, string> = {
   dashboard: "/",
@@ -767,6 +1394,8 @@ export const VIEW_PATH: Record<View, string> = {
   leads: "/whatsapp-leads",
   accidents: "/accident-cases",
   generations: "/generations",
+  settings: "/settings",
+  "audit-logs": "/audit-logs",
 };
 
 export const regSlug = (reg: string) => reg.replace(/\s+/g, "").toUpperCase();
@@ -1009,6 +1638,10 @@ export function FleetShell({ view }: { view: View }) {
             <AccidentCasesView toast={toast} />
           ) : view === "generations" ? (
             <GenerationsView vehicles={data.vehicles} drivers={data.drivers} toast={toast} />
+          ) : view === "settings" ? (
+            <UserSettingsView account={account} toast={toast} />
+          ) : view === "audit-logs" ? (
+            <AuditLogsView toast={toast} />
           ) : null}
         </main>
       </div>
@@ -1119,6 +1752,19 @@ function Sidebar({
 
   const email = account?.email ?? "";
   const initial = (email.trim()[0] ?? "V").toUpperCase();
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!accountMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (accountMenuRef.current && !accountMenuRef.current.contains(e.target as Node)) {
+        setAccountMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [accountMenuOpen]);
 
   const renderNavItem = (it: NavItem) => {
     const active = view === it.id;
@@ -1234,29 +1880,82 @@ function Sidebar({
             <span>Apex AI Assistant</span>
           </button>
 
-          <div
-            className="flex items-center gap-3 rounded-2xl border px-3 py-2.5"
-            style={{ borderColor: T.borderSoft, background: T.panel2 }}
-          >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#ff6a00] to-[#ff9d4d] text-sm font-bold text-white">
-              {initial}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-xs font-semibold text-[#e7eaf0]">
-                {email || "Signed in"}
+          <div className="relative" ref={accountMenuRef}>
+            {accountMenuOpen && (
+              <div
+                className="absolute bottom-full left-0 mb-2 w-full overflow-hidden rounded-2xl border bg-[#0d121f] p-1.5 shadow-2xl backdrop-blur-xl z-50"
+                style={{ borderColor: T.border }}
+              >
+                <div className="px-3 py-2 border-b border-white/10 mb-1">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-[#8b95a8]">Account Options</p>
+                  <p className="truncate text-xs font-semibold text-white">{email || "Fleet Admin"}</p>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setAccountMenuOpen(false);
+                    setView("settings");
+                  }}
+                  className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-zinc-200 transition hover:bg-white/10 hover:text-white"
+                >
+                  <Icon.Cog className="h-4 w-4 text-[#ff6a00]" />
+                  <span>User Settings</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setAccountMenuOpen(false);
+                    setView("audit-logs");
+                  }}
+                  className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-zinc-200 transition hover:bg-white/10 hover:text-white"
+                >
+                  <Icon.Shield className="h-4 w-4 text-emerald-400" />
+                  <span>Audit Logs</span>
+                </button>
+
+                <div className="my-1 border-t border-white/10" />
+
+                <button
+                  onClick={() => {
+                    setAccountMenuOpen(false);
+                    onSignOut();
+                  }}
+                  className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-red-400 transition hover:bg-red-500/10 hover:text-red-300"
+                >
+                  <Icon.SignOut className="h-4 w-4" />
+                  <span>Log out</span>
+                </button>
               </div>
-              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8b95a8]">
-                Fleet Admin
-              </div>
-            </div>
-            <button
-              onClick={onSignOut}
-              title="Sign out"
-              aria-label="Sign out"
-              className="shrink-0 rounded-full p-2 text-[#8b95a8] transition-colors hover:bg-white/10 hover:text-white"
+            )}
+
+            <div
+              onClick={() => setAccountMenuOpen(!accountMenuOpen)}
+              className="flex cursor-pointer items-center gap-3 rounded-2xl border px-3 py-2.5 transition hover:border-[#ff6a00]/50 hover:bg-white/[0.08]"
+              style={{ borderColor: accountMenuOpen ? T.orange : T.borderSoft, background: T.panel2 }}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setAccountMenuOpen(!accountMenuOpen);
+                }
+              }}
             >
-              <Icon.SignOut className="h-4 w-4" />
-            </button>
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#ff6a00] to-[#ff9d4d] text-sm font-bold text-white shadow-sm">
+                {initial}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-xs font-semibold text-[#e7eaf0]">
+                  {email || "Signed in"}
+                </div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8b95a8]">
+                  Fleet Admin
+                </div>
+              </div>
+              <div className="shrink-0 text-[#8b95a8]">
+                <Icon.ChevronUp className={`h-4 w-4 transition-transform ${accountMenuOpen ? "rotate-180 text-[#ff6a00]" : ""}`} />
+              </div>
+            </div>
           </div>
           <p className="mt-3 text-center text-[11px] text-[#8b95a8]">
             Powered by{" "}
@@ -1336,6 +2035,18 @@ function MobileBottomNav({
       label: "Add Vehicle",
       description: "Add new vehicle to fleet",
       Icon: Icon.Plus,
+    },
+    {
+      id: "settings",
+      label: "User Settings",
+      description: "Manage password & preferences",
+      Icon: Icon.Cog,
+    },
+    {
+      id: "audit-logs",
+      label: "Audit Logs",
+      description: "System mutation & activity history",
+      Icon: Icon.Shield,
     },
   ];
 

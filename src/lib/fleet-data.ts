@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { getNextMotDate, getPcoExpiryDate } from "@/lib/vehicle-date-fields";
 import { PDF_FLEET } from "@/lib/pdf-fleet";
+import { logAuditEvent } from "@/lib/audit-logger";
 
 export type Vehicle = {
   id: string;
@@ -416,9 +417,21 @@ export function useFleetData() {
       if (isNew) {
         const { error } = await supabase.from("vehicles").insert(payload);
         if (error) throw new Error(error.message);
+        await logAuditEvent({
+          actionType: "vehicle_added",
+          targetTable: "vehicles",
+          targetId: v.id ?? null,
+          details: { reg: v.registration, make: v.make, model: v.model, year: v.year, status: v.status },
+        });
       } else {
         const { error } = await supabase.from("vehicles").update(payload).eq("id", v.id);
         if (error) throw new Error(error.message);
+        await logAuditEvent({
+          actionType: "vehicle_edited",
+          targetTable: "vehicles",
+          targetId: v.id ?? null,
+          details: { reg: v.registration, make: v.make, model: v.model, status: v.status, current_mileage: v.current_mileage },
+        });
       }
       // sync driver_tracks current_mileage if updated
       await supabase
@@ -433,11 +446,18 @@ export function useFleetData() {
 
   const deleteVehicle = useCallback(
     async (id: string) => {
+      const target = vehicles.find((v) => v.id === id);
       setVehicles((prev) => prev.filter((v) => v.id !== id));
       await supabase.from("vehicles").delete().eq("id", id);
+      await logAuditEvent({
+        actionType: "vehicle_deleted",
+        targetTable: "vehicles",
+        targetId: id,
+        details: { reg: target?.registration ?? null, make: target?.make ?? null, model: target?.model ?? null },
+      });
       await refresh();
     },
-    [refresh],
+    [vehicles, refresh],
   );
 
   const addService = useCallback(
@@ -562,6 +582,20 @@ export function useFleetData() {
           .eq("id", d.vehicle_id);
         if (vehicleError) throw new Error(vehicleError.message);
       }
+      await logAuditEvent({
+        actionType: "driver_created",
+        targetTable: "driver_tracks",
+        targetId: null,
+        details: {
+          driver_name: d.driver_name,
+          reg: d.registration,
+          phone: d.phone,
+          email: d.email,
+          weekly_rent: d.weekly_rent,
+          rent_due_day: d.rent_due_day,
+          rent_status: d.rent_status,
+        },
+      });
       await refresh();
     },
     [refresh],
@@ -675,9 +709,28 @@ export function useFleetData() {
         ({ error } = await supabase.from("driver_tracks").update(legacyPayload).eq("id", d.id));
       }
       if (error) throw new Error(error.message);
+
+      const existing = drivers.find((item) => item.id === d.id);
+      await logAuditEvent({
+        actionType: "driver_edited",
+        targetTable: "driver_tracks",
+        targetId: d.id,
+        details: {
+          driver_name: d.driver_name,
+          reg: d.registration,
+          phone: d.phone,
+          email: d.email,
+          weekly_rent: d.weekly_rent,
+          rent_due_day: d.rent_due_day,
+          rent_status: d.rent_status,
+          balance_due: d.balance_due,
+          previous_name: existing?.driver_name,
+        },
+      });
+
       await refresh();
     },
-    [refresh],
+    [drivers, refresh],
   );
 
   const toggleRentStatus = useCallback(
@@ -707,9 +760,25 @@ export function useFleetData() {
         .eq("id", driverId);
 
       if (error) throw new Error(error.message);
+
+      const target = drivers.find((item) => item.id === driverId);
+      await logAuditEvent({
+        actionType: "rent_updated",
+        targetTable: "driver_tracks",
+        targetId: driverId,
+        details: {
+          driver_name: target?.driver_name ?? "Driver",
+          reg: target?.registration ?? null,
+          previous_status: currentStatus,
+          new_status: newStatus,
+          weekly_rent: weeklyRent,
+          new_balance_due: newBalance,
+        },
+      });
+
       await refresh();
     },
-    [refresh],
+    [drivers, refresh],
   );
 
   const addDriverCharge = useCallback(
@@ -764,9 +833,23 @@ export function useFleetData() {
 
       if (trackErr) throw new Error(trackErr.message);
 
+      const target = drivers.find((item) => item.id === driverId);
+      await logAuditEvent({
+        actionType: "charge_added",
+        targetTable: "driver_charges",
+        targetId: driverId,
+        details: {
+          driver_id: driverId,
+          driver_name: target?.driver_name ?? "Driver",
+          reg: target?.registration ?? null,
+          amount,
+          description,
+        },
+      });
+
       await refresh();
     },
-    [refresh],
+    [drivers, refresh],
   );
 
   const sendDriverReminder = useCallback(
@@ -842,14 +925,29 @@ export function useFleetData() {
         .eq("id", driverId);
 
       if (error) throw new Error(error.message);
+
+      const target = drivers.find((item) => item.id === driverId);
+      await logAuditEvent({
+        actionType: "invite_sent",
+        targetTable: "driver_tracks",
+        targetId: driverId,
+        details: {
+          driver_id: driverId,
+          driver_name: target?.driver_name ?? "Driver",
+          reg: target?.registration ?? null,
+          invite_status: "pending",
+        },
+      });
+
       await refresh();
       return newToken;
     },
-    [refresh],
+    [drivers, refresh],
   );
 
   const deleteDriver = useCallback(
     async (id: string) => {
+      const target = drivers.find((item) => item.id === id);
       setDrivers((prev) => prev.filter((d) => d.id !== id));
       const { data: track } = await supabase
         .from("driver_tracks")
@@ -867,9 +965,20 @@ export function useFleetData() {
           .eq("id", track.vehicle_id)
           .eq("status", "rented");
       }
+
+      await logAuditEvent({
+        actionType: "driver_deleted",
+        targetTable: "driver_tracks",
+        targetId: id,
+        details: {
+          driver_name: target?.driver_name ?? null,
+          reg: target?.registration ?? null,
+        },
+      });
+
       await refresh();
     },
-    [refresh],
+    [drivers, refresh],
   );
 
   const removeDriver = deleteDriver;
