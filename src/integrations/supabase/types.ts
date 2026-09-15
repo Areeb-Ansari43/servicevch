@@ -8,6 +8,35 @@ export type Database = {
   };
   public: {
     Tables: {
+      audit_logs: {
+        Row: {
+          id: string;
+          actor: string;
+          action_type: string;
+          target_table: string;
+          target_id: string | null;
+          details: Json | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          actor?: string;
+          action_type: string;
+          target_table: string;
+          target_id?: string | null;
+          details?: Json | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          actor?: string;
+          action_type?: string;
+          target_table?: string;
+          target_id?: string | null;
+          details?: Json | null;
+          created_at?: string;
+        };
+      };
       webhook_events: {
         Row: {
           id: string;
