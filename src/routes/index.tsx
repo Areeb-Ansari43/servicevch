@@ -4138,11 +4138,36 @@ function EditDriverModal({
 
   const selectedVehicle = vehicles.find((v) => v.id === vehicleId);
 
+  const [nextMotDate, setNextMotDate] = useState(selectedVehicle?.next_mot_date || "");
+  const [insuranceExpiry, setInsuranceExpiry] = useState(selectedVehicle?.insurance_expiry || "");
+
+  useEffect(() => {
+    const v = vehicles.find((item) => item.id === vehicleId);
+    if (v) {
+      setNextMotDate(v.next_mot_date || "");
+      setInsuranceExpiry(v.insurance_expiry || "");
+    }
+  }, [vehicleId, vehicles]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
     setSaving(true);
     try {
+      if (
+        selectedVehicle &&
+        (nextMotDate !== selectedVehicle.next_mot_date || insuranceExpiry !== selectedVehicle.insurance_expiry)
+      ) {
+        await data.saveVehicle(
+          {
+            ...selectedVehicle,
+            next_mot_date: nextMotDate,
+            insurance_expiry: insuranceExpiry,
+          },
+          false,
+        );
+      }
+
       await onSave({
         ...driver,
         driver_name: name.trim(),
@@ -4310,6 +4335,27 @@ function EditDriverModal({
               />
             </Field>
           </Grid2>
+
+          {selectedVehicle ? (
+            <Grid2>
+              <Field label="Linked Vehicle Next MOT">
+                <input
+                  type="date"
+                  value={nextMotDate}
+                  onChange={(e) => setNextMotDate(e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="Linked Vehicle PCO License Expiry">
+                <input
+                  type="date"
+                  value={insuranceExpiry}
+                  onChange={(e) => setInsuranceExpiry(e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+            </Grid2>
+          ) : null}
 
           {/* Rent & Financial Tracking */}
           <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: T.borderSoft, background: T.panel }}>

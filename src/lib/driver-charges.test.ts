@@ -79,4 +79,85 @@ describe("Driver Charges & Data State Consistency", () => {
     expect(updatedDriver.charges[0].driver_id).toBe("driver-1");
     expect(updatedDriver.charges[0].description).toBe("PCN Fine Pass-through");
   });
+
+  it("maps charges consistently matching driver track id or auth user id", () => {
+    const driverTrack: DriverTrack = {
+      id: "track-uuid-1",
+      driver_name: "Jane Smith",
+      email: "jane@example.com",
+      phone: "07987654321",
+      vehicle_id: "veh-1",
+      registration: "LC71 XYZ",
+      start_mileage: 5000,
+      current_mileage: 6000,
+      allowance: 4000,
+      excess_rate: 15,
+      start_date: "2026-01-01",
+      auth_user_id: "auth-uuid-99",
+      weekly_rent: 200,
+      rent_due_day: "Monday",
+      rent_status: "paid",
+      balance_due: 0,
+      charges: [],
+      monthly_logs: [],
+    };
+
+    const charges = [
+      { id: "c1", driver_id: "track-uuid-1", amount: 25, description: "Toll", created_at: "2026-03-01" },
+      { id: "c2", user_id: "auth-uuid-99", amount: 40, description: "Clean Air Zone", created_at: "2026-03-02" },
+    ];
+
+    const chargesByDriver = new Map<string, DriverCharge[]>();
+    for (const c of charges) {
+      const targetId = c.driver_id ?? c.user_id;
+      const parsed: DriverCharge = {
+        id: c.id,
+        driver_id: targetId,
+        amount: c.amount,
+        description: c.description,
+        created_at: c.created_at,
+      };
+      const arr = chargesByDriver.get(targetId) ?? [];
+      arr.push(parsed);
+      chargesByDriver.set(targetId, arr);
+    }
+
+    const matchedCharges = [
+      ...(chargesByDriver.get(driverTrack.id) ?? []),
+      ...(driverTrack.auth_user_id && driverTrack.auth_user_id !== driverTrack.id
+        ? chargesByDriver.get(driverTrack.auth_user_id) ?? []
+        : []),
+    ];
+
+    expect(matchedCharges.length).toBe(2);
+    expect(matchedCharges.map((x) => x.description)).toEqual(["Toll", "Clean Air Zone"]);
+  });
+
+  it("updates vehicle next_mot_date optimistically in vehicle state", () => {
+    const vehicles = [
+      {
+        id: "v1",
+        registration: "AB12 CDE",
+        make: "Toyota",
+        model: "Prius",
+        year: 2022,
+        fuel_type: "Hybrid" as const,
+        current_mileage: 15000,
+        status: "Rented" as const,
+        next_service_date: "2026-09-01",
+        next_mot_date: "2026-05-01",
+        insurance_expiry: "2026-10-01",
+        notes: "",
+      },
+    ];
+
+    const updatedVehicle = {
+      ...vehicles[0],
+      next_mot_date: "2027-05-01",
+    };
+
+    const newVehicles = vehicles.map((item) => (item.id === updatedVehicle.id ? updatedVehicle : item));
+
+    expect(newVehicles[0].next_mot_date).toBe("2027-05-01");
+  });
 });

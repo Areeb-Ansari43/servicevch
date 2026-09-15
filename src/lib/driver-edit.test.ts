@@ -57,6 +57,51 @@ describe("Driver File Editing & Payload Persistence", () => {
     expect(updatePayload.reg).toBe("AB12CDE");
   });
 
+  it("updates driver name instantly in optimistic drivers array state", () => {
+    const driversList: DriverTrack[] = [
+      {
+        id: "driver-123",
+        driver_name: "Original Name",
+        email: "john@example.com",
+        phone: "+447700900123",
+        vehicle_id: "veh-456",
+        registration: "AB12CDE",
+        start_mileage: 10000,
+        current_mileage: 12000,
+        allowance: 5000,
+        excess_rate: 20,
+        start_date: "2025-01-01",
+        weekly_rent: 200,
+        rent_due_day: "Monday",
+        rent_status: "unpaid",
+        balance_due: 200,
+        charges: [],
+        monthly_logs: [],
+      },
+    ];
+
+    const updated = {
+      ...driversList[0],
+      driver_name: "New Edited Name",
+    };
+
+    const newDrivers = driversList.map((item) => (item.id === updated.id ? updated : item));
+
+    expect(newDrivers[0].driver_name).toBe("New Edited Name");
+  });
+
+  it("includes drivers with active: true or active: null when filtering active drivers", () => {
+    const rows = [
+      { id: "1", driver_name: "Driver 1", active: true },
+      { id: "2", driver_name: "Driver 2", active: null },
+      { id: "3", driver_name: "Driver 3", active: false },
+    ];
+
+    const activeDrivers = rows.filter((r) => r.active !== false);
+    expect(activeDrivers.length).toBe(2);
+    expect(activeDrivers.map((d) => d.id)).toEqual(["1", "2"]);
+  });
+
   it("calculates updated balance correctly when adding an extra charge", () => {
     const currentBalance = 150;
     const chargeAmount = 75.5;
