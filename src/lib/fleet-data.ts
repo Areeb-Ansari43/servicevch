@@ -291,7 +291,7 @@ export function useFleetData() {
       supabase
         .from("driver_tracks")
         .select("*")
-        .eq("active", true)
+        .neq("active", false)
         .order("created_at", { ascending: false }),
       supabase.from("mileage_logs").select("*").order("period_end", { ascending: false }),
       supabase.from("driver_charges").select("*").order("created_at", { ascending: false }),
@@ -313,9 +313,27 @@ export function useFleetData() {
       const arr = chargesByDriver.get(targetDriverId) ?? [];
       arr.push(cFromRow(c));
       chargesByDriver.set(targetDriverId, arr);
+      if (c.driver_id && c.user_id && c.driver_id !== c.user_id) {
+        const arr2 = chargesByDriver.get(c.user_id) ?? [];
+        arr2.push(cFromRow(c));
+        chargesByDriver.set(c.user_id, arr2);
+      }
     }
 
-    setDrivers((dRes.data ?? []).map((r) => dFromRow(r, logsByTrack.get(r.id) ?? [], chargesByDriver.get(r.id) ?? [])));
+    setDrivers(
+      (dRes.data ?? []).map((r) => {
+        const matchedCharges = [
+          ...(chargesByDriver.get(r.id) ?? []),
+          ...(r.auth_user_id && r.auth_user_id !== r.id ? chargesByDriver.get(r.auth_user_id) ?? [] : []),
+        ];
+        const uniqueChargesMap = new Map<string, DriverCharge>();
+        for (const ch of matchedCharges) {
+          uniqueChargesMap.set(ch.id, ch);
+        }
+        const chargesList = Array.from(uniqueChargesMap.values());
+        return dFromRow(r, logsByTrack.get(r.id) ?? [], chargesList);
+      }),
+    );
     setLoading(false);
   }, []);
 
@@ -362,6 +380,22 @@ export function useFleetData() {
 
   const saveVehicle = useCallback(
     async (v: Vehicle, isNew: boolean) => {
+      setVehicles((prev) => {
+        if (isNew) {
+          return [v, ...prev];
+        }
+        return prev.map((item) => (item.id === v.id ? v : item));
+      });
+      if (!isNew && v.current_mileage > 0) {
+        setDrivers((prev) =>
+          prev.map((d) =>
+            d.vehicle_id === v.id && d.current_mileage < v.current_mileage
+              ? { ...d, current_mileage: v.current_mileage }
+              : d,
+          ),
+        );
+      }
+
       const { data: userData } = await supabase.auth.getUser();
       const userId = userData.user?.id;
       if (!userId) throw new Error("Not signed in");
@@ -413,6 +447,7 @@ export function useFleetData() {
   const deleteVehicle = useCallback(
     async (id: string) => {
       const target = vehicles.find((v) => v.id === id);
+      setVehicles((prev) => prev.filter((v) => v.id !== id));
       await supabase.from("vehicles").delete().eq("id", id);
       await logAuditEvent({
         actionType: "vehicle_deleted",
@@ -427,6 +462,35 @@ export function useFleetData() {
 
   const addService = useCallback(
     async (s: Omit<ServiceRecord, "id">) => {
+      const newServiceRecord: ServiceRecord = {
+        id: crypto.randomUUID(),
+        vehicle_id: s.vehicle_id || "",
+        registration: s.registration,
+        service_type: s.service_type,
+        service_date: s.service_date,
+        mileage: s.mileage,
+        cost: s.cost,
+        garage: s.garage,
+        description: s.description,
+      };
+      setServices((prev) => [newServiceRecord, ...prev]);
+      if (s.vehicle_id && s.mileage > 0) {
+        setVehicles((prev) =>
+          prev.map((v) =>
+            v.id === s.vehicle_id && v.current_mileage < s.mileage
+              ? { ...v, current_mileage: s.mileage }
+              : v,
+          ),
+        );
+        setDrivers((prev) =>
+          prev.map((d) =>
+            d.vehicle_id === s.vehicle_id && d.current_mileage < s.mileage
+              ? { ...d, current_mileage: s.mileage }
+              : d,
+          ),
+        );
+      }
+
       const { data: userData } = await supabase.auth.getUser();
       const userId = userData.user?.id;
       if (!userId) throw new Error("Not signed in");
@@ -463,6 +527,7 @@ export function useFleetData() {
 
   const deleteService = useCallback(
     async (id: string) => {
+      setServices((prev) => prev.filter((s) => s.id !== id));
       await supabase.from("service_records").delete().eq("id", id);
       await refresh();
     },
@@ -471,6 +536,19 @@ export function useFleetData() {
 
   const addDriver = useCallback(
     async (d: Omit<DriverTrack, "id" | "monthly_logs">) => {
+      const newDriver: DriverTrack = {
+        ...d,
+        id: crypto.randomUUID(),
+        charges: d.charges || [],
+        monthly_logs: [],
+      };
+      setDrivers((prev) => [newDriver, ...prev]);
+      if (d.vehicle_id) {
+        setVehicles((prev) =>
+          prev.map((v) => (v.id === d.vehicle_id ? { ...v, status: "Rented" } : v)),
+        );
+      }
+
       const { data: userData } = await supabase.auth.getUser();
       const userId = userData.user?.id;
       if (!userId) throw new Error("Not signed in");
@@ -525,6 +603,16 @@ export function useFleetData() {
 
   const updateDriverMileage = useCallback(
     async (d: DriverTrack, newMi: number) => {
+      setDrivers((prev) =>
+        prev.map((item) => (item.id === d.id ? { ...item, current_mileage: newMi } : item)),
+      );
+      if (d.vehicle_id) {
+        setVehicles((prev) =>
+          prev.map((v) =>
+            v.id === d.vehicle_id && v.current_mileage < newMi ? { ...v, current_mileage: newMi } : v,
+          ),
+        );
+      }
       await supabase.from("driver_tracks").update({ current_mileage: newMi }).eq("id", d.id);
       if (d.vehicle_id) {
         await supabase
@@ -706,26 +794,20 @@ export function useFleetData() {
         created_at: new Date().toISOString(),
       };
 
+      let newBal = amount;
       setDrivers((prev) =>
-        prev.map((item) =>
-          item.id === driverId
-            ? {
-                ...item,
-                balance_due: Number(item.balance_due || 0) + amount,
-                charges: [newCharge, ...(item.charges || [])],
-              }
-            : item,
-        ),
+        prev.map((item) => {
+          if (item.id === driverId) {
+            newBal = Number(item.balance_due || 0) + amount;
+            return {
+              ...item,
+              balance_due: newBal,
+              charges: [newCharge, ...(item.charges || [])],
+            };
+          }
+          return item;
+        }),
       );
-
-      const { data: driverTrack } = await supabase
-        .from("driver_tracks")
-        .select("balance_due")
-        .eq("id", driverId)
-        .single();
-
-      const currentBal = Number(driverTrack?.balance_due ?? 0);
-      const newBal = currentBal + amount;
 
       let { error: chargeErr } = await supabase.from("driver_charges").insert({
         driver_id: driverId,
