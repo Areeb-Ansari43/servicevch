@@ -5061,6 +5061,15 @@ function EditDriverModal({
               <Icon.Shield className="h-3.5 w-3.5" />
               {sendingReminder === "pco" ? "Sending..." : "PCO Reminder"}
             </button>
+            <button
+              type="button"
+              disabled={sendingReminder !== null}
+              onClick={() => handleSendReminder("contract")}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-orange-500/40 bg-orange-500/15 px-3 py-1.5 text-xs font-semibold text-orange-300 hover:bg-orange-500/25 disabled:opacity-50"
+            >
+              <Icon.Calendar className="h-3.5 w-3.5" />
+              {sendingReminder === "contract" ? "Sending..." : "Contract Renewal Reminder"}
+            </button>
           </div>
           <p className="text-[11px] text-[#8b95a8]">
             Sends a direct notification to the driver's portal dashboard and an email copy if an email address is connected.
@@ -5140,6 +5149,183 @@ function EditDriverModal({
               </Field>
             </Grid2>
           ) : null}
+
+          {/* Contract Term & Renewal Tracking */}
+          <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: T.borderSoft, background: T.panel }}>
+            <div className="font-bold text-white text-xs">Contract Term & Renewal</div>
+            <Grid2>
+              <Field label="Contract Start Date">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="Contract Length (Weeks)">
+                <input
+                  type="number"
+                  min="1"
+                  value={contractWeeks}
+                  onChange={(e) => setContractWeeks(e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+            </Grid2>
+            <Grid2>
+              <Field label="Calculated Contract End Date">
+                <div className="rounded-lg border px-3 py-2 text-xs font-semibold text-white bg-white/5 border-white/10">
+                  {calculateContractEndDate(startDate, parseInt(contractWeeks) || 6).toLocaleDateString("en-GB", {
+                    weekday: "long",
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </div>
+              </Field>
+              <Field label="Contract Status / Time Remaining">
+                {(() => {
+                  const remDays = getContractDaysRemaining(startDate, parseInt(contractWeeks) || 6);
+                  return (
+                    <div
+                      className={`rounded-lg border px-3 py-2 text-xs font-semibold ${
+                        remDays <= 14
+                          ? "text-amber-300 bg-amber-500/10 border-amber-500/20"
+                          : "text-emerald-300 bg-emerald-500/10 border-emerald-500/20"
+                      }`}
+                    >
+                      {remDays < 0
+                        ? `${Math.abs(remDays)} days past contract end`
+                        : `${remDays} days remaining (${Math.ceil(remDays / 7)} weeks)`}
+                    </div>
+                  );
+                })()}
+              </Field>
+            </Grid2>
+          </div>
+
+          {/* Deposit Tracking & Instalments */}
+          <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: T.borderSoft, background: T.panel }}>
+            <div className="flex items-center justify-between">
+              <div className="font-bold text-white text-xs">Deposit Tracking (Instalments)</div>
+              {(() => {
+                const totalPaid = (driver.deposit_payments || []).reduce(
+                  (sum, p) => sum + Number(p.amount || 0),
+                  0,
+                );
+                const agreed = parseFloat(depositTotal) || 0;
+                let badgeCls = "border-red-500/40 bg-red-500/15 text-red-300";
+                let label = "Unpaid";
+                if (agreed > 0 && totalPaid >= agreed) {
+                  badgeCls = "border-emerald-500/40 bg-emerald-500/15 text-emerald-300";
+                  label = "Paid in full";
+                } else if (totalPaid > 0) {
+                  badgeCls = "border-amber-500/40 bg-amber-500/15 text-amber-300";
+                  label = `£${totalPaid} of £${agreed} paid`;
+                } else if (agreed === 0) {
+                  badgeCls = "border-slate-500/40 bg-slate-500/15 text-slate-300";
+                  label = "None set";
+                }
+                return (
+                  <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold border ${badgeCls}`}>
+                    {label}
+                  </span>
+                );
+              })()}
+            </div>
+
+            <Grid2>
+              <Field label="Total Agreed Deposit (£)">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={depositTotal}
+                  onChange={(e) => setDepositTotal(e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="Outstanding Deposit Balance (£)">
+                {(() => {
+                  const paid = (driver.deposit_payments || []).reduce(
+                    (s, p) => s + Number(p.amount || 0),
+                    0,
+                  );
+                  const agreed = parseFloat(depositTotal) || 0;
+                  const outstanding = Math.max(0, agreed - paid);
+                  return (
+                    <div className="rounded-lg border px-3 py-2 text-xs font-bold text-white bg-white/5 border-white/10">
+                      £{outstanding.toFixed(2)}
+                    </div>
+                  );
+                })()}
+              </Field>
+            </Grid2>
+
+            {/* Deposit Payments Received List */}
+            <div className="border-t pt-3 space-y-2.5" style={{ borderColor: T.borderSoft }}>
+              <div className="font-semibold text-white text-xs">Deposit Payments Received</div>
+              {driver.deposit_payments && driver.deposit_payments.length > 0 ? (
+                <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                  {driver.deposit_payments.map((dp) => (
+                    <div
+                      key={dp.id}
+                      className="flex justify-between items-center rounded-lg border p-2 text-xs"
+                      style={{ borderColor: T.borderSoft, background: T.panel2 }}
+                    >
+                      <div>
+                        <div className="font-medium text-white">{dp.note || "Deposit Payment"}</div>
+                        <div className="text-[10px] text-[#8b95a8]">
+                          {new Date(dp.paid_at).toLocaleDateString("en-GB")}
+                        </div>
+                      </div>
+                      <div className="font-bold text-emerald-400">+£{Number(dp.amount).toFixed(2)}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-[11px] text-[#8b95a8] italic">No deposit payments recorded yet.</div>
+              )}
+
+              {/* Record Deposit Instalment Form */}
+              <div className="rounded-lg border p-2.5 space-y-2" style={{ borderColor: T.border, background: T.panel2 }}>
+                <div className="text-[11px] font-bold text-[#ff8a3d]">Record Deposit Payment / Instalment</div>
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={depAmount}
+                    onChange={(e) => setDepAmount(e.target.value)}
+                    placeholder="Amount (£)"
+                    className="w-28 rounded-lg border py-1.5 px-2 text-xs text-white"
+                    style={{ borderColor: T.border, background: T.panel }}
+                  />
+                  <input
+                    type="date"
+                    value={depDate}
+                    onChange={(e) => setDepDate(e.target.value)}
+                    className="w-36 rounded-lg border py-1.5 px-2 text-xs text-white"
+                    style={{ borderColor: T.border, background: T.panel }}
+                  />
+                  <input
+                    type="text"
+                    value={depNote}
+                    onChange={(e) => setDepNote(e.target.value)}
+                    placeholder="Optional note (e.g. 2nd instalment)"
+                    className="flex-1 min-w-[150px] rounded-lg border py-1.5 px-2 text-xs text-white"
+                    style={{ borderColor: T.border, background: T.panel }}
+                  />
+                  <button
+                    type="button"
+                    disabled={addingDeposit || !depAmount}
+                    onClick={handleAddDeposit}
+                    className="rounded-lg bg-[#ff6a00] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#e05d00] disabled:opacity-50 shrink-0"
+                  >
+                    {addingDeposit ? "Saving..." : "Record Payment"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
 
           {/* Rent & Financial Tracking */}
           <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: T.borderSoft, background: T.panel }}>
