@@ -709,6 +709,79 @@ function DarkSelect({
   );
 }
 
+/* ---------------- Driver Search ---------------- */
+function DriverSearch({
+  drivers,
+  onPick,
+  value,
+  onTextChange,
+}: {
+  drivers: DriverTrack[];
+  onPick: (d: DriverTrack) => void;
+  value: string;
+  onTextChange: (s: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const matches = useMemo(() => {
+    const q = value.trim().toLowerCase();
+    if (!q) return drivers.slice(0, 8);
+    return drivers
+      .filter(
+        (d) =>
+          d.driver_name.toLowerCase().includes(q) ||
+          d.registration.toLowerCase().includes(q) ||
+          (d.phone && d.phone.toLowerCase().includes(q)),
+      )
+      .slice(0, 8);
+  }, [value, drivers]);
+
+  return (
+    <div className="relative">
+      <input
+        value={value}
+        onChange={(e) => {
+          onTextChange(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder="Select existing driver or type name..."
+        className={inputCls}
+      />
+      {open && matches.length > 0 && (
+        <div
+          className="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border shadow-xl"
+          style={{ borderColor: T.border, background: T.panel }}
+        >
+          {matches.map((d) => (
+            <button
+              type="button"
+              key={d.id}
+              onClick={() => {
+                onPick(d);
+                setOpen(false);
+              }}
+              className="flex w-full items-center justify-between border-b px-3 py-2 text-left hover:bg-[#ff6a00]/10"
+              style={{ borderColor: T.borderSoft }}
+            >
+              <div className="flex-1 truncate">
+                <div className="text-sm font-semibold">{d.driver_name}</div>
+                <div className="text-xs text-[#8b95a8]">
+                  {d.registration || "No Reg"} {d.phone ? `· ${d.phone}` : ""}
+                </div>
+              </div>
+              <div className="text-right text-xs">
+                <div className="font-semibold text-white">{(d.current_mileage || 0).toLocaleString()} mi</div>
+                <div className="text-[#8b95a8]">Allowance: {(d.allowance || 0).toLocaleString()} mi</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function UserSettingsView({
   account,
   toast,
@@ -5575,6 +5648,8 @@ function MileageView({
   data: ReturnType<typeof useFleetData>;
   toast: (m: string, t?: Toast["type"]) => void;
 }) {
+  const [selectedDriver, setSelectedDriver] = useState<DriverTrack | null>(null);
+  const [driverSearchText, setDriverSearchText] = useState("");
   const [regText, setRegText] = useState("");
   const [selected, setSelected] = useState<Vehicle | null>(null);
   const [driverName, setDriverName] = useState("");
@@ -5587,10 +5662,30 @@ function MileageView({
   const [eomTarget, setEomTarget] = useState<DriverTrack | null>(null);
   const [logsTarget, setLogsTarget] = useState<DriverTrack | null>(null);
 
+  const handlePickDriver = (d: DriverTrack) => {
+    setSelectedDriver(d);
+    setDriverSearchText(d.driver_name);
+    setDriverName(d.driver_name);
+    setRegText(d.registration);
+    setStartMileage(String(d.current_mileage || d.start_mileage || "0"));
+    setAllowance(String(d.allowance || "5000"));
+    setExcessRate(String(d.excess_rate || "20"));
+    setStartDate(d.start_date || new Date().toISOString().slice(0, 10));
+
+    const matchedVeh = vehicles.find(
+      (v) =>
+        v.id === d.vehicle_id ||
+        v.registration.toUpperCase() === (d.registration || "").toUpperCase(),
+    );
+    if (matchedVeh) {
+      setSelected(matchedVeh);
+    }
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selected) {
-      toast("Pick a vehicle by registration.", "error");
+    if (!selected && !selectedDriver?.vehicle_id) {
+      toast("Pick a vehicle by registration or select an existing driver.", "error");
       return;
     }
     if (!driverName.trim()) {
@@ -5598,22 +5693,46 @@ function MileageView({
       return;
     }
     try {
-      const autoRent = getVehicleWeeklyPrice(selected.make, selected.model);
-      await data.addDriver({
-        driver_name: driverName.trim(),
-        vehicle_id: selected.id,
-        registration: selected.registration,
-        start_mileage: parseInt(startMileage) || 0,
-        current_mileage: parseInt(startMileage) || 0,
-        allowance: parseInt(allowance) || 5000,
-        excess_rate: parseInt(excessRate) || 20,
-        start_date: startDate,
-        weekly_rent: autoRent,
-        rent_due_day: "Monday",
-        rent_status: "unpaid",
-        balance_due: autoRent,
-      });
-      toast(`Tracking started for ${driverName}`);
+      const targetVeh = selected || vehicles.find((v) => v.id === selectedDriver?.vehicle_id);
+      const autoRent = targetVeh ? getVehicleWeeklyPrice(targetVeh.make, targetVeh.model) : 200;
+
+      if (selectedDriver) {
+        // Update existing driver tracking details
+        const updatedMi = parseInt(startMileage) || selectedDriver.current_mileage || 0;
+        await data.editDriver({
+          ...selectedDriver,
+          driver_name: driverName.trim(),
+          registration: selected?.registration || selectedDriver.registration,
+          vehicle_id: selected?.id || selectedDriver.vehicle_id,
+          allowance: parseInt(allowance) || 5000,
+          excess_rate: parseInt(excessRate) || 20,
+          start_date: startDate,
+        });
+        if (updatedMi !== selectedDriver.current_mileage) {
+          await data.updateDriverMileage(selectedDriver, updatedMi);
+        }
+        toast(`Mileage and tracking updated for ${driverName}`);
+      } else {
+        // Start tracking a new driver
+        await data.addDriver({
+          driver_name: driverName.trim(),
+          vehicle_id: selected?.id || "",
+          registration: selected?.registration || regText.trim().toUpperCase(),
+          start_mileage: parseInt(startMileage) || 0,
+          current_mileage: parseInt(startMileage) || 0,
+          allowance: parseInt(allowance) || 5000,
+          excess_rate: parseInt(excessRate) || 20,
+          start_date: startDate,
+          weekly_rent: autoRent,
+          rent_due_day: "Monday",
+          rent_status: "unpaid",
+          balance_due: autoRent,
+        });
+        toast(`Tracking started for ${driverName}`);
+      }
+
+      setSelectedDriver(null);
+      setDriverSearchText("");
       setDriverName("");
       setRegText("");
       setSelected(null);
@@ -5630,10 +5749,46 @@ function MileageView({
         className="space-y-4 rounded-xl border p-6"
         style={{ borderColor: T.border, background: T.panel }}
       >
-        <h3 className="text-base font-semibold">Start Tracking a Driver</h3>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <h3 className="text-base font-semibold">
+            {selectedDriver ? `Update Mileage / Tracking for ${selectedDriver.driver_name}` : "Start Tracking / Update Driver Mileage"}
+          </h3>
+          {selectedDriver && (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedDriver(null);
+                setDriverSearchText("");
+                setDriverName("");
+                setRegText("");
+                setSelected(null);
+                setStartMileage("");
+              }}
+              className="text-xs text-[#8b95a8] hover:text-white underline"
+            >
+              Clear selected driver
+            </button>
+          )}
+        </div>
+
+        <div>
+          <Label>Select Existing Driver (Auto-Fills Details)</Label>
+          <DriverSearch
+            drivers={drivers}
+            value={driverSearchText}
+            onTextChange={(s) => {
+              setDriverSearchText(s);
+              if (selectedDriver && s !== selectedDriver.driver_name) {
+                setSelectedDriver(null);
+              }
+            }}
+            onPick={handlePickDriver}
+          />
+        </div>
+
         <Grid2>
           <div>
-            <Label>Registration *</Label>
+            <Label>Vehicle Registration *</Label>
             <RegSearch
               vehicles={vehicles}
               value={regText}
@@ -5644,14 +5799,17 @@ function MileageView({
               onPick={(v) => {
                 setSelected(v);
                 setRegText(v.registration);
-                setStartMileage(String(v.current_mileage || ""));
+                if (!selectedDriver) {
+                  setStartMileage(String(v.current_mileage || ""));
+                }
               }}
             />
           </div>
-          <Field label="Driver Name">
+          <Field label="Driver Name *">
             <input
               value={driverName}
               onChange={(e) => setDriverName(e.target.value)}
+              placeholder="e.g. John Doe"
               className={inputCls}
             />
           </Field>
