@@ -52,8 +52,14 @@ export class RouteErrorBoundary extends Component<Props, State> {
             </h2>
             <p className="mt-2 text-xs text-[#aeb8c9]">
               {this.props.fallbackMessage ??
-                (this.state.error?.message || "An unexpected error occurred during rendering.")}
+                "An unexpected error occurred during rendering."}
             </p>
+            {this.state.error?.message && (
+              <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-2.5 text-left text-[11px] font-mono text-red-300 break-words max-h-36 overflow-y-auto">
+                <span className="font-bold block text-red-400 mb-0.5">Error details:</span>
+                {this.state.error.message}
+              </div>
+            )}
             <div className="mt-5 flex flex-wrap justify-center gap-3">
               <button
                 onClick={() => {
