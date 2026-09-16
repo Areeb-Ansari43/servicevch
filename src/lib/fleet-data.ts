@@ -836,13 +836,44 @@ export function useFleetData() {
 
   const closeMonth = useCallback(
     async (d: DriverTrack, endMi: number) => {
-      const { data: userData } = await supabase.auth.getUser();
-      const userId = userData.user?.id;
-      if (!userId) throw new Error("Not signed in");
-
+      const today = new Date().toISOString().slice(0, 10);
       const driven = Math.max(0, endMi - d.start_mileage);
       const over = Math.max(0, driven - d.allowance);
       const charge = (over * d.excess_rate) / 100;
+
+      const newLog: MonthlyLog = {
+        month: new Date(today).toLocaleDateString("en-GB", { month: "long", year: "numeric" }),
+        start_mileage: d.start_mileage,
+        end_mileage: endMi,
+        miles_driven: driven,
+        overage: over,
+        excess_charge: charge,
+        date: today,
+      };
+
+      setDrivers((prev) =>
+        prev.map((item) =>
+          item.id === d.id
+            ? {
+                ...item,
+                start_mileage: endMi,
+                current_mileage: endMi,
+                start_date: today,
+                monthly_logs: [newLog, ...(item.monthly_logs || [])],
+              }
+            : item,
+        ),
+      );
+
+      if (d.vehicle_id) {
+        setVehicles((prev) =>
+          prev.map((v) => (v.id === d.vehicle_id ? { ...v, current_mileage: endMi } : v)),
+        );
+      }
+
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id;
+      if (!userId) throw new Error("Not signed in");
 
       await supabase.from("mileage_logs").insert({
         user_id: userId,
@@ -850,7 +881,7 @@ export function useFleetData() {
         reg: d.registration,
         driver_name: d.driver_name,
         period_start: d.start_date,
-        period_end: new Date().toISOString().slice(0, 10),
+        period_end: today,
         start_mileage: d.start_mileage,
         end_mileage: endMi,
         allowance: d.allowance,
@@ -862,7 +893,7 @@ export function useFleetData() {
         .update({
           start_mileage: endMi,
           current_mileage: endMi,
-          start_date: new Date().toISOString().slice(0, 10),
+          start_date: today,
         })
         .eq("id", d.id);
       if (d.vehicle_id) {

@@ -710,6 +710,79 @@ function DarkSelect({
   );
 }
 
+/* ---------------- Driver Search ---------------- */
+function DriverSearch({
+  drivers,
+  onPick,
+  value,
+  onTextChange,
+}: {
+  drivers: DriverTrack[];
+  onPick: (d: DriverTrack) => void;
+  value: string;
+  onTextChange: (s: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const matches = useMemo(() => {
+    const q = value.trim().toLowerCase();
+    if (!q) return drivers.slice(0, 8);
+    return drivers
+      .filter(
+        (d) =>
+          d.driver_name.toLowerCase().includes(q) ||
+          d.registration.toLowerCase().includes(q) ||
+          (d.phone && d.phone.toLowerCase().includes(q)),
+      )
+      .slice(0, 8);
+  }, [value, drivers]);
+
+  return (
+    <div className="relative">
+      <input
+        value={value}
+        onChange={(e) => {
+          onTextChange(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder="Select existing driver or type name..."
+        className={inputCls}
+      />
+      {open && matches.length > 0 && (
+        <div
+          className="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border shadow-xl"
+          style={{ borderColor: T.border, background: T.panel }}
+        >
+          {matches.map((d) => (
+            <button
+              type="button"
+              key={d.id}
+              onClick={() => {
+                onPick(d);
+                setOpen(false);
+              }}
+              className="flex w-full items-center justify-between border-b px-3 py-2 text-left hover:bg-[#ff6a00]/10"
+              style={{ borderColor: T.borderSoft }}
+            >
+              <div className="flex-1 truncate">
+                <div className="text-sm font-semibold">{d.driver_name}</div>
+                <div className="text-xs text-[#8b95a8]">
+                  {d.registration || "No Reg"} {d.phone ? `· ${d.phone}` : ""}
+                </div>
+              </div>
+              <div className="text-right text-xs">
+                <div className="font-semibold text-white">{(d.current_mileage || 0).toLocaleString()} mi</div>
+                <div className="text-[#8b95a8]">Allowance: {(d.allowance || 0).toLocaleString()} mi</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function UserSettingsView({
   account,
   toast,
@@ -4989,6 +5062,15 @@ function EditDriverModal({
               <Icon.Shield className="h-3.5 w-3.5" />
               {sendingReminder === "pco" ? "Sending..." : "PCO Reminder"}
             </button>
+            <button
+              type="button"
+              disabled={sendingReminder !== null}
+              onClick={() => handleSendReminder("contract")}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-orange-500/40 bg-orange-500/15 px-3 py-1.5 text-xs font-semibold text-orange-300 hover:bg-orange-500/25 disabled:opacity-50"
+            >
+              <Icon.Calendar className="h-3.5 w-3.5" />
+              {sendingReminder === "contract" ? "Sending..." : "Contract Renewal Reminder"}
+            </button>
           </div>
           <p className="text-[11px] text-[#8b95a8]">
             Sends a direct notification to the driver's portal dashboard and an email copy if an email address is connected.
@@ -5068,6 +5150,183 @@ function EditDriverModal({
               </Field>
             </Grid2>
           ) : null}
+
+          {/* Contract Term & Renewal Tracking */}
+          <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: T.borderSoft, background: T.panel }}>
+            <div className="font-bold text-white text-xs">Contract Term & Renewal</div>
+            <Grid2>
+              <Field label="Contract Start Date">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="Contract Length (Weeks)">
+                <input
+                  type="number"
+                  min="1"
+                  value={contractWeeks}
+                  onChange={(e) => setContractWeeks(e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+            </Grid2>
+            <Grid2>
+              <Field label="Calculated Contract End Date">
+                <div className="rounded-lg border px-3 py-2 text-xs font-semibold text-white bg-white/5 border-white/10">
+                  {calculateContractEndDate(startDate, parseInt(contractWeeks) || 6).toLocaleDateString("en-GB", {
+                    weekday: "long",
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </div>
+              </Field>
+              <Field label="Contract Status / Time Remaining">
+                {(() => {
+                  const remDays = getContractDaysRemaining(startDate, parseInt(contractWeeks) || 6);
+                  return (
+                    <div
+                      className={`rounded-lg border px-3 py-2 text-xs font-semibold ${
+                        remDays <= 14
+                          ? "text-amber-300 bg-amber-500/10 border-amber-500/20"
+                          : "text-emerald-300 bg-emerald-500/10 border-emerald-500/20"
+                      }`}
+                    >
+                      {remDays < 0
+                        ? `${Math.abs(remDays)} days past contract end`
+                        : `${remDays} days remaining (${Math.ceil(remDays / 7)} weeks)`}
+                    </div>
+                  );
+                })()}
+              </Field>
+            </Grid2>
+          </div>
+
+          {/* Deposit Tracking & Instalments */}
+          <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: T.borderSoft, background: T.panel }}>
+            <div className="flex items-center justify-between">
+              <div className="font-bold text-white text-xs">Deposit Tracking (Instalments)</div>
+              {(() => {
+                const totalPaid = (driver.deposit_payments || []).reduce(
+                  (sum, p) => sum + Number(p.amount || 0),
+                  0,
+                );
+                const agreed = parseFloat(depositTotal) || 0;
+                let badgeCls = "border-red-500/40 bg-red-500/15 text-red-300";
+                let label = "Unpaid";
+                if (agreed > 0 && totalPaid >= agreed) {
+                  badgeCls = "border-emerald-500/40 bg-emerald-500/15 text-emerald-300";
+                  label = "Paid in full";
+                } else if (totalPaid > 0) {
+                  badgeCls = "border-amber-500/40 bg-amber-500/15 text-amber-300";
+                  label = `£${totalPaid} of £${agreed} paid`;
+                } else if (agreed === 0) {
+                  badgeCls = "border-slate-500/40 bg-slate-500/15 text-slate-300";
+                  label = "None set";
+                }
+                return (
+                  <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold border ${badgeCls}`}>
+                    {label}
+                  </span>
+                );
+              })()}
+            </div>
+
+            <Grid2>
+              <Field label="Total Agreed Deposit (£)">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={depositTotal}
+                  onChange={(e) => setDepositTotal(e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="Outstanding Deposit Balance (£)">
+                {(() => {
+                  const paid = (driver.deposit_payments || []).reduce(
+                    (s, p) => s + Number(p.amount || 0),
+                    0,
+                  );
+                  const agreed = parseFloat(depositTotal) || 0;
+                  const outstanding = Math.max(0, agreed - paid);
+                  return (
+                    <div className="rounded-lg border px-3 py-2 text-xs font-bold text-white bg-white/5 border-white/10">
+                      £{outstanding.toFixed(2)}
+                    </div>
+                  );
+                })()}
+              </Field>
+            </Grid2>
+
+            {/* Deposit Payments Received List */}
+            <div className="border-t pt-3 space-y-2.5" style={{ borderColor: T.borderSoft }}>
+              <div className="font-semibold text-white text-xs">Deposit Payments Received</div>
+              {driver.deposit_payments && driver.deposit_payments.length > 0 ? (
+                <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                  {driver.deposit_payments.map((dp) => (
+                    <div
+                      key={dp.id}
+                      className="flex justify-between items-center rounded-lg border p-2 text-xs"
+                      style={{ borderColor: T.borderSoft, background: T.panel2 }}
+                    >
+                      <div>
+                        <div className="font-medium text-white">{dp.note || "Deposit Payment"}</div>
+                        <div className="text-[10px] text-[#8b95a8]">
+                          {new Date(dp.paid_at).toLocaleDateString("en-GB")}
+                        </div>
+                      </div>
+                      <div className="font-bold text-emerald-400">+£{Number(dp.amount).toFixed(2)}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-[11px] text-[#8b95a8] italic">No deposit payments recorded yet.</div>
+              )}
+
+              {/* Record Deposit Instalment Form */}
+              <div className="rounded-lg border p-2.5 space-y-2" style={{ borderColor: T.border, background: T.panel2 }}>
+                <div className="text-[11px] font-bold text-[#ff8a3d]">Record Deposit Payment / Instalment</div>
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={depAmount}
+                    onChange={(e) => setDepAmount(e.target.value)}
+                    placeholder="Amount (£)"
+                    className="w-28 rounded-lg border py-1.5 px-2 text-xs text-white"
+                    style={{ borderColor: T.border, background: T.panel }}
+                  />
+                  <input
+                    type="date"
+                    value={depDate}
+                    onChange={(e) => setDepDate(e.target.value)}
+                    className="w-36 rounded-lg border py-1.5 px-2 text-xs text-white"
+                    style={{ borderColor: T.border, background: T.panel }}
+                  />
+                  <input
+                    type="text"
+                    value={depNote}
+                    onChange={(e) => setDepNote(e.target.value)}
+                    placeholder="Optional note (e.g. 2nd instalment)"
+                    className="flex-1 min-w-[150px] rounded-lg border py-1.5 px-2 text-xs text-white"
+                    style={{ borderColor: T.border, background: T.panel }}
+                  />
+                  <button
+                    type="button"
+                    disabled={addingDeposit || !depAmount}
+                    onClick={handleAddDeposit}
+                    className="rounded-lg bg-[#ff6a00] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#e05d00] disabled:opacity-50 shrink-0"
+                  >
+                    {addingDeposit ? "Saving..." : "Record Payment"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
 
           {/* Rent & Financial Tracking */}
           <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: T.borderSoft, background: T.panel }}>
@@ -5576,6 +5835,8 @@ function MileageView({
   data: ReturnType<typeof useFleetData>;
   toast: (m: string, t?: Toast["type"]) => void;
 }) {
+  const [selectedDriver, setSelectedDriver] = useState<DriverTrack | null>(null);
+  const [driverSearchText, setDriverSearchText] = useState("");
   const [regText, setRegText] = useState("");
   const [selected, setSelected] = useState<Vehicle | null>(null);
   const [driverName, setDriverName] = useState("");
@@ -5606,11 +5867,30 @@ function MileageView({
         : subFilter === "rejected"
           ? rejectedSubmissions
           : submissions;
+  const handlePickDriver = (d: DriverTrack) => {
+    setSelectedDriver(d);
+    setDriverSearchText(d.driver_name);
+    setDriverName(d.driver_name);
+    setRegText(d.registration);
+    setStartMileage(String(d.current_mileage || d.start_mileage || "0"));
+    setAllowance(String(d.allowance || "5000"));
+    setExcessRate(String(d.excess_rate || "20"));
+    setStartDate(d.start_date || new Date().toISOString().slice(0, 10));
+
+    const matchedVeh = vehicles.find(
+      (v) =>
+        v.id === d.vehicle_id ||
+        v.registration.toUpperCase() === (d.registration || "").toUpperCase(),
+    );
+    if (matchedVeh) {
+      setSelected(matchedVeh);
+    }
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selected) {
-      toast("Pick a vehicle by registration.", "error");
+    if (!selected && !selectedDriver?.vehicle_id) {
+      toast("Pick a vehicle by registration or select an existing driver.", "error");
       return;
     }
     if (!driverName.trim()) {
@@ -5618,22 +5898,46 @@ function MileageView({
       return;
     }
     try {
-      const autoRent = getVehicleWeeklyPrice(selected.make, selected.model);
-      await data.addDriver({
-        driver_name: driverName.trim(),
-        vehicle_id: selected.id,
-        registration: selected.registration,
-        start_mileage: parseInt(startMileage) || 0,
-        current_mileage: parseInt(startMileage) || 0,
-        allowance: parseInt(allowance) || 5000,
-        excess_rate: parseInt(excessRate) || 20,
-        start_date: startDate,
-        weekly_rent: autoRent,
-        rent_due_day: "Monday",
-        rent_status: "unpaid",
-        balance_due: autoRent,
-      });
-      toast(`Tracking started for ${driverName}`);
+      const targetVeh = selected || vehicles.find((v) => v.id === selectedDriver?.vehicle_id);
+      const autoRent = targetVeh ? getVehicleWeeklyPrice(targetVeh.make, targetVeh.model) : 200;
+
+      if (selectedDriver) {
+        // Update existing driver tracking details
+        const updatedMi = parseInt(startMileage) || selectedDriver.current_mileage || 0;
+        await data.editDriver({
+          ...selectedDriver,
+          driver_name: driverName.trim(),
+          registration: selected?.registration || selectedDriver.registration,
+          vehicle_id: selected?.id || selectedDriver.vehicle_id,
+          allowance: parseInt(allowance) || 5000,
+          excess_rate: parseInt(excessRate) || 20,
+          start_date: startDate,
+        });
+        if (updatedMi !== selectedDriver.current_mileage) {
+          await data.updateDriverMileage(selectedDriver, updatedMi);
+        }
+        toast(`Mileage and tracking updated for ${driverName}`);
+      } else {
+        // Start tracking a new driver
+        await data.addDriver({
+          driver_name: driverName.trim(),
+          vehicle_id: selected?.id || "",
+          registration: selected?.registration || regText.trim().toUpperCase(),
+          start_mileage: parseInt(startMileage) || 0,
+          current_mileage: parseInt(startMileage) || 0,
+          allowance: parseInt(allowance) || 5000,
+          excess_rate: parseInt(excessRate) || 20,
+          start_date: startDate,
+          weekly_rent: autoRent,
+          rent_due_day: "Monday",
+          rent_status: "unpaid",
+          balance_due: autoRent,
+        });
+        toast(`Tracking started for ${driverName}`);
+      }
+
+      setSelectedDriver(null);
+      setDriverSearchText("");
       setDriverName("");
       setRegText("");
       setSelected(null);
@@ -5758,10 +6062,46 @@ function MileageView({
         className="space-y-4 rounded-xl border p-6"
         style={{ borderColor: T.border, background: T.panel }}
       >
-        <h3 className="text-base font-semibold">Start Tracking a Driver</h3>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <h3 className="text-base font-semibold">
+            {selectedDriver ? `Update Mileage / Tracking for ${selectedDriver.driver_name}` : "Start Tracking / Update Driver Mileage"}
+          </h3>
+          {selectedDriver && (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedDriver(null);
+                setDriverSearchText("");
+                setDriverName("");
+                setRegText("");
+                setSelected(null);
+                setStartMileage("");
+              }}
+              className="text-xs text-[#8b95a8] hover:text-white underline"
+            >
+              Clear selected driver
+            </button>
+          )}
+        </div>
+
+        <div>
+          <Label>Select Existing Driver (Auto-Fills Details)</Label>
+          <DriverSearch
+            drivers={drivers}
+            value={driverSearchText}
+            onTextChange={(s) => {
+              setDriverSearchText(s);
+              if (selectedDriver && s !== selectedDriver.driver_name) {
+                setSelectedDriver(null);
+              }
+            }}
+            onPick={handlePickDriver}
+          />
+        </div>
+
         <Grid2>
           <div>
-            <Label>Registration *</Label>
+            <Label>Vehicle Registration *</Label>
             <RegSearch
               vehicles={vehicles}
               value={regText}
@@ -5772,14 +6112,17 @@ function MileageView({
               onPick={(v) => {
                 setSelected(v);
                 setRegText(v.registration);
-                setStartMileage(String(v.current_mileage || ""));
+                if (!selectedDriver) {
+                  setStartMileage(String(v.current_mileage || ""));
+                }
               }}
             />
           </div>
-          <Field label="Driver Name">
+          <Field label="Driver Name *">
             <input
               value={driverName}
               onChange={(e) => setDriverName(e.target.value)}
+              placeholder="e.g. John Doe"
               className={inputCls}
             />
           </Field>
