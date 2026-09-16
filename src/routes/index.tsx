@@ -9,6 +9,7 @@ import {
   type Vehicle,
   type ServiceRecord,
   type DriverTrack,
+  type MileageSubmission,
 } from "@/lib/fleet-data";
 import { simplifyVehicleName, vehicleArtworkPath } from "@/lib/vehicle-display";
 import { exportServiceHistoryPdf } from "@/lib/pdf-export";
@@ -5848,6 +5849,24 @@ function MileageView({
   const [eomTarget, setEomTarget] = useState<DriverTrack | null>(null);
   const [logsTarget, setLogsTarget] = useState<DriverTrack | null>(null);
 
+  // Mileage Submissions Queue State
+  const [subFilter, setSubFilter] = useState<"pending" | "approved" | "rejected" | "all">("pending");
+  const [submitModalOpen, setSubmitModalOpen] = useState(false);
+  const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
+
+  const submissions = data.mileageSubmissions || [];
+  const pendingSubmissions = submissions.filter((s) => s.status === "pending");
+  const approvedSubmissions = submissions.filter((s) => s.status === "approved");
+  const rejectedSubmissions = submissions.filter((s) => s.status === "rejected");
+
+  const filteredSubmissions =
+    subFilter === "pending"
+      ? pendingSubmissions
+      : subFilter === "approved"
+        ? approvedSubmissions
+        : subFilter === "rejected"
+          ? rejectedSubmissions
+          : submissions;
   const handlePickDriver = (d: DriverTrack) => {
     setSelectedDriver(d);
     setDriverSearchText(d.driver_name);
@@ -5930,6 +5949,114 @@ function MileageView({
 
   return (
     <div className="space-y-6">
+      {/* Pending Mileage Submissions Review Queue (B1, B2, B3) */}
+      <div
+        className="rounded-xl border p-5 sm:p-6 shadow-sm"
+        style={{ borderColor: T.border, background: T.panel }}
+      >
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-extrabold text-white">
+                Mileage Submission Review Queue
+              </h2>
+              {pendingSubmissions.length > 0 && (
+                <span className="rounded-full bg-amber-500/20 px-2.5 py-0.5 text-xs font-bold text-amber-300 border border-amber-500/30 animate-pulse">
+                  {pendingSubmissions.length} Pending
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-[#8b95a8] mt-0.5">
+              Review driver odometer photo submissions, verify Gemini Vision OCR suggested values, and confirm automatic mileage & excess charges.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSubmitModalOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#ff6a00] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#e05d00] transition-colors"
+            >
+              <Icon.Camera className="h-4 w-4" />
+              Submit Odometer Photo
+            </button>
+          </div>
+        </div>
+
+        {/* Queue Filter Tabs */}
+        <div className="mb-4 flex flex-wrap items-center gap-2 border-b pb-3" style={{ borderColor: T.borderSoft }}>
+          <button
+            type="button"
+            onClick={() => setSubFilter("pending")}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+              subFilter === "pending"
+                ? "bg-[#ff6a00] text-white"
+                : "bg-white/5 text-[#8b95a8] hover:bg-white/10 hover:text-white"
+            }`}
+          >
+            Pending ({pendingSubmissions.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setSubFilter("approved")}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+              subFilter === "approved"
+                ? "bg-[#ff6a00] text-white"
+                : "bg-white/5 text-[#8b95a8] hover:bg-white/10 hover:text-white"
+            }`}
+          >
+            Approved ({approvedSubmissions.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setSubFilter("rejected")}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+              subFilter === "rejected"
+                ? "bg-[#ff6a00] text-white"
+                : "bg-white/5 text-[#8b95a8] hover:bg-white/10 hover:text-white"
+            }`}
+          >
+            Rejected ({rejectedSubmissions.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setSubFilter("all")}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+              subFilter === "all"
+                ? "bg-[#ff6a00] text-white"
+                : "bg-white/5 text-[#8b95a8] hover:bg-white/10 hover:text-white"
+            }`}
+          >
+            All Submissions ({submissions.length})
+          </button>
+        </div>
+
+        {/* Submissions List */}
+        {filteredSubmissions.length === 0 ? (
+          <div
+            className="rounded-xl border border-dashed p-8 text-center text-sm text-[#8b95a8]"
+            style={{ borderColor: T.border, background: T.panel2 }}
+          >
+            {subFilter === "pending"
+              ? "No pending mileage submissions to review. All submissions are up to date!"
+              : `No ${subFilter} mileage submissions found.`}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {filteredSubmissions.map((sub) => (
+              <MileageSubmissionCard
+                key={sub.id}
+                submission={sub}
+                drivers={drivers}
+                data={data}
+                toast={toast}
+                onExpandPhoto={(url) => setPreviewPhotoUrl(url)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
       <form
         onSubmit={submit}
         className="space-y-4 rounded-xl border p-6"
@@ -6192,6 +6319,572 @@ function MileageView({
       )}
 
       {logsTarget && <LogsModal driver={logsTarget} onClose={() => setLogsTarget(null)} />}
+
+      {submitModalOpen && (
+        <SubmitMileagePhotoModal
+          drivers={drivers}
+          data={data}
+          toast={toast}
+          onClose={() => setSubmitModalOpen(false)}
+        />
+      )}
+
+      {previewPhotoUrl && (
+        <FullImagePreviewModal
+          photoUrl={previewPhotoUrl}
+          onClose={() => setPreviewPhotoUrl(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function MileageSubmissionCard({
+  submission,
+  drivers,
+  data,
+  toast,
+  onExpandPhoto,
+}: {
+  submission: MileageSubmission;
+  drivers: DriverTrack[];
+  data: ReturnType<typeof useFleetData>;
+  toast: (m: string, t?: Toast["type"]) => void;
+  onExpandPhoto: (url: string) => void;
+}) {
+  const driver = drivers.find(
+    (d) =>
+      (submission.driver_id && d.id === submission.driver_id) ||
+      d.registration.replace(/\s+/g, "").toUpperCase() ===
+        submission.registration.replace(/\s+/g, "").toUpperCase(),
+  );
+
+  const [confirmedInput, setConfirmedInput] = useState<string>(
+    submission.approved_mileage
+      ? String(submission.approved_mileage)
+      : submission.ocr_mileage
+        ? String(submission.ocr_mileage)
+        : "",
+  );
+
+  const numVal = parseInt(confirmedInput) || 0;
+  const recordedMi = driver?.current_mileage ?? driver?.start_mileage ?? 0;
+  const startMi = driver?.start_mileage ?? 0;
+  const allowance = driver?.allowance ?? 5000;
+  const excessRate = driver?.excess_rate ?? 20;
+
+  // Validation Flags (B3)
+  const isBackwards = numVal > 0 && driver && numVal < recordedMi;
+  const isImplausibleJump = driver && numVal > recordedMi && numVal - recordedMi > 3000;
+
+  // Automatic Mileage Calculation (B2)
+  const milesDriven = Math.max(0, numVal - startMi);
+  const remainingMiles = Math.max(0, allowance - milesDriven);
+  const overageMiles = Math.max(0, milesDriven - allowance);
+  const excessCharge = (overageMiles * excessRate) / 100;
+
+  const handleApprove = async () => {
+    if (!numVal || numVal <= 0) {
+      toast("Please enter a valid positive odometer reading.", "error");
+      return;
+    }
+    if (isBackwards) {
+      if (!confirm(`Warning: Submitted reading (${numVal.toLocaleString()}) is lower than recorded current mileage (${recordedMi.toLocaleString()}). Are you sure you want to approve?`)) {
+        return;
+      }
+    }
+    try {
+      await data.approveMileageSubmission(submission.id, numVal);
+      toast(`Approved reading of ${numVal.toLocaleString()} mi for ${submission.driver_name}`);
+    } catch (e: any) {
+      toast(e?.message ?? "Failed to approve", "error");
+    }
+  };
+
+  const handleReject = async () => {
+    const reason = prompt("Enter rejection reason:", "Blurry photo or wrong reading");
+    if (reason === null) return;
+    try {
+      await data.rejectMileageSubmission(submission.id, reason);
+      toast("Submission rejected", "info");
+    } catch (e: any) {
+      toast(e?.message ?? "Failed to reject", "error");
+    }
+  };
+
+  const handleAddExcessCharge = async () => {
+    if (!driver) return;
+    if (excessCharge <= 0) return;
+    if (
+      confirm(
+        `Add excess charge of £${excessCharge.toFixed(2)} to ${driver.driver_name}'s balance? (${overageMiles.toLocaleString()} miles over @ ${excessRate}p/mi)`,
+      )
+    ) {
+      try {
+        await data.addDriverCharge(
+          driver.id,
+          excessCharge,
+          `Excess mileage charge: ${overageMiles.toLocaleString()} miles @ ${excessRate}p/mi`,
+        );
+        toast(`Added £${excessCharge.toFixed(2)} excess mileage charge to driver balance`);
+      } catch (e: any) {
+        toast(e?.message ?? "Failed to add charge", "error");
+      }
+    }
+  };
+
+  return (
+    <div
+      className="rounded-xl border p-4 sm:p-5 transition-all"
+      style={{ borderColor: T.border, background: T.panel2 }}
+    >
+      {/* Top Info Bar */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b pb-3" style={{ borderColor: T.borderSoft }}>
+        <div className="flex items-center gap-3">
+          <UKPlate reg={submission.registration} size="sm" />
+          <div>
+            <div className="text-base font-extrabold text-white">{submission.driver_name}</div>
+            <div className="text-xs text-[#8b95a8]">
+              Submitted: {new Date(submission.submitted_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+            </div>
+          </div>
+        </div>
+
+        <div>
+          {submission.status === "pending" && (
+            <span className="rounded-full bg-amber-500/20 px-3 py-1 text-xs font-bold text-amber-300 border border-amber-500/30">
+              Pending Review
+            </span>
+          )}
+          {submission.status === "approved" && (
+            <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-bold text-emerald-300 border border-emerald-500/30">
+              Approved ({submission.approved_mileage?.toLocaleString()} mi)
+            </span>
+          )}
+          {submission.status === "rejected" && (
+            <span className="rounded-full bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300 border border-red-500/30">
+              Rejected
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Main Grid: Photo Preview & OCR Calculation Panel */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
+        {/* Photo Column */}
+        <div className="md:col-span-4 lg:col-span-3">
+          <div className="text-xs font-semibold text-[#8b95a8] mb-1.5 flex items-center justify-between">
+            <span>Submitted Odometer Photo</span>
+            <span className="text-[10px] text-amber-400">Click to view</span>
+          </div>
+          <div
+            onClick={() => onExpandPhoto(submission.photo_url)}
+            className="group relative cursor-pointer overflow-hidden rounded-lg border border-white/10 bg-black/40 hover:border-[#ff6a00] transition-all"
+            style={{ height: "140px" }}
+          >
+            <img
+              src={submission.photo_url}
+              alt="Odometer Submission"
+              className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
+              onError={(e) => {
+                (e.target as HTMLElement).style.display = "none";
+              }}
+            />
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+              <span className="inline-flex items-center gap-1 rounded-md bg-black/80 px-2.5 py-1 text-xs font-semibold text-white">
+                <Icon.Eye className="h-3.5 w-3.5" /> Enlarge Photo
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Reading & Calculations Column */}
+        <div className="md:col-span-8 lg:col-span-9 space-y-3">
+          {/* OCR Suggestion Status Badge */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {submission.ocr_confidence === "high" && submission.ocr_mileage ? (
+              <div className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-300">
+                <span>✨ Gemini Vision OCR Extracted:</span>
+                <span className="font-bold">{submission.ocr_mileage.toLocaleString()} mi</span>
+                <span className="text-[10px] text-emerald-400/80">(High Confidence - Editable)</span>
+              </div>
+            ) : (
+              <div className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-300">
+                <span>⚠️ Manual Entry Required</span>
+                <span className="text-[10px] text-amber-400/80">(OCR low confidence or photo unclear)</span>
+              </div>
+            )}
+
+            {driver && (
+              <div className="text-xs text-[#8b95a8]">
+                Last recorded: <span className="font-semibold text-white">{recordedMi.toLocaleString()} mi</span>
+              </div>
+            )}
+          </div>
+
+          {/* Odometer Input Field */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex-1 min-w-[200px]">
+              <label className="block text-xs font-medium text-[#8b95a8] mb-1">
+                Confirmed Odometer Reading (mi) *
+              </label>
+              <input
+                type="number"
+                inputMode="numeric"
+                disabled={submission.status !== "pending"}
+                value={confirmedInput}
+                onChange={(e) => setConfirmedInput(e.target.value.replace(/^0+(?=\d)/, ""))}
+                placeholder="Enter confirmed mileage"
+                className={inputCls}
+              />
+            </div>
+
+            {submission.status === "pending" && (
+              <div className="flex items-end gap-2 pt-5">
+                <button
+                  type="button"
+                  onClick={handleApprove}
+                  disabled={!numVal || numVal <= 0}
+                  className="rounded-lg bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 disabled:opacity-50 transition-colors shadow-sm"
+                >
+                  Confirm & Approve
+                </button>
+                <button
+                  type="button"
+                  onClick={handleReject}
+                  className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-xs font-semibold text-red-300 hover:bg-red-500/20 transition-colors"
+                >
+                  Reject
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Correctness & Validation Warnings (B3) */}
+          {isBackwards && (
+            <div className="rounded-lg border border-red-500/40 bg-red-500/15 p-3 text-xs text-red-200 space-y-1">
+              <div className="font-bold flex items-center gap-1.5 text-red-300">
+                <span>⛔ REJECTION / MISREAD WARNING</span>
+              </div>
+              <p>
+                Submitted reading (<span className="font-bold text-white">{numVal.toLocaleString()} mi</span>) is lower than current recorded mileage (<span className="font-bold text-white">{recordedMi.toLocaleString()} mi</span>). Odometers do not run backwards — check for trip meter misreads or incorrect photos.
+              </p>
+            </div>
+          )}
+
+          {isImplausibleJump && !isBackwards && (
+            <div className="rounded-lg border border-amber-500/40 bg-amber-500/15 p-3 text-xs text-amber-200 space-y-1">
+              <div className="font-bold flex items-center gap-1.5 text-amber-300">
+                <span>⚠️ IMPLAUSIBLE JUMP WARNING</span>
+              </div>
+              <p>
+                Submitted reading is <span className="font-bold text-white">+{(numVal - recordedMi).toLocaleString()} miles</span> above current recorded mileage. Verify photo carefully before approving.
+              </p>
+            </div>
+          )}
+
+          {/* Automatic Mileage & Excess Calculation Box (B2) */}
+          {driver && numVal > 0 && !isBackwards && (
+            <div className="rounded-lg border p-3.5 space-y-2 text-xs" style={{ borderColor: T.border, background: T.panel }}>
+              <div className="text-xs font-bold text-white mb-1 border-b pb-1" style={{ borderColor: T.borderSoft }}>
+                Automatic Mileage Calculation
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <div>
+                  <span className="text-[#8b95a8] block text-[11px]">Start Mileage</span>
+                  <span className="font-semibold text-white">{startMi.toLocaleString()} mi</span>
+                </div>
+                <div>
+                  <span className="text-[#8b95a8] block text-[11px]">Approved Reading</span>
+                  <span className="font-semibold text-emerald-400">{numVal.toLocaleString()} mi</span>
+                </div>
+                <div>
+                  <span className="text-[#8b95a8] block text-[11px]">Miles Driven</span>
+                  <span className="font-bold text-white">{milesDriven.toLocaleString()} mi</span>
+                </div>
+                <div>
+                  <span className="text-[#8b95a8] block text-[11px]">Monthly Allowance</span>
+                  <span className="font-semibold text-white">{allowance.toLocaleString()} mi</span>
+                </div>
+              </div>
+
+              {overageMiles > 0 ? (
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-md border border-red-500/30 bg-red-500/10 p-2.5">
+                  <div>
+                    <span className="font-bold text-red-300 block">
+                      🚨 Allowance Exceeded by {overageMiles.toLocaleString()} miles
+                    </span>
+                    <span className="text-[11px] text-red-200">
+                      Calculated Excess Charge: <span className="font-bold text-white">£{excessCharge.toFixed(2)}</span> ({excessRate}p/mi)
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleAddExcessCharge}
+                    className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-500 transition-colors shadow-sm"
+                  >
+                    ⚡ Add Excess Charge £{excessCharge.toFixed(2)} to Balance
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 p-2 text-center text-xs font-semibold text-emerald-300">
+                  ✅ Within Allowance ({remainingMiles.toLocaleString()} miles remaining)
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SubmitMileagePhotoModal({
+  drivers,
+  data,
+  toast,
+  onClose,
+}: {
+  drivers: DriverTrack[];
+  data: ReturnType<typeof useFleetData>;
+  toast: (m: string, t?: Toast["type"]) => void;
+  onClose: () => void;
+}) {
+  const [selectedDriverId, setSelectedDriverId] = useState<string>(drivers[0]?.id || "");
+  const [photoUrl, setPhotoUrl] = useState<string>("");
+  const [photoPreview, setPhotoPreview] = useState<string>("");
+  const [analyzing, setAnalyzing] = useState(false);
+  const [ocrResult, setOcrResult] = useState<{ odometer: number | null; confidence: "high" | "low" | "none" } | null>(null);
+  const [notes, setNotes] = useState("");
+
+  const selectedDriver = drivers.find((d) => d.id === selectedDriverId);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result as string;
+        setPhotoPreview(base64);
+        void runOcr(base64);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleUrlBlur = () => {
+    if (photoUrl.trim() && photoUrl !== photoPreview) {
+      setPhotoPreview(photoUrl.trim());
+      void runOcr(photoUrl.trim());
+    }
+  };
+
+  const runOcr = async (imageSource: string) => {
+    setAnalyzing(true);
+    setOcrResult(null);
+    try {
+      const res = await fetch("/api/public/ocr-odometer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photo_url: imageSource }),
+      });
+      if (res.ok) {
+        const body = await res.json();
+        setOcrResult({
+          odometer: typeof body.odometer === "number" ? body.odometer : null,
+          confidence: body.confidence || "none",
+        });
+      }
+    } catch {
+      // ignore
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedDriver) {
+      toast("Please select a driver", "error");
+      return;
+    }
+    const finalPhoto = photoPreview || photoUrl.trim();
+    if (!finalPhoto) {
+      toast("Please provide an odometer photo or file", "error");
+      return;
+    }
+
+    try {
+      await data.addMileageSubmission({
+        driver_id: selectedDriver.id,
+        driver_name: selectedDriver.driver_name,
+        registration: selectedDriver.registration,
+        photo_url: finalPhoto,
+        ocr_mileage: ocrResult?.odometer ?? null,
+        ocr_confidence: ocrResult?.confidence ?? "low",
+        notes,
+      });
+      toast(`Odometer photo submitted for review (${selectedDriver.driver_name})`);
+      onClose();
+    } catch (e: any) {
+      toast(e?.message ?? "Failed to submit photo", "error");
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-3xl sm:rounded-xl border border-white/15 bg-[#10141d] p-5 sm:p-6 shadow-2xl animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200"
+        style={{ borderColor: T.border }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/20 sm:hidden" />
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-extrabold text-white">Submit Odometer Photo</h2>
+            <p className="text-xs text-[#8b95a8]">Upload dashboard image for automatic Gemini OCR extraction</p>
+          </div>
+          <button onClick={onClose} className="text-[#8b95a8] hover:text-white">
+            <Icon.X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label>Select Driver *</Label>
+            <select
+              value={selectedDriverId}
+              onChange={(e) => setSelectedDriverId(e.target.value)}
+              className={inputCls}
+            >
+              {drivers.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.driver_name} ({d.registration})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <Label>Upload Photo / Image File</Label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+              className="block w-full text-xs text-[#8b95a8] file:mr-3 file:rounded-md file:border-0 file:bg-[#ff6a00] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-[#e05d00] cursor-pointer"
+            />
+          </div>
+
+          <Field label="OR Photo URL">
+            <input
+              type="url"
+              placeholder="https://..."
+              value={photoUrl}
+              onChange={(e) => setPhotoUrl(e.target.value)}
+              onBlur={handleUrlBlur}
+              className={inputCls}
+            />
+          </Field>
+
+          {photoPreview && (
+            <div className="space-y-2">
+              <div className="text-xs font-medium text-[#8b95a8]">Image Preview</div>
+              <div className="relative overflow-hidden rounded-lg border border-white/10 bg-black/50 max-h-48 flex items-center justify-center p-2">
+                <img src={photoPreview} alt="Preview" className="max-h-44 object-contain rounded" />
+              </div>
+            </div>
+          )}
+
+          {analyzing && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-center text-xs font-semibold text-amber-300 animate-pulse flex items-center justify-center gap-2">
+              <Icon.Clock className="h-4 w-4 animate-spin" />
+              Analyzing photo with Gemini Vision OCR...
+            </div>
+          )}
+
+          {ocrResult && !analyzing && (
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300 space-y-1">
+              <div className="font-bold flex items-center gap-1.5">
+                <span>✨ OCR Analysis Complete</span>
+              </div>
+              {ocrResult.odometer ? (
+                <p>
+                  Extracted Odometer: <span className="font-bold text-white">{ocrResult.odometer.toLocaleString()} mi</span> (High Confidence)
+                </p>
+              ) : (
+                <p className="text-amber-300">
+                  ⚠️ Confidence low or image unclear — field will be left blank for staff manual entry.
+                </p>
+              )}
+            </div>
+          )}
+
+          <Field label="Notes / Comments (Optional)">
+            <input
+              type="text"
+              placeholder="e.g., Weekly mileage check photo"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className={inputCls}
+            />
+          </Field>
+
+          <div className="mt-5 flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border px-4 py-2 text-xs font-semibold hover:bg-[#1e222b]"
+              style={{ borderColor: T.border }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={analyzing || (!photoPreview && !photoUrl.trim())}
+              className="rounded-lg bg-[#ff6a00] px-4 py-2 text-xs font-bold text-white hover:bg-[#e05d00] disabled:opacity-50 transition-colors"
+            >
+              Submit Photo for Review
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function FullImagePreviewModal({
+  photoUrl,
+  onClose,
+}: {
+  photoUrl: string;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      <div
+        className="relative max-h-[95vh] max-w-4xl overflow-hidden rounded-xl border border-white/20 bg-black/80 p-2 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 z-10 rounded-full bg-black/60 p-2 text-white hover:bg-black transition-colors"
+        >
+          <Icon.X className="h-6 w-6" />
+        </button>
+        <img
+          src={photoUrl}
+          alt="Enlarged Odometer Submission"
+          className="max-h-[85vh] w-full object-contain rounded-lg"
+        />
+      </div>
     </div>
   );
 }
