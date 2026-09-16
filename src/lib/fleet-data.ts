@@ -85,6 +85,23 @@ export type DriverTrack = {
   monthly_logs: MonthlyLog[];
 };
 
+export type MileageSubmission = {
+  id: string;
+  driver_id?: string | null;
+  driver_name: string;
+  registration: string;
+  photo_url: string;
+  ocr_mileage?: number | null;
+  ocr_confidence?: "high" | "low" | "none" | null;
+  status: "pending" | "approved" | "rejected";
+  submitted_at: string;
+  approved_mileage?: number | null;
+  approved_at?: string | null;
+  rejected_at?: string | null;
+  rejection_reason?: string | null;
+  notes?: string | null;
+};
+
 const statusToDb = (s: Vehicle["status"]): string =>
   s === "Active"
     ? "available"
@@ -152,6 +169,23 @@ const cFromRow = (r: any): DriverCharge => ({
   amount: Number(r.amount ?? 0),
   description: r.description,
   created_at: r.created_at,
+});
+
+const msFromRow = (r: any): MileageSubmission => ({
+  id: r.id,
+  driver_id: r.driver_id ?? null,
+  driver_name: r.driver_name ?? "Unknown Driver",
+  registration: r.registration ?? r.reg ?? "",
+  photo_url: r.photo_url ?? "",
+  ocr_mileage: typeof r.ocr_mileage === "number" ? r.ocr_mileage : null,
+  ocr_confidence: r.ocr_confidence ?? "low",
+  status: (r.status as "pending" | "approved" | "rejected") ?? "pending",
+  submitted_at: r.submitted_at ?? r.created_at ?? new Date().toISOString(),
+  approved_mileage: typeof r.approved_mileage === "number" ? r.approved_mileage : null,
+  approved_at: r.approved_at ?? null,
+  rejected_at: r.rejected_at ?? null,
+  rejection_reason: r.rejection_reason ?? null,
+  notes: r.notes ?? null,
 });
 
 export const WEBSITE_CATALOG = [
@@ -282,10 +316,11 @@ export function useFleetData() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [services, setServices] = useState<ServiceRecord[]>([]);
   const [drivers, setDrivers] = useState<DriverTrack[]>([]);
+  const [mileageSubmissions, setMileageSubmissions] = useState<MileageSubmission[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
-    const [vRes, sRes, dRes, lRes, cRes] = await Promise.all([
+    const [vRes, sRes, dRes, lRes, cRes, msRes] = await Promise.all([
       supabase.from("vehicles").select("*").order("reg"),
       supabase.from("service_records").select("*").order("service_date", { ascending: false }),
       supabase
@@ -295,9 +330,12 @@ export function useFleetData() {
         .order("created_at", { ascending: false }),
       supabase.from("mileage_logs").select("*").order("period_end", { ascending: false }),
       supabase.from("driver_charges").select("*").order("created_at", { ascending: false }),
+      supabase.from("mileage_submissions").select("*").order("submitted_at", { ascending: false }),
     ]);
     setVehicles((vRes.data ?? []).map(vFromRow));
     setServices((sRes.data ?? []).map(sFromRow));
+    setMileageSubmissions((msRes.data ?? []).map(msFromRow));
+
     const logsByTrack = new Map<string, MonthlyLog[]>();
     for (const l of lRes.data ?? []) {
       if (!l.track_id) continue;
@@ -365,6 +403,11 @@ export function useFleetData() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "driver_charges" },
+        () => void refresh(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "mileage_submissions" },
         () => void refresh(),
       )
       .subscribe((status) => {
@@ -622,6 +665,171 @@ export function useFleetData() {
           .lt("current_mileage", newMi);
       }
       await refresh();
+    },
+    [refresh],
+  );
+
+  const approveMileageSubmission = useCallback(
+    async (submissionId: string, confirmedMileage: number) => {
+      const sub = mileageSubmissions.find((s) => s.id === submissionId);
+
+      const targetDriver = drivers.find(
+        (d) =>
+          (sub?.driver_id && d.id === sub.driver_id) ||
+          (sub?.registration &&
+            d.registration.replace(/\s+/g, "").toUpperCase() ===
+              sub.registration.replace(/\s+/g, "").toUpperCase()),
+      );
+
+      setMileageSubmissions((prev) =>
+        prev.map((s) =>
+          s.id === submissionId
+            ? {
+                ...s,
+                status: "approved",
+                approved_mileage: confirmedMileage,
+                approved_at: new Date().toISOString(),
+              }
+            : s,
+        ),
+      );
+
+      if (targetDriver) {
+        setDrivers((prev) =>
+          prev.map((d) => (d.id === targetDriver.id ? { ...d, current_mileage: confirmedMileage } : d)),
+        );
+        if (targetDriver.vehicle_id) {
+          setVehicles((prev) =>
+            prev.map((v) =>
+              v.id === targetDriver.vehicle_id ? { ...v, current_mileage: confirmedMileage } : v,
+            ),
+          );
+        }
+      }
+
+      await supabase
+        .from("mileage_submissions")
+        .update({
+          status: "approved",
+          approved_mileage: confirmedMileage,
+          approved_at: new Date().toISOString(),
+        })
+        .eq("id", submissionId);
+
+      if (targetDriver) {
+        await supabase
+          .from("driver_tracks")
+          .update({ current_mileage: confirmedMileage })
+          .eq("id", targetDriver.id);
+
+        if (targetDriver.vehicle_id) {
+          await supabase
+            .from("vehicles")
+            .update({ current_mileage: confirmedMileage })
+            .eq("id", targetDriver.vehicle_id);
+        }
+      }
+
+      await logAuditEvent({
+        actionType: "mileage_submission_approved",
+        targetTable: "mileage_submissions",
+        targetId: submissionId,
+        details: {
+          driver_name: sub?.driver_name ?? targetDriver?.driver_name ?? "Driver",
+          reg: sub?.registration ?? targetDriver?.registration ?? null,
+          approved_mileage: confirmedMileage,
+          previous_mileage: targetDriver?.current_mileage ?? null,
+        },
+      });
+
+      await refresh();
+    },
+    [mileageSubmissions, drivers, refresh],
+  );
+
+  const rejectMileageSubmission = useCallback(
+    async (submissionId: string, reason?: string) => {
+      const sub = mileageSubmissions.find((s) => s.id === submissionId);
+      setMileageSubmissions((prev) =>
+        prev.map((s) =>
+          s.id === submissionId
+            ? {
+                ...s,
+                status: "rejected",
+                rejected_at: new Date().toISOString(),
+                rejection_reason: reason || "Rejected by staff",
+              }
+            : s,
+        ),
+      );
+
+      await supabase
+        .from("mileage_submissions")
+        .update({
+          status: "rejected",
+          rejected_at: new Date().toISOString(),
+          rejection_reason: reason || "Rejected by staff",
+        })
+        .eq("id", submissionId);
+
+      await logAuditEvent({
+        actionType: "mileage_submission_rejected",
+        targetTable: "mileage_submissions",
+        targetId: submissionId,
+        details: {
+          driver_name: sub?.driver_name ?? "Driver",
+          reg: sub?.registration ?? null,
+          rejection_reason: reason || "Rejected by staff",
+        },
+      });
+
+      await refresh();
+    },
+    [mileageSubmissions, refresh],
+  );
+
+  const addMileageSubmission = useCallback(
+    async (sub: {
+      driver_id?: string | null;
+      driver_name: string;
+      registration: string;
+      photo_url: string;
+      ocr_mileage?: number | null;
+      ocr_confidence?: "high" | "low" | "none" | null;
+      notes?: string | null;
+    }) => {
+      const newSub: MileageSubmission = {
+        id: crypto.randomUUID(),
+        driver_id: sub.driver_id ?? null,
+        driver_name: sub.driver_name,
+        registration: sub.registration,
+        photo_url: sub.photo_url,
+        ocr_mileage: sub.ocr_mileage ?? null,
+        ocr_confidence: sub.ocr_confidence ?? "low",
+        status: "pending",
+        submitted_at: new Date().toISOString(),
+        notes: sub.notes ?? null,
+      };
+
+      setMileageSubmissions((prev) => [newSub, ...prev]);
+
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id || null;
+
+      await supabase.from("mileage_submissions").insert({
+        ...(userId ? { user_id: userId } : {}),
+        driver_id: sub.driver_id || null,
+        driver_name: sub.driver_name,
+        registration: sub.registration,
+        photo_url: sub.photo_url,
+        ocr_mileage: sub.ocr_mileage || null,
+        ocr_confidence: sub.ocr_confidence || "low",
+        status: "pending",
+        notes: sub.notes || null,
+      } as any);
+
+      await refresh();
+      return newSub;
     },
     [refresh],
   );
@@ -987,6 +1195,7 @@ export function useFleetData() {
     vehicles,
     services,
     drivers,
+    mileageSubmissions,
     loading,
     saveVehicle,
     deleteVehicle,
@@ -1000,6 +1209,9 @@ export function useFleetData() {
     generatePortalInvite,
     deleteDriver,
     updateDriverMileage,
+    approveMileageSubmission,
+    rejectMileageSubmission,
+    addMileageSubmission,
     closeMonth,
     removeDriver,
     refresh,
