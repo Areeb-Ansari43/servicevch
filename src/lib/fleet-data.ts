@@ -62,6 +62,15 @@ export type DriverNotification = {
   created_at: string;
 };
 
+export type DepositPayment = {
+  id: string;
+  driver_id: string;
+  amount: number;
+  paid_at: string;
+  note?: string | null;
+  created_at: string;
+};
+
 export type DriverTrack = {
   id: string;
   driver_name: string;
@@ -74,6 +83,9 @@ export type DriverTrack = {
   allowance: number;
   excess_rate: number;
   start_date: string;
+  contract_length_weeks?: number;
+  deposit_total?: number;
+  deposit_payments?: DepositPayment[];
   invite_token?: string | null;
   invite_status?: InviteStatus | null;
   auth_user_id?: string | null;
@@ -278,18 +290,35 @@ export function calculateNextPaymentDueDate(
   return nextDue;
 }
 
-const dFromRow = (r: any, logs: MonthlyLog[], charges: DriverCharge[] = []): DriverTrack => ({
+const dpFromRow = (r: any): DepositPayment => ({
   id: r.id,
-  driver_name: r.driver_name,
+  driver_id: r.driver_id ?? "",
+  amount: Number(r.amount ?? 0),
+  paid_at: r.paid_at ?? r.created_at ?? new Date().toISOString(),
+  note: r.note ?? null,
+  created_at: r.created_at ?? new Date().toISOString(),
+});
+
+const dFromRow = (
+  r: any,
+  logs: MonthlyLog[],
+  charges: DriverCharge[] = [],
+  depositPayments: DepositPayment[] = [],
+): DriverTrack => ({
+  id: r.id,
+  driver_name: r.driver_name ?? "Driver",
   email: r.email ?? "",
   phone: r.phone ?? "",
   vehicle_id: r.vehicle_id ?? "",
-  registration: r.reg,
-  start_mileage: r.start_mileage,
-  current_mileage: r.current_mileage,
-  allowance: r.allowance,
-  excess_rate: r.rate_pence,
-  start_date: r.start_date,
+  registration: r.reg ?? "",
+  start_mileage: Number(r.start_mileage ?? 0),
+  current_mileage: Number(r.current_mileage ?? 0),
+  allowance: Number(r.allowance ?? 5000),
+  excess_rate: Number(r.rate_pence ?? 20),
+  start_date: r.start_date ?? new Date().toISOString().slice(0, 10),
+  contract_length_weeks: Number(r.contract_length_weeks ?? 6),
+  deposit_total: Number(r.deposit_total ?? 0),
+  deposit_payments: depositPayments,
   invite_token: r.invite_token ?? null,
   invite_status: (r.invite_status as InviteStatus) ?? "none",
   auth_user_id: r.auth_user_id ?? null,
@@ -320,6 +349,14 @@ export function useFleetData() {
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
+    let dpData: any[] = [];
+    try {
+      const dpRes = await supabase.from("deposit_payments").select("*").order("paid_at", { ascending: false });
+      if (dpRes.data) dpData = dpRes.data;
+    } catch {
+      dpData = [];
+    }
+
     const [vRes, sRes, dRes, lRes, cRes, msRes] = await Promise.all([
       supabase.from("vehicles").select("*").order("reg"),
       supabase.from("service_records").select("*").order("service_date", { ascending: false }),
@@ -358,6 +395,14 @@ export function useFleetData() {
       }
     }
 
+    const depositPaymentsByDriver = new Map<string, DepositPayment[]>();
+    for (const dp of dpData) {
+      if (!dp.driver_id) continue;
+      const arr = depositPaymentsByDriver.get(dp.driver_id) ?? [];
+      arr.push(dpFromRow(dp));
+      depositPaymentsByDriver.set(dp.driver_id, arr);
+    }
+
     setDrivers(
       (dRes.data ?? []).map((r) => {
         const matchedCharges = [
@@ -369,7 +414,11 @@ export function useFleetData() {
           uniqueChargesMap.set(ch.id, ch);
         }
         const chargesList = Array.from(uniqueChargesMap.values());
-        return dFromRow(r, logsByTrack.get(r.id) ?? [], chargesList);
+        const depositPaymentsList = [
+          ...(depositPaymentsByDriver.get(r.id) ?? []),
+          ...(r.auth_user_id && r.auth_user_id !== r.id ? depositPaymentsByDriver.get(r.auth_user_id) ?? [] : []),
+        ];
+        return dFromRow(r, logsByTrack.get(r.id) ?? [], chargesList, depositPaymentsList);
       }),
     );
     setLoading(false);
@@ -605,6 +654,8 @@ export function useFleetData() {
         start_date: d.start_date,
         start_mileage: d.start_mileage,
         current_mileage: d.start_mileage,
+        contract_length_weeks: d.contract_length_weeks ?? 6,
+        deposit_total: d.deposit_total ?? 0,
         allowance: d.allowance,
         rate_pence: d.excess_rate,
         weekly_rent: d.weekly_rent ?? 0,
@@ -613,8 +664,8 @@ export function useFleetData() {
         balance_due: d.balance_due ?? (d.weekly_rent ?? 0),
       };
       let { error } = await (supabase.from("driver_tracks") as any).insert(driverPayload);
-      if (error && /email|phone|column/i.test(error.message)) {
-        const { email: _email, phone: _phone, ...legacyPayload } = driverPayload;
+      if (error && /email|phone|column|contract_length_weeks|deposit_total/i.test(error.message)) {
+        const { contract_length_weeks: _c, deposit_total: _d, email: _email, phone: _phone, ...legacyPayload } = driverPayload;
         ({ error } = await (supabase.from("driver_tracks") as any).insert(legacyPayload));
       }
       if (error) throw new Error(error.message);
@@ -917,6 +968,8 @@ export function useFleetData() {
                 vehicle_id: d.vehicle_id,
                 registration: d.registration,
                 start_date: d.start_date,
+                contract_length_weeks: d.contract_length_weeks ?? 6,
+                deposit_total: d.deposit_total ?? 0,
                 allowance: d.allowance,
                 excess_rate: d.excess_rate,
                 weekly_rent: d.weekly_rent,
@@ -935,6 +988,8 @@ export function useFleetData() {
         vehicle_id: d.vehicle_id || null,
         reg: d.registration,
         start_date: d.start_date,
+        contract_length_weeks: d.contract_length_weeks ?? 6,
+        deposit_total: d.deposit_total ?? 0,
         allowance: d.allowance,
         rate_pence: d.excess_rate,
         weekly_rent: d.weekly_rent,
@@ -943,8 +998,8 @@ export function useFleetData() {
         balance_due: d.balance_due,
       };
       let { error } = await supabase.from("driver_tracks").update(payload).eq("id", d.id);
-      if (error && /email|phone|column/i.test(error.message)) {
-        const { email: _email, phone: _phone, ...legacyPayload } = payload;
+      if (error && /email|phone|column|contract_length_weeks|deposit_total/i.test(error.message)) {
+        const { contract_length_weeks: _c, deposit_total: _d, email: _email, phone: _phone, ...legacyPayload } = payload;
         ({ error } = await supabase.from("driver_tracks").update(legacyPayload).eq("id", d.id));
       }
       if (error) throw new Error(error.message);
@@ -964,6 +1019,69 @@ export function useFleetData() {
           rent_status: d.rent_status,
           balance_due: d.balance_due,
           previous_name: existing?.driver_name,
+        },
+      });
+
+      await refresh();
+    },
+    [drivers, refresh],
+  );
+
+  const addDepositPayment = useCallback(
+    async (driverId: string, amount: number, note?: string, paidAt?: string) => {
+      const paidDate = paidAt || new Date().toISOString();
+      const newPayment: DepositPayment = {
+        id: crypto.randomUUID(),
+        driver_id: driverId,
+        amount,
+        paid_at: paidDate,
+        note: note || null,
+        created_at: new Date().toISOString(),
+      };
+
+      setDrivers((prev) =>
+        prev.map((item) => {
+          if (item.id === driverId) {
+            return {
+              ...item,
+              deposit_payments: [newPayment, ...(item.deposit_payments || [])],
+            };
+          }
+          return item;
+        }),
+      );
+
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id || null;
+
+      let { error } = await supabase.from("deposit_payments").insert({
+        driver_id: driverId,
+        amount,
+        note: note || null,
+        paid_at: paidDate,
+        ...(userId ? { user_id: userId } : {}),
+      } as any);
+
+      if (error && /user_id/i.test(error.message)) {
+        ({ error } = await supabase.from("deposit_payments").insert({
+          driver_id: driverId,
+          amount,
+          note: note || null,
+          paid_at: paidDate,
+        } as any));
+      }
+
+      const target = drivers.find((item) => item.id === driverId);
+      await logAuditEvent({
+        actionType: "deposit_payment_added",
+        targetTable: "deposit_payments",
+        targetId: driverId,
+        details: {
+          driver_id: driverId,
+          driver_name: target?.driver_name ?? "Driver",
+          reg: target?.registration ?? null,
+          amount,
+          note,
         },
       });
 
@@ -1234,6 +1352,7 @@ export function useFleetData() {
     deleteService,
     addDriver,
     editDriver,
+    addDepositPayment,
     toggleRentStatus,
     addDriverCharge,
     sendDriverReminder,

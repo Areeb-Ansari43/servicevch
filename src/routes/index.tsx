@@ -22,6 +22,7 @@ import { GenerationsView } from "@/components/generations-view";
 import { type AuditLogEntry } from "@/lib/audit-logger";
 import { WEBSITE_BASE_URL } from "@/lib/domain-config";
 import { RouteErrorBoundary } from "@/components/error-boundary";
+import { calculateContractEndDate, getContractDaysRemaining } from "@/lib/contract-helpers";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -1693,19 +1694,29 @@ export function FleetShell({ view }: { view: View }) {
               onCancel={() => go("services")}
             />
           ) : view === "mileage" ? (
-            <MileageView
-              vehicles={data.vehicles}
-              drivers={data.drivers}
-              data={data}
-              toast={toast}
-            />
+            <RouteErrorBoundary
+              fallbackTitle="Driver Mileage Error"
+              fallbackMessage="An error occurred while loading the Driver Mileage tracking page."
+            >
+              <MileageView
+                vehicles={data.vehicles}
+                drivers={data.drivers}
+                data={data}
+                toast={toast}
+              />
+            </RouteErrorBoundary>
           ) : view === "drivers" ? (
-            <DriversView
-              vehicles={data.vehicles}
-              drivers={data.drivers}
-              data={data}
-              toast={toast}
-            />
+            <RouteErrorBoundary
+              fallbackTitle="Drivers Management Error"
+              fallbackMessage="An error occurred while loading the Drivers directory or driver profile popup."
+            >
+              <DriversView
+                vehicles={data.vehicles}
+                drivers={data.drivers}
+                data={data}
+                toast={toast}
+              />
+            </RouteErrorBoundary>
           ) : view === "leads" ? (
             <WhatsAppLeadsView toast={toast} />
           ) : view === "accidents" ? (
@@ -4437,12 +4448,17 @@ function DriversView({
               ) : (
                 filteredDrivers.map((driver) => {
                   const vehicle = vehicles.find((v) => v.id === driver.vehicle_id);
-                  const initials = driver.driver_name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")
-                    .slice(0, 2)
-                    .toUpperCase();
+                  const driverName = driver.driver_name || "Driver";
+                  const initials =
+                    driverName
+                      .split(" ")
+                      .map((n) => n[0])
+                      .filter(Boolean)
+                      .join("")
+                      .slice(0, 2)
+                      .toUpperCase() || "D";
+                  const allowanceVal = driver.allowance || 5000;
+                  const balanceDueVal = driver.balance_due || 0;
                   return (
                     <tr key={driver.id} onClick={() => setEditingDriver(driver)} className="cursor-pointer transition-colors hover:bg-white/[0.04]">
                       <td className="px-4 py-3">
@@ -4456,10 +4472,10 @@ function DriversView({
                               onClick={() => setEditingDriver(driver)}
                               className="font-bold text-white hover:text-[#ff8a3d] text-left underline-offset-2 hover:underline"
                             >
-                              {driver.driver_name}
+                              {driverName}
                             </button>
                             <div className="text-[10px] text-[#8b95a8]">
-                              Allowance: {driver.allowance.toLocaleString()} mi
+                              Allowance: {allowanceVal.toLocaleString()} mi
                             </div>
                           </div>
                         </div>
@@ -4525,10 +4541,10 @@ function DriversView({
                       <td className="px-4 py-3 font-medium">
                         <span
                           className={
-                            driver.balance_due > 0 ? "font-bold text-red-400" : "text-[#9aa5b8]"
+                            balanceDueVal > 0 ? "font-bold text-red-400" : "text-[#9aa5b8]"
                           }
                         >
-                          £{driver.balance_due.toFixed(2)}
+                          £{balanceDueVal.toFixed(2)}
                         </span>
                       </td>
                       <td className="px-4 py-3">{portalStatusBadge(driver)}</td>
@@ -4901,8 +4917,14 @@ function EditDriverModal({
   const [rentDueDay, setRentDueDay] = useState(driver.rent_due_day || "Monday");
   const [rentStatus, setRentStatus] = useState<"paid" | "unpaid">(driver.rent_status || "unpaid");
   const [balanceDue, setBalanceDue] = useState(String(driver.balance_due || 0));
-  const [allowance, setAllowance] = useState(String(driver.allowance));
-  const [excessRate, setExcessRate] = useState(String(driver.excess_rate));
+  const [allowance, setAllowance] = useState(String(driver.allowance || 5000));
+  const [excessRate, setExcessRate] = useState(String(driver.excess_rate || 20));
+  const [contractWeeks, setContractWeeks] = useState(String(driver.contract_length_weeks ?? 6));
+  const [depositTotal, setDepositTotal] = useState(String(driver.deposit_total ?? 0));
+  const [depAmount, setDepAmount] = useState("");
+  const [depDate, setDepDate] = useState(new Date().toISOString().slice(0, 10));
+  const [depNote, setDepNote] = useState("");
+  const [addingDeposit, setAddingDeposit] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -4961,6 +4983,8 @@ function EditDriverModal({
         vehicle_id: selectedVehicle ? selectedVehicle.id : driver.vehicle_id,
         registration: selectedVehicle ? selectedVehicle.registration : driver.registration,
         start_date: startDate,
+        contract_length_weeks: parseInt(contractWeeks) || 6,
+        deposit_total: parseFloat(depositTotal) || 0,
         weekly_rent: parseFloat(weeklyRent) || 0,
         rent_due_day: rentDueDay,
         rent_status: rentStatus,
@@ -4973,6 +4997,22 @@ function EditDriverModal({
       toast(err?.message ?? "Failed to save driver file", "error");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleAddDeposit = async () => {
+    const amt = parseFloat(depAmount);
+    if (!amt || isNaN(amt)) return;
+    setAddingDeposit(true);
+    try {
+      await data.addDepositPayment(driver.id, amt, depNote.trim() || undefined, depDate);
+      toast(`Recorded deposit payment of £${amt.toFixed(2)} for ${driver.driver_name}`);
+      setDepAmount("");
+      setDepNote("");
+    } catch (err: any) {
+      toast(err?.message ?? "Failed to record deposit payment", "error");
+    } finally {
+      setAddingDeposit(false);
     }
   };
 
@@ -5869,10 +5909,10 @@ function MileageView({
           : submissions;
   const handlePickDriver = (d: DriverTrack) => {
     setSelectedDriver(d);
-    setDriverSearchText(d.driver_name);
-    setDriverName(d.driver_name);
-    setRegText(d.registration);
-    setStartMileage(String(d.current_mileage || d.start_mileage || "0"));
+    setDriverSearchText(d.driver_name || "");
+    setDriverName(d.driver_name || "");
+    setRegText(d.registration || "");
+    setStartMileage(String(d.current_mileage ?? d.start_mileage ?? "0"));
     setAllowance(String(d.allowance || "5000"));
     setExcessRate(String(d.excess_rate || "20"));
     setStartDate(d.start_date || new Date().toISOString().slice(0, 10));
@@ -5880,7 +5920,7 @@ function MileageView({
     const matchedVeh = vehicles.find(
       (v) =>
         v.id === d.vehicle_id ||
-        v.registration.toUpperCase() === (d.registration || "").toUpperCase(),
+        (v.registration || "").toUpperCase() === (d.registration || "").toUpperCase(),
     );
     if (matchedVeh) {
       setSelected(matchedVeh);
@@ -6188,9 +6228,15 @@ function MileageView({
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {drivers.map((d) => {
-              const driven = Math.max(0, d.current_mileage - d.start_mileage);
-              const over = Math.max(0, driven - d.allowance);
-              const charge = (over * d.excess_rate) / 100;
+              const curMi = d.current_mileage || 0;
+              const stMi = d.start_mileage || 0;
+              const dAllowance = d.allowance || 5000;
+              const dRate = d.excess_rate || 20;
+
+              const driven = Math.max(0, curMi - stMi);
+              const over = Math.max(0, driven - dAllowance);
+              const charge = (over * dRate) / 100;
+              const logsCount = (d.monthly_logs || []).length;
               return (
                 <div
                   key={d.id}
@@ -6199,26 +6245,26 @@ function MileageView({
                 >
                   <div className="mb-3 flex items-center justify-between">
                     <div>
-                      <div className="text-base font-bold">{d.driver_name}</div>
-                      <div className="text-xs text-[#8b95a8]">Started {d.start_date}</div>
+                      <div className="text-base font-bold">{d.driver_name || "Driver"}</div>
+                      <div className="text-xs text-[#8b95a8]">Started {d.start_date || "—"}</div>
                     </div>
-                    <UKPlate reg={d.registration} size="sm" />
+                    <UKPlate reg={d.registration || ""} size="sm" />
                   </div>
                   <div className="mb-3 grid grid-cols-2 gap-2 text-sm">
                     <div className="rounded-lg p-2" style={{ background: T.panel2 }}>
                       <div className="text-xs text-[#8b95a8]">Month Start</div>
-                      <div className="font-semibold">{d.start_mileage.toLocaleString()} mi</div>
+                      <div className="font-semibold">{stMi.toLocaleString()} mi</div>
                     </div>
                     <div className="rounded-lg p-2" style={{ background: T.panel2 }}>
                       <div className="text-xs text-[#8b95a8]">Current / Last Known</div>
-                      <div className="font-semibold">{d.current_mileage.toLocaleString()} mi</div>
+                      <div className="font-semibold">{curMi.toLocaleString()} mi</div>
                     </div>
                   </div>
                   <div className="mb-3 text-sm">
                     <div className="flex justify-between text-xs text-[#8b95a8]">
                       <span>Driven</span>
                       <span>
-                        {driven.toLocaleString()} / {d.allowance.toLocaleString()} mi
+                        {driven.toLocaleString()} / {dAllowance.toLocaleString()} mi
                       </span>
                     </div>
                     <div
@@ -6228,7 +6274,7 @@ function MileageView({
                       <div
                         className="h-full rounded-full"
                         style={{
-                          width: `${Math.min(100, (driven / d.allowance) * 100)}%`,
+                          width: `${Math.min(100, (driven / dAllowance) * 100)}%`,
                           background: over > 0 ? "#dc2626" : "#22c55e",
                         }}
                       />
@@ -6257,14 +6303,13 @@ function MileageView({
                     >
                       End of Month
                     </button>
-                    {d.monthly_logs.length > 0 && (
+                    {logsCount > 0 && (
                       <button
                         onClick={() => setLogsTarget(d)}
                         className="ml-auto inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-[#1e222b]"
                         style={{ borderColor: T.border }}
                       >
-                        <Icon.Clock className="h-3.5 w-3.5" /> Logged Miles ({d.monthly_logs.length}
-                        )
+                        <Icon.Clock className="h-3.5 w-3.5" /> Logged Miles ({logsCount})
                       </button>
                     )}
                     <button
@@ -6355,8 +6400,8 @@ function MileageSubmissionCard({
   const driver = drivers.find(
     (d) =>
       (submission.driver_id && d.id === submission.driver_id) ||
-      d.registration.replace(/\s+/g, "").toUpperCase() ===
-        submission.registration.replace(/\s+/g, "").toUpperCase(),
+      (d.registration || "").replace(/\s+/g, "").toUpperCase() ===
+        (submission.registration || "").replace(/\s+/g, "").toUpperCase(),
   );
 
   const [confirmedInput, setConfirmedInput] = useState<string>(

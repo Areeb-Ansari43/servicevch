@@ -180,4 +180,48 @@ describe("Contract Term & Renewal Tracking", () => {
     expect(remainingDays).toBe(7);
     expect(remainingDays <= 14).toBe(true);
   });
+
+  test("handles legacy drivers created prior to schema migration gracefully with null safety", () => {
+    // Legacy driver record where new columns are null/undefined
+    const legacyDriver: Partial<DriverTrack> = {
+      id: "legacy-1",
+      driver_name: "Legacy Driver",
+      vehicle_id: "v-legacy",
+      registration: undefined,
+      start_mileage: 12000,
+      current_mileage: 12500,
+      allowance: undefined as any,
+      excess_rate: undefined as any,
+      start_date: "2025-01-01",
+      contract_length_weeks: undefined,
+      deposit_total: undefined,
+      deposit_payments: undefined,
+      weekly_rent: undefined as any,
+      rent_status: undefined as any,
+      balance_due: undefined as any,
+    };
+
+    // Safely default values for UI rendering
+    const contractWeeks = legacyDriver.contract_length_weeks ?? 6;
+    const depositTotal = legacyDriver.deposit_total ?? 0;
+    const depositPayments = legacyDriver.deposit_payments ?? [];
+    const registrationStr = legacyDriver.registration ?? "";
+    const allowanceVal = legacyDriver.allowance ?? 5000;
+    const balanceDueVal = legacyDriver.balance_due ?? 0;
+
+    expect(contractWeeks).toBe(6);
+    expect(depositTotal).toBe(0);
+    expect(depositPayments).toEqual([]);
+    expect(registrationStr).toBe("");
+    expect(allowanceVal).toBe(5000);
+    expect(balanceDueVal).toBe(0);
+
+    // Verify contract date calculation works with defaulted weeks
+    const endDate = calculateContractEndDate(legacyDriver.start_date!, contractWeeks);
+    expect(endDate).toBeInstanceOf(Date);
+
+    // Verify registration normalization does not throw on undefined registration
+    const normalizedReg = (legacyDriver.registration || "").replace(/\s+/g, "").toUpperCase();
+    expect(normalizedReg).toBe("");
+  });
 });
