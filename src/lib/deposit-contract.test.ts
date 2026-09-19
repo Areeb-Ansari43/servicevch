@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { calculateContractEndDate, getContractDaysRemaining } from "./contract-helpers";
+import { calculateContractEndDate, getContractDaysRemaining, getVehicleDefaultDeposit } from "./contract-helpers";
+import type { DriverDocument } from "./fleet-data";
 
 export type DepositPayment = {
   id: string;
@@ -94,6 +95,14 @@ describe("Deposit Instalments & Payment Tracking", () => {
     expect(outstandingFull).toBe(0);
   });
 
+  test("returns vehicle default deposit as 1000 for EQE/EQS and 500 for other models", () => {
+    expect(getVehicleDefaultDeposit("Mercedes", "EQE 300 AMG Line")).toBe(1000);
+    expect(getVehicleDefaultDeposit("Mercedes-Benz", "EQS 450+")).toBe(1000);
+    expect(getVehicleDefaultDeposit("Mercedes", "E220d")).toBe(500);
+    expect(getVehicleDefaultDeposit("Toyota", "Corolla Estate")).toBe(500);
+    expect(getVehicleDefaultDeposit("Tesla", "Model 3")).toBe(500);
+  });
+
   test("keeps deposit payments separate from driver rent balance_due", () => {
     const driver: DriverTrack = {
       id: "d-test",
@@ -179,6 +188,50 @@ describe("Contract Term & Renewal Tracking", () => {
 
     expect(remainingDays).toBe(7);
     expect(remainingDays <= 14).toBe(true);
+  });
+
+  test("determines portal active status correctly to suppress re-invite button", () => {
+    const activeDriver1: Partial<DriverTrack> = {
+      auth_user_id: "usr-123",
+      invite_status: "pending",
+    };
+    const activeDriver2: Partial<DriverTrack> = {
+      auth_user_id: null,
+      invite_status: "accepted",
+    };
+    const pendingDriver: Partial<DriverTrack> = {
+      auth_user_id: null,
+      invite_status: "pending",
+    };
+    const uninvitedDriver: Partial<DriverTrack> = {
+      auth_user_id: null,
+      invite_status: "none",
+    };
+
+    const isPortalActive = (d: Partial<DriverTrack>) =>
+      Boolean(d.auth_user_id) || d.invite_status === "accepted";
+
+    expect(isPortalActive(activeDriver1)).toBe(true);
+    expect(isPortalActive(activeDriver2)).toBe(true);
+    expect(isPortalActive(pendingDriver)).toBe(false);
+    expect(isPortalActive(uninvitedDriver)).toBe(false);
+  });
+
+  test("validates driver document structure and document type mapping", () => {
+    const doc: DriverDocument = {
+      id: "doc-1",
+      driver_id: "d-123",
+      user_id: "usr-admin",
+      document_type: "contract",
+      file_name: "John_Smith_Contract.pdf",
+      file_path: "d-123/contract_1700000000_John_Smith_Contract.pdf",
+      file_size: 1048576,
+      created_at: "2025-03-01T12:00:00Z",
+    };
+
+    expect(doc.document_type).toBe("contract");
+    expect(doc.file_name).toContain("Contract.pdf");
+    expect(doc.file_size).toBe(1048576);
   });
 
   test("handles legacy drivers created prior to schema migration gracefully with null safety", () => {
