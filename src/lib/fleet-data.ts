@@ -1166,20 +1166,12 @@ export function useFleetData() {
         }),
       );
 
-      let { error: chargeErr } = await supabase.from("driver_charges").insert({
+      const { error: chargeErr } = await supabase.from("driver_charges").insert({
         driver_id: driverId,
         amount,
         description,
         ...(userId ? { user_id: userId } : {}),
       } as any);
-
-      if (chargeErr && /user_id/i.test(chargeErr.message)) {
-        ({ error: chargeErr } = await supabase.from("driver_charges").insert({
-          driver_id: driverId,
-          amount,
-          description,
-        } as any));
-      }
 
       if (chargeErr) throw new Error(chargeErr.message);
 
