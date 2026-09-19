@@ -3,6 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { getNextMotDate, getPcoExpiryDate } from "@/lib/vehicle-date-fields";
 import { PDF_FLEET } from "@/lib/pdf-fleet";
 import { logAuditEvent } from "@/lib/audit-logger";
+import { getVehicleDefaultDeposit } from "@/lib/contract-helpers";
+
+export { getVehicleDefaultDeposit };
 
 export type Vehicle = {
   id: string;
@@ -17,6 +20,18 @@ export type Vehicle = {
   next_mot_date: string;
   insurance_expiry: string;
   notes: string;
+  default_deposit?: number;
+};
+
+export type DriverDocument = {
+  id: string;
+  driver_id: string;
+  user_id?: string | null;
+  document_type: "contract" | "permission_letter" | "vehicle_schedule" | "pco_licence";
+  file_name: string;
+  file_path: string;
+  file_size?: number | null;
+  created_at: string;
 };
 
 export type ServiceRecord = {
@@ -161,6 +176,7 @@ const vFromRow = (r: any): Vehicle => ({
   next_mot_date: getNextMotDate(r),
   insurance_expiry: getPcoExpiryDate(r),
   notes: r.notes ?? "",
+  default_deposit: Number(r.default_deposit ?? getVehicleDefaultDeposit(r.make, r.model)),
 });
 
 const sFromRow = (r: any): ServiceRecord => ({
@@ -1090,6 +1106,48 @@ export function useFleetData() {
     [drivers, refresh],
   );
 
+  const toggleDepositPaidStatus = useCallback(
+    async (driverId: string, isPaid: boolean, depositTotal: number) => {
+      const targetDriver = drivers.find((item) => item.id === driverId);
+      if (!targetDriver) return;
+
+      if (isPaid) {
+        const paidSoFar = (targetDriver.deposit_payments || []).reduce(
+          (sum, p) => sum + Number(p.amount || 0),
+          0,
+        );
+        const outstanding = Math.max(0, depositTotal - paidSoFar);
+
+        if (outstanding > 0) {
+          await addDepositPayment(driverId, outstanding, "Deposit marked fully paid");
+        }
+      } else {
+        setDrivers((prev) =>
+          prev.map((item) =>
+            item.id === driverId ? { ...item, deposit_payments: [] } : item,
+          ),
+        );
+
+        await supabase.from("deposit_payments").delete().eq("driver_id", driverId);
+
+        await logAuditEvent({
+          actionType: "deposit_payment_cleared",
+          targetTable: "deposit_payments",
+          targetId: driverId,
+          details: {
+            driver_id: driverId,
+            driver_name: targetDriver.driver_name,
+            reg: targetDriver.registration,
+            action: "Toggled deposit back to unpaid",
+          },
+        });
+
+        await refresh();
+      }
+    },
+    [drivers, addDepositPayment, refresh],
+  );
+
   const toggleRentStatus = useCallback(
     async (driverId: string, currentStatus: "paid" | "unpaid", weeklyRent: number, currentBalance: number) => {
       const newStatus = currentStatus === "paid" ? "unpaid" : "paid";
@@ -1353,6 +1411,7 @@ export function useFleetData() {
     addDriver,
     editDriver,
     addDepositPayment,
+    toggleDepositPaidStatus,
     toggleRentStatus,
     addDriverCharge,
     sendDriverReminder,
