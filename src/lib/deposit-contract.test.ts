@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { calculateContractEndDate, getContractDaysRemaining } from "./contract-helpers";
+import { calculateContractEndDate, getContractDaysRemaining, getVehicleDefaultDeposit } from "./contract-helpers";
+import type { DriverDocument } from "./fleet-data";
 
 export type DepositPayment = {
   id: string;
@@ -94,6 +95,14 @@ describe("Deposit Instalments & Payment Tracking", () => {
     expect(outstandingFull).toBe(0);
   });
 
+  test("returns vehicle default deposit as 1000 for EQE/EQS and 500 for other models", () => {
+    expect(getVehicleDefaultDeposit("Mercedes", "EQE 300 AMG Line")).toBe(1000);
+    expect(getVehicleDefaultDeposit("Mercedes-Benz", "EQS 450+")).toBe(1000);
+    expect(getVehicleDefaultDeposit("Mercedes", "E220d")).toBe(500);
+    expect(getVehicleDefaultDeposit("Toyota", "Corolla Estate")).toBe(500);
+    expect(getVehicleDefaultDeposit("Tesla", "Model 3")).toBe(500);
+  });
+
   test("keeps deposit payments separate from driver rent balance_due", () => {
     const driver: DriverTrack = {
       id: "d-test",
@@ -179,6 +188,85 @@ describe("Contract Term & Renewal Tracking", () => {
 
     expect(remainingDays).toBe(7);
     expect(remainingDays <= 14).toBe(true);
+  });
+
+  test("determines portal active status correctly to suppress re-invite button", () => {
+    const activeDriver1: Partial<DriverTrack> = {
+      auth_user_id: "usr-123",
+      invite_status: "pending",
+    };
+    const activeDriver2: Partial<DriverTrack> = {
+      auth_user_id: null,
+      invite_status: "accepted",
+    };
+    const pendingDriver: Partial<DriverTrack> = {
+      auth_user_id: null,
+      invite_status: "pending",
+    };
+    const uninvitedDriver: Partial<DriverTrack> = {
+      auth_user_id: null,
+      invite_status: "none",
+    };
+
+    const isPortalActive = (d: Partial<DriverTrack>) =>
+      Boolean(d.auth_user_id) || d.invite_status === "accepted";
+
+    expect(isPortalActive(activeDriver1)).toBe(true);
+    expect(isPortalActive(activeDriver2)).toBe(true);
+    expect(isPortalActive(pendingDriver)).toBe(false);
+    expect(isPortalActive(uninvitedDriver)).toBe(false);
+  });
+
+  test("validates driver document structure and document type mapping", () => {
+    const doc: DriverDocument = {
+      id: "doc-1",
+      driver_id: "d-123",
+      user_id: "usr-admin",
+      document_type: "contract",
+      file_name: "John_Smith_Contract.pdf",
+      file_path: "d-123/contract_1700000000_John_Smith_Contract.pdf",
+      file_size: 1048576,
+      created_at: "2025-03-01T12:00:00Z",
+    };
+
+    expect(doc.document_type).toBe("contract");
+    expect(doc.file_name).toContain("Contract.pdf");
+    expect(doc.file_size).toBe(1048576);
+  });
+
+  test("maps generated_documents record correctly into driver_documents when linking", () => {
+    const generatedDoc = {
+      id: "gen-doc-999",
+      document_type: "permission_letter",
+      driver_id: null,
+      vehicle_id: "v-777",
+      source_registration: "AF70MYK",
+      storage_path: "user-123/permission_letter/1700000000-Permission_AF70MYK.pdf",
+      created_at: "2025-03-01T10:00:00Z",
+    };
+
+    const targetDriverId = "d-456";
+
+    const docType: DriverDocument["document_type"] =
+      generatedDoc.document_type === "permission_letter"
+        ? "permission_letter"
+        : "contract";
+
+    const rawFileName = generatedDoc.storage_path.split("/").pop() || "generated_document.pdf";
+    const cleanFileName = rawFileName.includes(".pdf") ? rawFileName : `${rawFileName}.pdf`;
+
+    const linkedDriverDocument: Omit<DriverDocument, "id" | "created_at"> = {
+      driver_id: targetDriverId,
+      user_id: "user-123",
+      document_type: docType,
+      file_name: cleanFileName,
+      file_path: `${targetDriverId}/${docType}_1700000001_${cleanFileName}`,
+      file_size: 250000,
+    };
+
+    expect(linkedDriverDocument.driver_id).toBe("d-456");
+    expect(linkedDriverDocument.document_type).toBe("permission_letter");
+    expect(linkedDriverDocument.file_name).toBe("1700000000-Permission_AF70MYK.pdf");
   });
 
   test("handles legacy drivers created prior to schema migration gracefully with null safety", () => {

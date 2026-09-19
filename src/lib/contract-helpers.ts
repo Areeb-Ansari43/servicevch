@@ -1,3 +1,10 @@
+export function getVehicleDefaultDeposit(make?: string | null, model?: string | null): number {
+  if (!make && !model) return 500;
+  const combined = `${make ?? ""} ${model ?? ""}`.toLowerCase();
+  if (/eqe|eqs/i.test(combined)) return 1000;
+  return 500;
+}
+
 export function calculateContractEndDate(
   startDateStr?: string | null,
   contractLengthWeeks: number = 6,
