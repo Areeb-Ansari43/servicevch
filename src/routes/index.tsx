@@ -4923,16 +4923,6 @@ function AddDriverModal({
   );
 }
 
-type GeneratedDocumentRow = {
-  id: string;
-  document_type: string;
-  driver_id: string | null;
-  vehicle_id: string | null;
-  source_registration: string | null;
-  storage_path: string;
-  created_at: string;
-};
-
 function DriverDocumentsSection({
   driver,
   toast,
@@ -4944,9 +4934,9 @@ function DriverDocumentsSection({
   const [loading, setLoading] = useState(true);
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
 
-  const [generatedDocs, setGeneratedDocs] = useState<GeneratedDocumentRow[]>([]);
-  const [selectedGenDocId, setSelectedGenDocId] = useState<string>("");
-  const [attachingGenDoc, setAttachingGenDoc] = useState(false);
+  const [unlinkedDocs, setUnlinkedDocs] = useState<DriverDocument[]>([]);
+  const [selectedUnlinkedDocId, setSelectedUnlinkedDocId] = useState<string>("");
+  const [attachingDoc, setAttachingDoc] = useState(false);
 
   const docTypes: { type: DriverDocument["document_type"]; label: string }[] = [
     { type: "contract", label: "Contract" },
@@ -4972,96 +4962,59 @@ function DriverDocumentsSection({
     }
   }, [driver.id]);
 
-  const fetchGeneratedDocs = useCallback(async () => {
+  const fetchUnlinkedDocs = useCallback(async () => {
     try {
       const { data, error } = await supabase
-        .from("generated_documents" as never)
-        .select("id, document_type, driver_id, vehicle_id, source_registration, storage_path, created_at")
+        .from("driver_documents")
+        .select("*")
+        .is("driver_id", null)
         .order("created_at", { ascending: false })
         .limit(20);
       if (!error && data) {
-        setGeneratedDocs(data as GeneratedDocumentRow[]);
+        setUnlinkedDocs((data as any) || []);
       }
     } catch {
-      setGeneratedDocs([]);
+      setUnlinkedDocs([]);
     }
   }, []);
 
   useEffect(() => {
     fetchDocs();
-    fetchGeneratedDocs();
-  }, [fetchDocs, fetchGeneratedDocs]);
+    fetchUnlinkedDocs();
+  }, [fetchDocs, fetchUnlinkedDocs]);
 
   const handleAttachGeneratedDoc = async () => {
-    if (!selectedGenDocId) return;
-    const docToAttach = generatedDocs.find((d) => d.id === selectedGenDocId);
+    if (!selectedUnlinkedDocId) return;
+    const docToAttach = unlinkedDocs.find((d) => d.id === selectedUnlinkedDocId);
     if (!docToAttach) return;
 
-    setAttachingGenDoc(true);
+    setAttachingDoc(true);
     try {
-      const { data: userData } = await supabase.auth.getUser();
-      const userId = userData.user?.id || null;
-
-      // 1. Update driver_id on generated_documents table
-      await supabase
-        .from("generated_documents" as never)
-        .update({ driver_id: driver.id } as never)
+      // Associate unlinked document with the current driver
+      const { error } = await supabase
+        .from("driver_documents")
+        .update({ driver_id: driver.id } as any)
         .eq("id", docToAttach.id);
 
-      const docType: DriverDocument["document_type"] =
+      if (error) throw error;
+
+      const typeLabel =
         docToAttach.document_type === "permission_letter"
-          ? "permission_letter"
-          : "contract";
+          ? "Permission Letter"
+          : docToAttach.document_type === "contract"
+            ? "Contract"
+            : docToAttach.document_type === "vehicle_schedule"
+              ? "Vehicle Schedule"
+              : "PCO Licence";
 
-      const rawFileName = docToAttach.storage_path.split("/").pop() || "generated_document.pdf";
-      const cleanFileName = rawFileName.includes(".pdf") ? rawFileName : `${rawFileName}.pdf`;
-
-      let targetFilePath = docToAttach.storage_path;
-      let fileSize: number | null = null;
-
-      // Copy PDF from 'generations-documents' to 'driver-documents' bucket so it appears in portal
-      try {
-        const { data: blob, error: downloadErr } = await supabase.storage
-          .from("generations-documents")
-          .download(docToAttach.storage_path);
-
-        if (!downloadErr && blob) {
-          fileSize = blob.size;
-          const safeName = cleanFileName.replace(/[^a-zA-Z0-9.-]/g, "_");
-          const newPath = `${driver.id}/${docType}_${Date.now()}_${safeName}`;
-
-          const { error: uploadErr } = await supabase.storage
-            .from("driver-documents")
-            .upload(newPath, blob, { contentType: "application/pdf", upsert: true });
-
-          if (!uploadErr) {
-            targetFilePath = newPath;
-          }
-        }
-      } catch {
-        // Fallback
-      }
-
-      // 2. Insert into driver_documents
-      const { error: dbErr } = await supabase.from("driver_documents").insert({
-        driver_id: driver.id,
-        user_id: userId,
-        document_type: docType,
-        file_name: cleanFileName,
-        file_path: targetFilePath,
-        file_size: fileSize,
-      } as any);
-
-      if (dbErr) throw dbErr;
-
-      toast(`Linked ${docType === "permission_letter" ? "Permission Letter" : "Contract"} to ${driver.driver_name}`);
-      setSelectedGenDocId("");
+      toast(`Linked ${typeLabel} (${docToAttach.file_name}) to ${driver.driver_name}`);
+      setSelectedUnlinkedDocId("");
       await fetchDocs();
-      await fetchGeneratedDocs();
+      await fetchUnlinkedDocs();
     } catch (err: any) {
-      toast(err?.message || "Failed to attach generated document", "error");
+      toast(err?.message || "Failed to attach document", "error");
     } finally {
-      setAttachingGenDoc(false);
+      setAttachingDoc(false);
     }
   };
 
@@ -5136,35 +5089,41 @@ function DriverDocumentsSection({
           <span className="text-[10px] text-[#ff8a3d] font-normal">VCHLetter sync</span>
         </div>
         <p className="text-[11px] text-[#8b95a8]">
-          Attach contracts or permission letters created in the VCHLetter tool directly to this driver.
+          Attach unlinked contracts or permission letters created in the VCHLetter tool directly to this driver.
         </p>
 
         <div className="flex flex-col sm:flex-row gap-2 pt-1">
           <select
-            value={selectedGenDocId}
-            onChange={(e) => setSelectedGenDocId(e.target.value)}
-            disabled={attachingGenDoc || generatedDocs.length === 0}
+            value={selectedUnlinkedDocId}
+            onChange={(e) => setSelectedUnlinkedDocId(e.target.value)}
+            disabled={attachingDoc || unlinkedDocs.length === 0}
             className="flex-1 rounded border bg-[#142131] px-2.5 py-1.5 text-xs text-white focus:border-[#ff6a00] focus:outline-none"
             style={{ borderColor: T.borderSoft }}
           >
             <option value="">
-              {generatedDocs.length === 0
-                ? "No generated letters found"
+              {unlinkedDocs.length === 0
+                ? "No unlinked generated letters found"
                 : "Select a generated PDF letter..."}
             </option>
-            {generatedDocs.map((doc) => {
-              const typeLabel = doc.document_type === "permission_letter" ? "Permission Letter" : "Contract";
+            {unlinkedDocs.map((doc) => {
+              const typeLabel =
+                doc.document_type === "permission_letter"
+                  ? "Permission Letter"
+                  : doc.document_type === "contract"
+                    ? "Contract"
+                    : doc.document_type === "vehicle_schedule"
+                      ? "Vehicle Schedule"
+                      : "PCO Licence";
+
               const dateStr = new Date(doc.created_at).toLocaleDateString("en-GB", {
                 day: "numeric",
                 month: "short",
                 hour: "2-digit",
                 minute: "2-digit",
               });
-              const regRef = doc.source_registration ? ` · Reg: ${doc.source_registration}` : "";
-              const fileNameRef = doc.storage_path.split("/").pop() || "";
               return (
                 <option key={doc.id} value={doc.id}>
-                  {typeLabel} ({dateStr}){regRef} — {fileNameRef}
+                  {typeLabel} ({dateStr}) — {doc.file_name}
                 </option>
               );
             })}
@@ -5172,11 +5131,11 @@ function DriverDocumentsSection({
 
           <button
             type="button"
-            disabled={!selectedGenDocId || attachingGenDoc}
+            disabled={!selectedUnlinkedDocId || attachingDoc}
             onClick={handleAttachGeneratedDoc}
             className="rounded border border-[#ff6a00]/50 bg-[#ff6a00] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#e05d00] disabled:opacity-50 transition-colors shrink-0"
           >
-            {attachingGenDoc ? "Attaching..." : "Attach Letter"}
+            {attachingDoc ? "Attaching..." : "Attach Letter"}
           </button>
         </div>
       </div>
