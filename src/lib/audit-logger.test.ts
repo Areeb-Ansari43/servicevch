@@ -95,4 +95,79 @@ describe("Audit Logging & Event Formatting", () => {
     const formatted = items.join(" · ");
     expect(formatted).toBe("Driver: Sarah Jenkins · Reg: LK68 XYZ · Rent: UNPAID ➔ PAID");
   });
+
+  test("handles null, undefined, and non-string fields safely without throwing exceptions", () => {
+    const corruptedLogs: Partial<AuditLogEntry>[] = [
+      {
+        id: "c1",
+        actor: null as any,
+        action_type: null as any,
+        target_table: "driver_tracks",
+        target_id: undefined as any,
+        details: null,
+        created_at: null as any,
+      },
+      {
+        id: "c2",
+        actor: "system@virtualcarhire.com",
+        action_type: "vehicle_added",
+        target_table: "vehicles",
+        target_id: 12345 as any, // non-string target_id
+        details: { reg: 1234, previous_status: null } as any, // non-string reg
+        created_at: "invalid-date",
+      },
+    ];
+
+    const safeFilterLogs = (query: string, category: string) => {
+      return corruptedLogs.filter((log) => {
+        if (!log) return false;
+        const actionType = log.action_type || "";
+
+        if (category !== "all") {
+          if (category === "driver" && !actionType.startsWith("driver")) return false;
+          if (category === "vehicle" && !actionType.startsWith("vehicle")) return false;
+        }
+
+        if (query) {
+          const q = query.toLowerCase();
+          const actorMatch = log.actor ? String(log.actor).toLowerCase().includes(q) : false;
+          const actionMatch = actionType.toLowerCase().includes(q);
+          const targetMatch = log.target_id ? String(log.target_id).toLowerCase().includes(q) : false;
+          const detailsStr = typeof log.details === "object" && log.details !== null
+            ? JSON.stringify(log.details).toLowerCase()
+            : String(log.details || "").toLowerCase();
+          return actorMatch || actionMatch || targetMatch || detailsStr.includes(q);
+        }
+
+        return true;
+      });
+    };
+
+    expect(() => safeFilterLogs("", "driver")).not.toThrow();
+    expect(safeFilterLogs("", "driver")).toHaveLength(0);
+    expect(safeFilterLogs("", "vehicle")).toHaveLength(1);
+    expect(safeFilterLogs("12345", "all")).toHaveLength(1);
+
+    const safeFormatDetails = (details: any) => {
+      if (!details || typeof details !== "object" || Array.isArray(details) || Object.keys(details).length === 0) {
+        return "—";
+      }
+
+      const items: string[] = [];
+      if (details.driver_name) items.push(`Driver: ${String(details.driver_name)}`);
+      if (details.reg) items.push(`Reg: ${String(details.reg).toUpperCase()}`);
+      if (details.amount !== undefined && details.amount !== null) items.push(`Amount: £${details.amount}`);
+      if (details.previous_status && details.new_status) {
+        items.push(`Rent: ${String(details.previous_status).toUpperCase()} ➔ ${String(details.new_status).toUpperCase()}`);
+      }
+
+      if (items.length > 0) return items.join(" · ");
+      return JSON.stringify(details);
+    };
+
+    expect(safeFormatDetails(null)).toBe("—");
+    expect(safeFormatDetails(undefined)).toBe("—");
+    expect(safeFormatDetails({ reg: "ab12 cde" })).toBe("Reg: AB12 CDE");
+    expect(safeFormatDetails({ reg: 1234 })).toBe("Reg: 1234");
+  });
 });
