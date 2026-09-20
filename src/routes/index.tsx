@@ -5022,6 +5022,9 @@ function DriverDocumentsSection({
     }
   }, [driver.id]);
 
+  useEffect(() => {
+    fetchDocs();
+  }, [fetchDocs]);
   const fetchUnlinkedDocs = useCallback(async () => {
     try {
       const { data, error } = await supabase
