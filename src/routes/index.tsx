@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -1048,6 +1048,7 @@ function AuditLogsView({
 }) {
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
@@ -1055,20 +1056,27 @@ function AuditLogsView({
   const loadLogs = useCallback(async () => {
     try {
       setLoading(true);
+      setFetchError(null);
       const { data, error } = await supabase
         .from("audit_logs")
         .select("*")
         .order("created_at", { ascending: false });
 
-      if (error) throw new Error(error.message);
+      if (error) {
+        console.warn("[AuditLogs] Query warning:", error.message);
+        setFetchError(error.message);
+        setLogs([]);
+        return;
+      }
       setLogs((data as any) || []);
     } catch (err: any) {
-      console.error("Error loading audit logs:", err);
-      toast(err?.message || "Failed to load audit logs", "error");
+      console.error("[AuditLogs] Exception loading audit logs:", err);
+      setFetchError(err?.message || "Failed to load audit logs");
+      setLogs([]);
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, []);
 
   useEffect(() => {
     loadLogs();
@@ -1091,36 +1099,43 @@ function AuditLogsView({
 
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
+      if (!log) return false;
+      const actionType = log.action_type || "";
+
       // Category filter
       if (categoryFilter !== "all") {
-        if (categoryFilter === "driver" && !log.action_type.startsWith("driver")) return false;
-        if (categoryFilter === "rent" && log.action_type !== "rent_updated") return false;
-        if (categoryFilter === "charge" && log.action_type !== "charge_added") return false;
-        if (categoryFilter === "invite" && log.action_type !== "invite_sent") return false;
-        if (categoryFilter === "vehicle" && !log.action_type.startsWith("vehicle")) return false;
+        if (categoryFilter === "driver" && !actionType.startsWith("driver")) return false;
+        if (categoryFilter === "rent" && actionType !== "rent_updated") return false;
+        if (categoryFilter === "charge" && actionType !== "charge_added") return false;
+        if (categoryFilter === "invite" && actionType !== "invite_sent") return false;
+        if (categoryFilter === "vehicle" && !actionType.startsWith("vehicle")) return false;
       }
 
       // Date filter
       if (dateFilter !== "all" && log.created_at) {
         const logDate = new Date(log.created_at).getTime();
-        const now = Date.now();
-        if (dateFilter === "today") {
-          const startOfToday = new Date().setHours(0, 0, 0, 0);
-          if (logDate < startOfToday) return false;
-        } else if (dateFilter === "7days") {
-          if (now - logDate > 7 * 24 * 60 * 60 * 1000) return false;
-        } else if (dateFilter === "30days") {
-          if (now - logDate > 30 * 24 * 60 * 60 * 1000) return false;
+        if (!isNaN(logDate)) {
+          const now = Date.now();
+          if (dateFilter === "today") {
+            const startOfToday = new Date().setHours(0, 0, 0, 0);
+            if (logDate < startOfToday) return false;
+          } else if (dateFilter === "7days") {
+            if (now - logDate > 7 * 24 * 60 * 60 * 1000) return false;
+          } else if (dateFilter === "30days") {
+            if (now - logDate > 30 * 24 * 60 * 60 * 1000) return false;
+          }
         }
       }
 
       // Text search query
       if (search.trim()) {
         const q = search.toLowerCase();
-        const actorMatch = log.actor?.toLowerCase().includes(q);
-        const actionMatch = log.action_type?.toLowerCase().includes(q);
-        const targetMatch = log.target_id?.toLowerCase().includes(q);
-        const detailsStr = JSON.stringify(log.details || {}).toLowerCase();
+        const actorMatch = log.actor ? String(log.actor).toLowerCase().includes(q) : false;
+        const actionMatch = actionType.toLowerCase().includes(q);
+        const targetMatch = log.target_id ? String(log.target_id).toLowerCase().includes(q) : false;
+        const detailsStr = typeof log.details === "object" && log.details !== null
+          ? JSON.stringify(log.details).toLowerCase()
+          : String(log.details || "").toLowerCase();
         const detailsMatch = detailsStr.includes(q);
         return actorMatch || actionMatch || targetMatch || detailsMatch;
       }
@@ -1129,11 +1144,12 @@ function AuditLogsView({
     });
   }, [logs, categoryFilter, dateFilter, search]);
 
-  const actionBadge = (actionType: string) => {
+  const actionBadge = (actionType?: string | null) => {
     let colorCls = "border-zinc-500/30 bg-zinc-500/10 text-zinc-300";
-    let label = actionType;
+    const safeType = actionType || "unknown";
+    let label = safeType;
 
-    switch (actionType) {
+    switch (safeType) {
       case "driver_created":
         colorCls = "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
         label = "Driver Created";
@@ -1179,18 +1195,18 @@ function AuditLogsView({
     );
   };
 
-  const formatDetails = (details: Record<string, any> | null) => {
-    if (!details || Object.keys(details).length === 0) {
+  const formatDetails = (details: Record<string, any> | null | undefined) => {
+    if (!details || typeof details !== "object" || Array.isArray(details) || Object.keys(details).length === 0) {
       return <span className="text-zinc-500">—</span>;
     }
 
     const items: string[] = [];
-    if (details.driver_name) items.push(`Driver: ${details.driver_name}`);
-    if (details.reg) items.push(`Reg: ${details.reg.toUpperCase()}`);
-    if (details.amount !== undefined) items.push(`Amount: £${details.amount}`);
-    if (details.description) items.push(`Description: "${details.description}"`);
+    if (details.driver_name) items.push(`Driver: ${String(details.driver_name)}`);
+    if (details.reg) items.push(`Reg: ${String(details.reg).toUpperCase()}`);
+    if (details.amount !== undefined && details.amount !== null) items.push(`Amount: £${details.amount}`);
+    if (details.description) items.push(`Description: "${String(details.description)}"`);
     if (details.previous_status && details.new_status) {
-      items.push(`Rent: ${details.previous_status.toUpperCase()} ➔ ${details.new_status.toUpperCase()}`);
+      items.push(`Rent: ${String(details.previous_status).toUpperCase()} ➔ ${String(details.new_status).toUpperCase()}`);
     }
     if (details.make || details.model) items.push(`Vehicle: ${details.make || ""} ${details.model || ""}`.trim());
 
@@ -1198,7 +1214,11 @@ function AuditLogsView({
       return <span className="text-xs font-medium text-[#c8d0dd]">{items.join(" · ")}</span>;
     }
 
-    return <span className="font-mono text-[11px] text-[#8b95a8]">{JSON.stringify(details)}</span>;
+    try {
+      return <span className="font-mono text-[11px] text-[#8b95a8]">{JSON.stringify(details)}</span>;
+    } catch {
+      return <span className="text-zinc-500">—</span>;
+    }
   };
 
   return (
@@ -1289,6 +1309,11 @@ function AuditLogsView({
       >
         {loading ? (
           <div className="p-12 text-center text-xs text-[#9aa5b8]">Loading audit log records…</div>
+        ) : fetchError ? (
+          <div className="p-8 text-center text-xs text-[#9aa5b8]">
+            <div className="text-amber-400 font-semibold mb-1">Audit Logs Currently Unavailable</div>
+            <div className="text-[11px] text-[#8b95a8]">{fetchError}</div>
+          </div>
         ) : filteredLogs.length === 0 ? (
           <div className="p-12 text-center text-xs text-[#9aa5b8]">
             No audit log entries matching your search criteria.
@@ -1308,14 +1333,16 @@ function AuditLogsView({
                 {filteredLogs.map((log) => (
                   <tr key={log.id} className="transition-colors hover:bg-white/[0.02]">
                     <td className="whitespace-nowrap px-4 py-3 text-[#8b95a8]">
-                      {new Date(log.created_at).toLocaleString("en-GB", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        second: "2-digit",
-                      })}
+                      {log.created_at && !isNaN(new Date(log.created_at).getTime())
+                        ? new Date(log.created_at).toLocaleString("en-GB", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            second: "2-digit",
+                          })
+                        : "—"}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 font-medium text-white">
                       {log.actor || "Fleet Admin"}
@@ -1560,11 +1587,11 @@ export function FleetShell({ view }: { view: View }) {
     };
   }, [navigate]);
 
-  const toast = (msg: string, type: Toast["type"] = "success") => {
+  const toast = useCallback((msg: string, type: Toast["type"] = "success") => {
     const id = uid();
     setToasts((t) => [...t, { id, msg, type }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 10000);
-  };
+  }, []);
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -1726,7 +1753,12 @@ export function FleetShell({ view }: { view: View }) {
           ) : view === "settings" ? (
             <UserSettingsView account={account} toast={toast} />
           ) : view === "audit-logs" ? (
-            <AuditLogsView toast={toast} />
+            <RouteErrorBoundary
+              fallbackTitle="Audit Logs Error"
+              fallbackMessage="An error occurred while loading system audit logs."
+            >
+              <AuditLogsView toast={toast} />
+            </RouteErrorBoundary>
           ) : null}
         </main>
       </div>
