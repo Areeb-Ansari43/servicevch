@@ -234,6 +234,41 @@ describe("Contract Term & Renewal Tracking", () => {
     expect(doc.file_size).toBe(1048576);
   });
 
+  test("maps generated_documents record correctly into driver_documents when linking", () => {
+    const generatedDoc = {
+      id: "gen-doc-999",
+      document_type: "permission_letter",
+      driver_id: null,
+      vehicle_id: "v-777",
+      source_registration: "AF70MYK",
+      storage_path: "user-123/permission_letter/1700000000-Permission_AF70MYK.pdf",
+      created_at: "2025-03-01T10:00:00Z",
+    };
+
+    const targetDriverId = "d-456";
+
+    const docType: DriverDocument["document_type"] =
+      generatedDoc.document_type === "permission_letter"
+        ? "permission_letter"
+        : "contract";
+
+    const rawFileName = generatedDoc.storage_path.split("/").pop() || "generated_document.pdf";
+    const cleanFileName = rawFileName.includes(".pdf") ? rawFileName : `${rawFileName}.pdf`;
+
+    const linkedDriverDocument: Omit<DriverDocument, "id" | "created_at"> = {
+      driver_id: targetDriverId,
+      user_id: "user-123",
+      document_type: docType,
+      file_name: cleanFileName,
+      file_path: `${targetDriverId}/${docType}_1700000001_${cleanFileName}`,
+      file_size: 250000,
+    };
+
+    expect(linkedDriverDocument.driver_id).toBe("d-456");
+    expect(linkedDriverDocument.document_type).toBe("permission_letter");
+    expect(linkedDriverDocument.file_name).toBe("1700000000-Permission_AF70MYK.pdf");
+  });
+
   test("handles legacy drivers created prior to schema migration gracefully with null safety", () => {
     // Legacy driver record where new columns are null/undefined
     const legacyDriver: Partial<DriverTrack> = {
