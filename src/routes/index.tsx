@@ -4,12 +4,14 @@ import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import {
   useFleetData,
+  getVehicleDefaultDeposit,
   getVehicleWeeklyPrice,
   calculateNextPaymentDueDate,
   type Vehicle,
   type ServiceRecord,
   type DriverTrack,
   type MileageSubmission,
+  type DriverDocument,
 } from "@/lib/fleet-data";
 import { simplifyVehicleName, vehicleArtworkPath } from "@/lib/vehicle-display";
 import { exportServiceHistoryPdf } from "@/lib/pdf-export";
@@ -4290,8 +4292,8 @@ function ServiceDetailsModal({
 
 /* ---------------- Drivers ---------------- */
 function portalStatusBadge(driver: DriverTrack) {
-  const status = driver.invite_status ?? "none";
-  if (status === "accepted") {
+  const isActive = Boolean(driver.auth_user_id) || driver.invite_status === "accepted";
+  if (isActive) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
         <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
@@ -4299,6 +4301,7 @@ function portalStatusBadge(driver: DriverTrack) {
       </span>
     );
   }
+  const status = driver.invite_status ?? "none";
   if (status === "pending") {
     return (
       <span className="inline-flex items-center gap-1 rounded-full border border-sky-400/30 bg-sky-400/10 px-2 py-0.5 text-[10px] font-bold text-sky-300">
@@ -4332,7 +4335,8 @@ function DriversView({
   );
   const [statusFilter, setStatusFilter] = useState("all");
   const [addModalOpen, setAddModalOpen] = useState(false);
-  const [editingDriver, setEditingDriver] = useState<DriverTrack | null>(null);
+  const [profileDriver, setProfileDriver] = useState<DriverTrack | null>(null);
+  const [balanceDriver, setBalanceDriver] = useState<DriverTrack | null>(null);
   const [previewDriver, setPreviewDriver] = useState<DriverTrack | null>(null);
   const [inviteModalDriver, setInviteModalDriver] = useState<DriverTrack | null>(null);
 
@@ -4491,8 +4495,10 @@ function DriversView({
                       .toUpperCase() || "D";
                   const allowanceVal = driver.allowance || 5000;
                   const balanceDueVal = driver.balance_due || 0;
+                  const isPortalActive = Boolean(driver.auth_user_id) || driver.invite_status === "accepted";
+
                   return (
-                    <tr key={driver.id} onClick={() => setEditingDriver(driver)} className="cursor-pointer transition-colors hover:bg-white/[0.04]">
+                    <tr key={driver.id} onClick={() => setProfileDriver(driver)} className="cursor-pointer transition-colors hover:bg-white/[0.04]">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2.5">
                           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#ff6a00] to-[#ff9d4d] text-xs font-bold text-white shadow-sm">
@@ -4501,7 +4507,10 @@ function DriversView({
                           <div>
                             <button
                               type="button"
-                              onClick={() => setEditingDriver(driver)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setProfileDriver(driver);
+                              }}
                               className="font-bold text-white hover:text-[#ff8a3d] text-left underline-offset-2 hover:underline"
                             >
                               {driverName}
@@ -4571,33 +4580,41 @@ function DriversView({
                         </button>
                       </td>
                       <td className="px-4 py-3 font-medium">
-                        <span
-                          className={
-                            balanceDueVal > 0 ? "font-bold text-red-400" : "text-[#9aa5b8]"
-                          }
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setBalanceDriver(driver);
+                          }}
+                          className="hover:underline text-left cursor-pointer"
+                          title="Open Deposit & Financial Balance popup"
                         >
-                          £{balanceDueVal.toFixed(2)}
-                        </span>
+                          <span
+                            className={
+                              balanceDueVal > 0 ? "font-bold text-red-400" : "text-[#9aa5b8]"
+                            }
+                          >
+                            £{balanceDueVal.toFixed(2)}
+                          </span>
+                        </button>
                       </td>
                       <td className="px-4 py-3">{portalStatusBadge(driver)}</td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setInviteModalDriver(driver);
-                            }}
-                            title="Send Portal Invite"
-                            className="inline-flex items-center gap-1 rounded-md border border-[#ff6a00]/40 bg-[#ff6a00]/15 px-2 py-1 text-[11px] font-bold text-[#ff8a3d] hover:bg-[#ff6a00]/25"
-                          >
-                            <Icon.Bolt className="h-3 w-3" />
-                            {driver.invite_status === "pending"
-                              ? "Re-invite"
-                              : driver.invite_status === "accepted"
-                                ? "Portal Link"
-                                : "Invite"}
-                          </button>
+                          {!isPortalActive && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setInviteModalDriver(driver);
+                              }}
+                              title="Send Portal Invite"
+                              className="inline-flex items-center gap-1 rounded-md border border-[#ff6a00]/40 bg-[#ff6a00]/15 px-2 py-1 text-[11px] font-bold text-[#ff8a3d] hover:bg-[#ff6a00]/25"
+                            >
+                              <Icon.Bolt className="h-3 w-3" />
+                              {driver.invite_status === "pending" ? "Re-invite" : "Invite"}
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={(e) => {
@@ -4614,7 +4631,7 @@ function DriversView({
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              setEditingDriver(driver);
+                              setProfileDriver(driver);
                             }}
                             title="Driver Settings & Profile"
                             className="rounded-md border p-1.5 text-[#8b95a8] hover:bg-white/10 hover:text-white"
@@ -4661,23 +4678,34 @@ function DriversView({
         />
       )}
 
-      {/* Edit Driver Modal */}
-      {editingDriver && (
-        <EditDriverModal
-          driver={drivers.find((d) => d.id === editingDriver.id) || editingDriver}
+      {/* Profile Popup */}
+      {profileDriver && (
+        <DriverProfileModal
+          driver={drivers.find((d) => d.id === profileDriver.id) || profileDriver}
           vehicles={vehicles}
           data={data}
           toast={toast}
-          onClose={() => setEditingDriver(null)}
+          onClose={() => setProfileDriver(null)}
           onSave={async (updatedDriver) => {
             try {
               await data.editDriver(updatedDriver);
               toast(`Driver ${updatedDriver.driver_name} updated`);
-              setEditingDriver(null);
+              setProfileDriver(null);
             } catch (err: any) {
               toast(err?.message ?? "Failed to update driver", "error");
             }
           }}
+        />
+      )}
+
+      {/* Balance Popup */}
+      {balanceDriver && (
+        <DriverBalanceModal
+          driver={drivers.find((d) => d.id === balanceDriver.id) || balanceDriver}
+          vehicles={vehicles}
+          data={data}
+          toast={toast}
+          onClose={() => setBalanceDriver(null)}
         />
       )}
 
@@ -4699,7 +4727,7 @@ function DriversView({
           onEditEmail={() => {
             const driverToEdit = inviteModalDriver;
             setInviteModalDriver(null);
-            setEditingDriver(driverToEdit);
+            setProfileDriver(driverToEdit);
           }}
         />
       )}
@@ -4830,6 +4858,8 @@ function AddDriverModal({
                   const price = getVehicleWeeklyPrice(newV.make, newV.model);
                   setWeeklyRent(String(price));
                   setBalanceDue(String(price));
+                  const defDep = newV.default_deposit ?? getVehicleDefaultDeposit(newV.make, newV.model);
+                  setDepositTotal(String(defDep));
                 }
               }}
               placeholder="Choose a vehicle…"
@@ -4925,7 +4955,313 @@ function AddDriverModal({
   );
 }
 
-function EditDriverModal({
+function DriverDocumentsSection({
+  driver,
+  toast,
+}: {
+  driver: DriverTrack;
+  toast: (m: string, t?: Toast["type"]) => void;
+}) {
+  const [documents, setDocuments] = useState<DriverDocument[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
+
+  const [unlinkedDocs, setUnlinkedDocs] = useState<DriverDocument[]>([]);
+  const [selectedUnlinkedDocId, setSelectedUnlinkedDocId] = useState<string>("");
+  const [attachingDoc, setAttachingDoc] = useState(false);
+
+  const docTypes: { type: DriverDocument["document_type"]; label: string }[] = [
+    { type: "contract", label: "Contract" },
+    { type: "permission_letter", label: "Permission Letter" },
+    { type: "vehicle_schedule", label: "Vehicle Schedule" },
+    { type: "pco_licence", label: "PCO Licence" },
+  ];
+
+  const fetchDocs = useCallback(async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("driver_documents")
+        .select("*")
+        .eq("driver_id", driver.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      setDocuments((data as any) || []);
+    } catch {
+      setDocuments([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [driver.id]);
+
+  const fetchUnlinkedDocs = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("driver_documents")
+        .select("*")
+        .is("driver_id", null)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      if (!error && data) {
+        setUnlinkedDocs((data as any) || []);
+      }
+    } catch {
+      setUnlinkedDocs([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchDocs();
+    fetchUnlinkedDocs();
+  }, [fetchDocs, fetchUnlinkedDocs]);
+
+  const handleAttachGeneratedDoc = async () => {
+    if (!selectedUnlinkedDocId) return;
+    const docToAttach = unlinkedDocs.find((d) => d.id === selectedUnlinkedDocId);
+    if (!docToAttach) return;
+
+    setAttachingDoc(true);
+    try {
+      // Associate unlinked document with the current driver
+      const { error } = await supabase
+        .from("driver_documents")
+        .update({ driver_id: driver.id } as any)
+        .eq("id", docToAttach.id);
+
+      if (error) throw error;
+
+      const typeLabel =
+        docToAttach.document_type === "permission_letter"
+          ? "Permission Letter"
+          : docToAttach.document_type === "contract"
+            ? "Contract"
+            : docToAttach.document_type === "vehicle_schedule"
+              ? "Vehicle Schedule"
+              : "PCO Licence";
+
+      toast(`Linked ${typeLabel} (${docToAttach.file_name}) to ${driver.driver_name}`);
+      setSelectedUnlinkedDocId("");
+      await fetchDocs();
+      await fetchUnlinkedDocs();
+    } catch (err: any) {
+      toast(err?.message || "Failed to attach document", "error");
+    } finally {
+      setAttachingDoc(false);
+    }
+  };
+
+  const handleUpload = async (
+    docType: DriverDocument["document_type"],
+    file: File
+  ) => {
+    if (!file) return;
+    setUploadingDoc(docType);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id || null;
+
+      const fileExt = file.name.split(".").pop();
+      const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
+      const filePath = `${driver.id}/${docType}_${Date.now()}_${safeName}`;
+
+      const { error: uploadErr } = await supabase.storage
+        .from("driver-documents")
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadErr) throw uploadErr;
+
+      const { error: dbErr } = await supabase.from("driver_documents").insert({
+        driver_id: driver.id,
+        user_id: userId,
+        document_type: docType,
+        file_name: file.name,
+        file_path: filePath,
+        file_size: file.size,
+      } as any);
+
+      if (dbErr) throw dbErr;
+
+      toast(`Uploaded ${file.name}`);
+      await fetchDocs();
+    } catch (err: any) {
+      toast(err?.message || "Failed to upload document", "error");
+    } finally {
+      setUploadingDoc(null);
+    }
+  };
+
+  const handleDelete = async (doc: DriverDocument) => {
+    if (!confirm(`Delete ${doc.file_name}?`)) return;
+    try {
+      await supabase.storage.from("driver-documents").remove([doc.file_path]);
+      await supabase.from("driver_documents").delete().eq("id", doc.id);
+      toast(`Removed ${doc.file_name}`, "info");
+      await fetchDocs();
+    } catch (err: any) {
+      toast(err?.message || "Failed to delete document", "error");
+    }
+  };
+
+  const getPublicUrl = (filePath: string) => {
+    const { data } = supabase.storage.from("driver-documents").getPublicUrl(filePath);
+    return data.publicUrl;
+  };
+
+  return (
+    <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: T.borderSoft, background: T.panel }}>
+      <div className="flex items-center justify-between">
+        <div className="font-bold text-white text-xs">Driver Documents & Portal Attachments</div>
+        <span className="text-[10px] text-[#8b95a8]">Syncs live with Driver Portal</span>
+      </div>
+
+      {/* Recently Generated Letters Dropdown (VCHLetter Integration) */}
+      <div className="rounded-lg border p-3 space-y-2 text-xs" style={{ borderColor: T.borderSoft, background: T.panel2 }}>
+        <div className="font-semibold text-white flex items-center justify-between">
+          <span>Attach a recently generated letter (VCHLetter)</span>
+          <span className="text-[10px] text-[#ff8a3d] font-normal">VCHLetter sync</span>
+        </div>
+        <p className="text-[11px] text-[#8b95a8]">
+          Attach unlinked contracts or permission letters created in the VCHLetter tool directly to this driver.
+        </p>
+
+        <div className="flex flex-col sm:flex-row gap-2 pt-1">
+          <select
+            value={selectedUnlinkedDocId}
+            onChange={(e) => setSelectedUnlinkedDocId(e.target.value)}
+            disabled={attachingDoc || unlinkedDocs.length === 0}
+            className="flex-1 rounded border bg-[#142131] px-2.5 py-1.5 text-xs text-white focus:border-[#ff6a00] focus:outline-none"
+            style={{ borderColor: T.borderSoft }}
+          >
+            <option value="">
+              {unlinkedDocs.length === 0
+                ? "No unlinked generated letters found"
+                : "Select a generated PDF letter..."}
+            </option>
+            {unlinkedDocs.map((doc) => {
+              const typeLabel =
+                doc.document_type === "permission_letter"
+                  ? "Permission Letter"
+                  : doc.document_type === "contract"
+                    ? "Contract"
+                    : doc.document_type === "vehicle_schedule"
+                      ? "Vehicle Schedule"
+                      : "PCO Licence";
+
+              const dateStr = new Date(doc.created_at).toLocaleDateString("en-GB", {
+                day: "numeric",
+                month: "short",
+                hour: "2-digit",
+                minute: "2-digit",
+              });
+              return (
+                <option key={doc.id} value={doc.id}>
+                  {typeLabel} ({dateStr}) — {doc.file_name}
+                </option>
+              );
+            })}
+          </select>
+
+          <button
+            type="button"
+            disabled={!selectedUnlinkedDocId || attachingDoc}
+            onClick={handleAttachGeneratedDoc}
+            className="rounded border border-[#ff6a00]/50 bg-[#ff6a00] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#e05d00] disabled:opacity-50 transition-colors shrink-0"
+          >
+            {attachingDoc ? "Attaching..." : "Attach Letter"}
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="text-xs text-[#8b95a8] py-2">Loading documents...</div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {docTypes.map(({ type, label }) => {
+            const existingDocs = documents.filter((d) => d.document_type === type);
+            const isUploading = uploadingDoc === type;
+
+            return (
+              <div
+                key={type}
+                className="rounded-lg border p-3 flex flex-col justify-between space-y-2 text-xs"
+                style={{ borderColor: T.borderSoft, background: T.panel2 }}
+              >
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-white">{label}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-[#8b95a8]">
+                      {existingDocs.length} uploaded
+                    </span>
+                  </div>
+
+                  {existingDocs.length > 0 ? (
+                    <div className="mt-2 space-y-1.5">
+                      {existingDocs.map((doc) => (
+                        <div
+                          key={doc.id}
+                          className="flex items-center justify-between gap-2 rounded bg-black/30 p-1.5 text-[11px]"
+                        >
+                          <div className="min-w-0 flex-1 truncate">
+                            <a
+                              href={getPublicUrl(doc.file_path)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="font-medium text-[#ff8a3d] hover:underline truncate block"
+                              title={doc.file_name}
+                            >
+                              📄 {doc.file_name}
+                            </a>
+                            {doc.file_size ? (
+                              <span className="text-[10px] text-[#8b95a8]">
+                                {(doc.file_size / (1024 * 1024)).toFixed(1)} MB
+                              </span>
+                            ) : null}
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(doc)}
+                            className="text-red-400 hover:text-red-300 px-1 py-0.5"
+                            title="Delete Document"
+                          >
+                            <Icon.X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-1 text-[11px] text-[#8b95a8] italic">No {label.toLowerCase()} uploaded</p>
+                  )}
+                </div>
+
+                <div className="pt-1">
+                  <label className="block w-full cursor-pointer">
+                    <input
+                      type="file"
+                      className="hidden"
+                      disabled={isUploading}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleUpload(type, file);
+                        e.target.value = "";
+                      }}
+                    />
+                    <span className="flex items-center justify-center gap-1 w-full rounded border border-[#ff6a00]/40 bg-[#ff6a00]/10 px-2.5 py-1.5 text-[11px] font-bold text-[#ff8a3d] hover:bg-[#ff6a00]/20 transition-colors">
+                      <Icon.Plus className="h-3 w-3" />
+                      {isUploading ? "Uploading..." : `Upload ${label}`}
+                    </span>
+                  </label>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DriverProfileModal({
   driver,
   vehicles,
   data,
@@ -4945,34 +5281,8 @@ function EditDriverModal({
   const [phone, setPhone] = useState(driver.phone || "");
   const [vehicleId, setVehicleId] = useState(driver.vehicle_id);
   const [startDate, setStartDate] = useState(driver.start_date || new Date().toISOString().slice(0, 10));
-  const [weeklyRent, setWeeklyRent] = useState(String(driver.weekly_rent || 0));
-  const [rentDueDay, setRentDueDay] = useState(driver.rent_due_day || "Monday");
-  const [rentStatus, setRentStatus] = useState<"paid" | "unpaid">(driver.rent_status || "unpaid");
-  const [balanceDue, setBalanceDue] = useState(String(driver.balance_due || 0));
-  const [allowance, setAllowance] = useState(String(driver.allowance || 5000));
-  const [excessRate, setExcessRate] = useState(String(driver.excess_rate || 20));
   const [contractWeeks, setContractWeeks] = useState(String(driver.contract_length_weeks ?? 6));
-  const [depositTotal, setDepositTotal] = useState(String(driver.deposit_total ?? 0));
-  const [depAmount, setDepAmount] = useState("");
-  const [depDate, setDepDate] = useState(new Date().toISOString().slice(0, 10));
-  const [depNote, setDepNote] = useState("");
-  const [addingDeposit, setAddingDeposit] = useState(false);
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    setBalanceDue(String(driver.balance_due || 0));
-  }, [driver.balance_due]);
-
-  useEffect(() => {
-    setRentStatus(driver.rent_status || "unpaid");
-  }, [driver.rent_status]);
-
-  // Add charge inline state
-  const [chargeAmount, setChargeAmount] = useState("");
-  const [chargeDesc, setChargeDesc] = useState("");
-  const [addingCharge, setAddingCharge] = useState(false);
-
-  // Sending reminders state
   const [sendingReminder, setSendingReminder] = useState<string | null>(null);
 
   const selectedVehicle = vehicles.find((v) => v.id === vehicleId);
@@ -5016,56 +5326,16 @@ function EditDriverModal({
         registration: selectedVehicle ? selectedVehicle.registration : driver.registration,
         start_date: startDate,
         contract_length_weeks: parseInt(contractWeeks) || 6,
-        deposit_total: parseFloat(depositTotal) || 0,
-        weekly_rent: parseFloat(weeklyRent) || 0,
-        rent_due_day: rentDueDay,
-        rent_status: rentStatus,
-        balance_due: parseFloat(balanceDue) || 0,
-        allowance: parseInt(allowance) || 5000,
-        excess_rate: parseInt(excessRate) || 20,
       });
       onClose();
     } catch (err: any) {
-      toast(err?.message ?? "Failed to save driver file", "error");
+      toast(err?.message ?? "Failed to save driver profile", "error");
     } finally {
       setSaving(false);
     }
   };
 
-  const handleAddDeposit = async () => {
-    const amt = parseFloat(depAmount);
-    if (!amt || isNaN(amt)) return;
-    setAddingDeposit(true);
-    try {
-      await data.addDepositPayment(driver.id, amt, depNote.trim() || undefined, depDate);
-      toast(`Recorded deposit payment of £${amt.toFixed(2)} for ${driver.driver_name}`);
-      setDepAmount("");
-      setDepNote("");
-    } catch (err: any) {
-      toast(err?.message ?? "Failed to record deposit payment", "error");
-    } finally {
-      setAddingDeposit(false);
-    }
-  };
-
-  const handleAddCharge = async () => {
-    const amt = parseFloat(chargeAmount);
-    if (!amt || isNaN(amt) || !chargeDesc.trim()) return;
-    setAddingCharge(true);
-    try {
-      await data.addDriverCharge(driver.id, amt, chargeDesc.trim());
-      toast(`Added charge of £${amt.toFixed(2)} to ${driver.driver_name}'s balance`);
-      setChargeAmount("");
-      setChargeDesc("");
-      setBalanceDue(String(Number(balanceDue || 0) + amt));
-    } catch (err: any) {
-      toast(err?.message ?? "Failed to add charge", "error");
-    } finally {
-      setAddingCharge(false);
-    }
-  };
-
-  const handleSendReminder = async (type: "mot" | "service" | "pco") => {
+  const handleSendReminder = async (type: "mot" | "service" | "pco" | "contract") => {
     setSendingReminder(type);
     try {
       await data.sendDriverReminder(driver, type);
@@ -5091,7 +5361,7 @@ function EditDriverModal({
         <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: T.border }}>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-lg font-bold text-white">Driver File & Management</h3>
+              <h3 className="text-lg font-bold text-white">Driver Profile</h3>
               {portalStatusBadge(driver)}
             </div>
             <p className="text-xs text-[#8b95a8]">
@@ -5103,7 +5373,7 @@ function EditDriverModal({
           </button>
         </div>
 
-        {/* Action Alert Reminders */}
+        {/* Quick Alert Reminders */}
         <div className="rounded-xl border p-4 space-y-2.5" style={{ borderColor: T.borderSoft, background: T.panel }}>
           <div className="text-xs font-bold uppercase tracking-wider text-[#ff8a3d]">Quick Alert & Reminder Actions</div>
           <div className="flex flex-wrap gap-2">
@@ -5145,7 +5415,7 @@ function EditDriverModal({
             </button>
           </div>
           <p className="text-[11px] text-[#8b95a8]">
-            Sends a direct notification to the driver's portal dashboard and an email copy if an email address is connected.
+            Sends a direct notification to the driver's portal dashboard and an email copy if connected.
           </p>
         </div>
 
@@ -5186,14 +5456,7 @@ function EditDriverModal({
             <Field label="Linked Vehicle">
               <DarkSelect
                 value={vehicleId}
-                onChange={(val) => {
-                  setVehicleId(val);
-                  const newV = vehicles.find((v) => v.id === val);
-                  if (newV) {
-                    const price = getVehicleWeeklyPrice(newV.make, newV.model);
-                    setWeeklyRent(String(price));
-                  }
-                }}
+                onChange={(val) => setVehicleId(val)}
                 options={vehicles.map((v) => ({
                   value: v.id,
                   label: `${v.registration} — ${simplifyVehicleName(v)}`,
@@ -5277,34 +5540,222 @@ function EditDriverModal({
             </Grid2>
           </div>
 
-          {/* Deposit Tracking & Instalments */}
+          {/* Document Upload Section */}
+          <DriverDocumentsSection driver={driver} toast={toast} />
+
+          <div className="flex justify-end gap-2 border-t pt-4" style={{ borderColor: T.border }}>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border px-4 py-2 hover:bg-white/10"
+              style={{ borderColor: T.border }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving || !name.trim()}
+              className="rounded-lg bg-[#ff6a00] px-4 py-2 font-semibold text-white hover:bg-[#e05d00] disabled:opacity-50"
+            >
+              {saving ? "Saving…" : "Save Profile"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function DriverBalanceModal({
+  driver,
+  vehicles,
+  data,
+  toast,
+  onClose,
+}: {
+  driver: DriverTrack;
+  vehicles: Vehicle[];
+  data: ReturnType<typeof useFleetData>;
+  toast: (m: string, t?: Toast["type"]) => void;
+  onClose: () => void;
+}) {
+  const [depositTotal, setDepositTotal] = useState(String(driver.deposit_total ?? 0));
+  const [weeklyRent, setWeeklyRent] = useState(String(driver.weekly_rent || 0));
+  const [rentDueDay, setRentDueDay] = useState(driver.rent_due_day || "Monday");
+  const [rentStatus, setRentStatus] = useState<"paid" | "unpaid">(driver.rent_status || "unpaid");
+  const [balanceDue, setBalanceDue] = useState(String(driver.balance_due || 0));
+  const [startDate, setStartDate] = useState(driver.start_date || new Date().toISOString().slice(0, 10));
+
+  const [depAmount, setDepAmount] = useState("");
+  const [depDate, setDepDate] = useState(new Date().toISOString().slice(0, 10));
+  const [depNote, setDepNote] = useState("");
+  const [addingDeposit, setAddingDeposit] = useState(false);
+  const [togglingDeposit, setTogglingDeposit] = useState(false);
+
+  const [chargeAmount, setChargeAmount] = useState("");
+  const [chargeDesc, setChargeDesc] = useState("");
+  const [addingCharge, setAddingCharge] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setBalanceDue(String(driver.balance_due || 0));
+  }, [driver.balance_due]);
+
+  useEffect(() => {
+    setRentStatus(driver.rent_status || "unpaid");
+  }, [driver.rent_status]);
+
+  const totalPaidDeposit = (driver.deposit_payments || []).reduce(
+    (sum, p) => sum + Number(p.amount || 0),
+    0
+  );
+  const agreedDeposit = parseFloat(depositTotal) || 0;
+  const isDepositFullyPaid = agreedDeposit > 0 && totalPaidDeposit >= agreedDeposit;
+
+  const handleToggleDepositPaid = async () => {
+    setTogglingDeposit(true);
+    try {
+      await data.toggleDepositPaidStatus(driver.id, !isDepositFullyPaid, agreedDeposit);
+      toast(
+        !isDepositFullyPaid
+          ? `Marked deposit as fully paid (£${agreedDeposit})`
+          : `Deposit status reset to unpaid`
+      );
+    } catch (err: any) {
+      toast(err?.message || "Failed to update deposit status", "error");
+    } finally {
+      setTogglingDeposit(false);
+    }
+  };
+
+  const handleAddDeposit = async () => {
+    const amt = parseFloat(depAmount);
+    if (!amt || isNaN(amt)) return;
+    setAddingDeposit(true);
+    try {
+      await data.addDepositPayment(driver.id, amt, depNote.trim() || undefined, depDate);
+      toast(`Recorded deposit payment of £${amt.toFixed(2)} for ${driver.driver_name}`);
+      setDepAmount("");
+      setDepNote("");
+    } catch (err: any) {
+      toast(err?.message ?? "Failed to record deposit payment", "error");
+    } finally {
+      setAddingDeposit(false);
+    }
+  };
+
+  const handleAddCharge = async () => {
+    const amt = parseFloat(chargeAmount);
+    if (!amt || isNaN(amt) || !chargeDesc.trim()) return;
+    setAddingCharge(true);
+    try {
+      await data.addDriverCharge(driver.id, amt, chargeDesc.trim());
+      toast(`Added charge of £${amt.toFixed(2)} to ${driver.driver_name}'s balance`);
+      setChargeAmount("");
+      setChargeDesc("");
+      setBalanceDue(String(Number(balanceDue || 0) + amt));
+    } catch (err: any) {
+      toast(err?.message ?? "Failed to add charge", "error");
+    } finally {
+      setAddingCharge(false);
+    }
+  };
+
+  const handleSaveFinancials = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await data.editDriver({
+        ...driver,
+        deposit_total: parseFloat(depositTotal) || 0,
+        weekly_rent: parseFloat(weeklyRent) || 0,
+        rent_due_day: rentDueDay,
+        rent_status: rentStatus,
+        balance_due: parseFloat(balanceDue) || 0,
+      });
+      toast(`Financial details for ${driver.driver_name} updated`);
+      onClose();
+    } catch (err: any) {
+      toast(err?.message ?? "Failed to update balance details", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const selectedVehicle = vehicles.find((v) => v.id === driver.vehicle_id);
+
+  return (
+    <div
+      className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-t-3xl sm:rounded-2xl border border-white/15 bg-[#10141d] p-6 shadow-2xl animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200 space-y-5"
+        style={{ borderColor: T.border }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mx-auto mb-1 h-1.5 w-12 rounded-full bg-white/20 sm:hidden" />
+        <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: T.border }}>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-bold text-white">Deposit & Balance Details</h3>
+              <span className="font-bold text-red-400 text-sm">
+                Balance Due: £{Number(balanceDue || 0).toFixed(2)}
+              </span>
+            </div>
+            <p className="text-xs text-[#8b95a8]">
+              {driver.driver_name} — {selectedVehicle ? `${selectedVehicle.registration} (${simplifyVehicleName(selectedVehicle)})` : driver.registration}
+            </p>
+          </div>
+          <button onClick={onClose} className="text-[#8b95a8] hover:text-white">
+            <Icon.X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSaveFinancials} className="space-y-4 text-xs">
+          {/* Deposit Tracking & Paid/Unpaid Toggle */}
           <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: T.borderSoft, background: T.panel }}>
-            <div className="flex items-center justify-between">
-              <div className="font-bold text-white text-xs">Deposit Tracking (Instalments)</div>
-              {(() => {
-                const totalPaid = (driver.deposit_payments || []).reduce(
-                  (sum, p) => sum + Number(p.amount || 0),
-                  0,
-                );
-                const agreed = parseFloat(depositTotal) || 0;
-                let badgeCls = "border-red-500/40 bg-red-500/15 text-red-300";
-                let label = "Unpaid";
-                if (agreed > 0 && totalPaid >= agreed) {
-                  badgeCls = "border-emerald-500/40 bg-emerald-500/15 text-emerald-300";
-                  label = "Paid in full";
-                } else if (totalPaid > 0) {
-                  badgeCls = "border-amber-500/40 bg-amber-500/15 text-amber-300";
-                  label = `£${totalPaid} of £${agreed} paid`;
-                } else if (agreed === 0) {
-                  badgeCls = "border-slate-500/40 bg-slate-500/15 text-slate-300";
-                  label = "None set";
-                }
-                return (
-                  <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold border ${badgeCls}`}>
-                    {label}
-                  </span>
-                );
-              })()}
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="font-bold text-white text-xs">Deposit Tracking</div>
+              <div className="flex items-center gap-2">
+                {(() => {
+                  let badgeCls = "border-red-500/40 bg-red-500/15 text-red-300";
+                  let label = "Unpaid";
+                  if (agreedDeposit > 0 && totalPaidDeposit >= agreedDeposit) {
+                    badgeCls = "border-emerald-500/40 bg-emerald-500/15 text-emerald-300";
+                    label = "Paid in full";
+                  } else if (totalPaidDeposit > 0) {
+                    badgeCls = "border-amber-500/40 bg-amber-500/15 text-amber-300";
+                    label = `£${totalPaidDeposit} of £${agreedDeposit} paid`;
+                  } else if (agreedDeposit === 0) {
+                    badgeCls = "border-slate-500/40 bg-slate-500/15 text-slate-300";
+                    label = "None set";
+                  }
+                  return (
+                    <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold border ${badgeCls}`}>
+                      {label}
+                    </span>
+                  );
+                })()}
+
+                <button
+                  type="button"
+                  disabled={togglingDeposit || agreedDeposit === 0}
+                  onClick={handleToggleDepositPaid}
+                  className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-bold border transition-colors ${
+                    isDepositFullyPaid
+                      ? "border-amber-500/40 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25"
+                      : "border-emerald-500/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25"
+                  }`}
+                >
+                  <span className={`h-2 w-2 rounded-full ${isDepositFullyPaid ? "bg-amber-400" : "bg-emerald-400"}`} />
+                  {togglingDeposit
+                    ? "Updating..."
+                    : isDepositFullyPaid
+                      ? "Mark Unpaid"
+                      : "Mark Paid Outright"}
+                </button>
+              </div>
             </div>
 
             <Grid2>
@@ -5319,12 +5770,7 @@ function EditDriverModal({
               </Field>
               <Field label="Outstanding Deposit Balance (£)">
                 {(() => {
-                  const paid = (driver.deposit_payments || []).reduce(
-                    (s, p) => s + Number(p.amount || 0),
-                    0,
-                  );
-                  const agreed = parseFloat(depositTotal) || 0;
-                  const outstanding = Math.max(0, agreed - paid);
+                  const outstanding = Math.max(0, agreedDeposit - totalPaidDeposit);
                   return (
                     <div className="rounded-lg border px-3 py-2 text-xs font-bold text-white bg-white/5 border-white/10">
                       £{outstanding.toFixed(2)}
@@ -5532,25 +5978,6 @@ function EditDriverModal({
             </div>
           </div>
 
-          <Grid2>
-            <Field label="Monthly Allowance (mi)">
-              <input
-                type="number"
-                value={allowance}
-                onChange={(e) => setAllowance(e.target.value)}
-                className={inputCls}
-              />
-            </Field>
-            <Field label="Excess Rate (p/mi)">
-              <input
-                type="number"
-                value={excessRate}
-                onChange={(e) => setExcessRate(e.target.value)}
-                className={inputCls}
-              />
-            </Field>
-          </Grid2>
-
           <div className="flex justify-end gap-2 border-t pt-4" style={{ borderColor: T.border }}>
             <button
               type="button"
@@ -5562,10 +5989,10 @@ function EditDriverModal({
             </button>
             <button
               type="submit"
-              disabled={saving || !name.trim()}
+              disabled={saving}
               className="rounded-lg bg-[#ff6a00] px-4 py-2 font-semibold text-white hover:bg-[#e05d00] disabled:opacity-50"
             >
-              {saving ? "Saving…" : "Save Driver File"}
+              {saving ? "Saving…" : "Save Financial Details"}
             </button>
           </div>
         </form>
