@@ -1361,6 +1361,18 @@ export function useFleetData() {
         .select("vehicle_id")
         .eq("id", id)
         .maybeSingle();
+
+      // Revoke portal access immediately by clearing auth link and tokens
+      await supabase
+        .from("driver_tracks")
+        .update({
+          auth_user_id: null,
+          invite_token: null,
+          invite_status: "none",
+          active: false,
+        })
+        .eq("id", id);
+
       const { error } = await supabase.from("driver_tracks").delete().eq("id", id);
       if (error) {
         await supabase.from("driver_tracks").update({ active: false }).eq("id", id);

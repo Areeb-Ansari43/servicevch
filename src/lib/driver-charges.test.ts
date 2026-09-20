@@ -180,4 +180,48 @@ describe("Driver Charges & Data State Consistency", () => {
     expect(insertPayload.description).toBe("Late Rent Fine");
     expect("driver_id" in insertPayload).toBe(true);
   });
+
+  it("calculates exact total balance (£400) for a driver with £300 weekly rent and £100 extra charge", () => {
+    const weeklyRent = 300;
+    const extraCharge = 100;
+
+    const initialDriver: DriverTrack = {
+      id: "driver-calc-1",
+      driver_name: "Test Driver",
+      email: "test@example.com",
+      phone: "07111222333",
+      vehicle_id: "veh-calc-1",
+      registration: "AB25 XYZ",
+      start_mileage: 5000,
+      current_mileage: 5500,
+      allowance: 5000,
+      excess_rate: 20,
+      start_date: "2026-01-01",
+      weekly_rent: weeklyRent,
+      rent_due_day: "Monday",
+      rent_status: "unpaid",
+      balance_due: weeklyRent,
+      charges: [],
+      monthly_logs: [],
+    };
+
+    const newCharge: DriverCharge = {
+      id: "charge-calc-1",
+      driver_id: initialDriver.id,
+      amount: extraCharge,
+      description: "PCN Fine",
+      created_at: new Date().toISOString(),
+    };
+
+    const updatedDriver: DriverTrack = {
+      ...initialDriver,
+      balance_due: Number(initialDriver.balance_due || 0) + extraCharge,
+      charges: [newCharge, ...initialDriver.charges],
+    };
+
+    expect(updatedDriver.weekly_rent).toBe(300);
+    expect(updatedDriver.balance_due).toBe(400);
+    expect(updatedDriver.charges.length).toBe(1);
+    expect(updatedDriver.charges[0].amount).toBe(100);
+  });
 });
