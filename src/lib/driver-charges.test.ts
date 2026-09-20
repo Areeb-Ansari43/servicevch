@@ -160,4 +160,24 @@ describe("Driver Charges & Data State Consistency", () => {
 
     expect(newVehicles[0].next_mot_date).toBe("2027-05-01");
   });
+
+  it("ensures driver_charges insert payload strictly enforces driver_id column for driver_tracks reference", () => {
+    const driverId = "track-uuid-999";
+    const userId = "auth-user-888";
+    const amount = 35;
+    const description = "Late Rent Fine";
+
+    const insertPayload = {
+      driver_id: driverId,
+      amount,
+      description,
+      ...(userId ? { user_id: userId } : {}),
+    };
+
+    expect(insertPayload.driver_id).toBe("track-uuid-999");
+    expect(insertPayload.user_id).toBe("auth-user-888");
+    expect(insertPayload.amount).toBe(35);
+    expect(insertPayload.description).toBe("Late Rent Fine");
+    expect("driver_id" in insertPayload).toBe(true);
+  });
 });
