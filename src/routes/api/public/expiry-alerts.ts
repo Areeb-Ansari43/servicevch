@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { getNextMotDate, getPcoExpiryDate } from "@/lib/vehicle-date-fields";
 import { getRuntimeEnv } from "@/integrations/supabase/config";
+import { calculateNextPaymentDueDate } from "@/lib/fleet-data";
 
 const ALERT_TO = "admin@fa-ibi.co.uk";
 // Until fa-ibi.co.uk is verified in Resend, send from the shared verified sender.
@@ -26,33 +27,39 @@ async function runExpiryScan() {
   }
 
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data: vehicles, error } = await supabaseAdmin.from("vehicles").select("*");
-  if (error)
-    return new Response(JSON.stringify({ ok: false, error: error.message }), { status: 500 });
+  const [vRes, dRes] = await Promise.all([
+    supabaseAdmin.from("vehicles").select("*"),
+    supabaseAdmin.from("driver_tracks").select("*").neq("active", false).is("deleted_at", null),
+  ]);
+
+  if (vRes.error)
+    return new Response(JSON.stringify({ ok: false, error: vRes.error.message }), { status: 500 });
+
+  const vehicles = vRes.data ?? [];
+  const drivers = dRes.data ?? [];
 
   const now = Date.now();
   type Item = {
     reg: string;
-    make: string;
-    model: string;
-    type: "MOT" | "PCO License";
+    description: string;
+    type: "MOT" | "PCO License" | "Driver Licence Expiry" | "Rent Due Tomorrow";
     date: string;
     days: number;
     expired: boolean;
   };
   const items: Item[] = [];
-  for (const v of vehicles ?? []) {
-    const check = (type: Item["type"], date: string | null, reminderDays: number) => {
+
+  // 1. Vehicle MOT & PCO License scans
+  for (const v of vehicles) {
+    const check = (type: "MOT" | "PCO License", date: string | null, reminderDays: number) => {
       if (!date) return;
       const t = new Date(date).getTime();
       if (isNaN(t)) return;
       const days = Math.ceil((t - now) / 86400000);
-      // Reminder any time within N days of expiry, and warning on/after expiry day
       if (days <= reminderDays) {
         items.push({
           reg: v.reg,
-          make: v.make,
-          model: v.model,
+          description: `${v.make} ${v.model}`,
           type,
           date,
           days,
@@ -62,6 +69,42 @@ async function runExpiryScan() {
     };
     check("MOT", getNextMotDate(v), 7);
     check("PCO License", getPcoExpiryDate(v), 10);
+  }
+
+  // 2. Driver licence expiry scans (30 days default)
+  for (const d of drivers) {
+    if (d.licence_expiry_date) {
+      const t = new Date(d.licence_expiry_date).getTime();
+      if (!isNaN(t)) {
+        const days = Math.ceil((t - now) / 86400000);
+        if (days <= 30) {
+          items.push({
+            reg: d.reg || "N/A",
+            description: `Driver: ${d.driver_name}`,
+            type: "Driver Licence Expiry",
+            date: d.licence_expiry_date,
+            days,
+            expired: days <= 0,
+          });
+        }
+      }
+    }
+
+    // 3. Rent due reminders (1 day before)
+    if (Number(d.weekly_rent || 0) > 0) {
+      const nextDue = calculateNextPaymentDueDate(d.start_date, d.rent_due_day, new Date(now));
+      const days = Math.ceil((nextDue.getTime() - now) / 86400000);
+      if (days === 1) {
+        items.push({
+          reg: d.reg || "N/A",
+          description: `Driver: ${d.driver_name} (£${Number(d.weekly_rent).toFixed(2)})`,
+          type: "Rent Due Tomorrow",
+          date: nextDue.toISOString().slice(0, 10),
+          days: 1,
+          expired: false,
+        });
+      }
+    }
   }
 
   if (items.length === 0) {
@@ -80,10 +123,12 @@ async function runExpiryScan() {
           ? i.days === 0
             ? `<span style="color:#ff7a7a;font-weight:700">EXPIRES TODAY</span>`
             : `<span style="color:#ff7a7a;font-weight:700">EXPIRED — ${Math.abs(i.days)}d ago</span>`
-          : `<span style="color:#ffab3d;font-weight:700">${i.days}d left</span>`;
+          : i.days === 1 && i.type === "Rent Due Tomorrow"
+            ? `<span style="color:#60a5fa;font-weight:700">DUE TOMORROW</span>`
+            : `<span style="color:#ffab3d;font-weight:700">${i.days}d left</span>`;
       return `<tr>
         <td style="padding:12px;border-bottom:1px solid rgba(255,255,255,.07);font-family:ui-monospace,monospace;font-weight:700;color:#ffffff">${i.reg}</td>
-        <td style="padding:12px;border-bottom:1px solid rgba(255,255,255,.07);color:#d6d6de">${i.make} ${i.model}</td>
+        <td style="padding:12px;border-bottom:1px solid rgba(255,255,255,.07);color:#d6d6de">${i.description}</td>
         <td style="padding:12px;border-bottom:1px solid rgba(255,255,255,.07);color:#d6d6de">${i.type}</td>
         <td style="padding:12px;border-bottom:1px solid rgba(255,255,255,.07);color:#d6d6de">${new Date(i.date).toLocaleDateString("en-GB")}</td>
         <td style="padding:12px;border-bottom:1px solid rgba(255,255,255,.07);text-align:right">${status}</td>
@@ -93,13 +138,13 @@ async function runExpiryScan() {
 
   const heading =
     expiredItems.length > 0 && reminderItems.length === 0
-      ? "Fleet expiry warnings"
+      ? "Fleet expiry & rent warnings"
       : expiredItems.length > 0
-        ? "Fleet expiry alerts & warnings"
-        : "Fleet expiry reminders";
+        ? "Fleet expiry & rent alerts"
+        : "Fleet expiry & rent reminders";
   const summary = [
     reminderItems.length > 0
-      ? `${reminderItems.length} upcoming (MOT 7 days / PCO License 10 days before expiry)`
+      ? `${reminderItems.length} upcoming alerts (Licence <=30d, MOT <=7d, PCO <=10d, Rent 1d)`
       : null,
     expiredItems.length > 0 ? `${expiredItems.length} expired` : null,
   ]
@@ -115,9 +160,9 @@ async function runExpiryScan() {
         <table style="width:100%;border-collapse:collapse;font-size:13px;background:#14141d;border:1px solid rgba(255,255,255,.08);border-radius:14px;overflow:hidden">
           <thead><tr style="background:rgba(255,106,0,.10)">
             <th style="padding:12px;text-align:left;color:#ff8a2b;font-size:11px;letter-spacing:.12em;text-transform:uppercase">Reg</th>
-            <th style="padding:12px;text-align:left;color:#ff8a2b;font-size:11px;letter-spacing:.12em;text-transform:uppercase">Vehicle</th>
+            <th style="padding:12px;text-align:left;color:#ff8a2b;font-size:11px;letter-spacing:.12em;text-transform:uppercase">Target / Details</th>
             <th style="padding:12px;text-align:left;color:#ff8a2b;font-size:11px;letter-spacing:.12em;text-transform:uppercase">Type</th>
-            <th style="padding:12px;text-align:left;color:#ff8a2b;font-size:11px;letter-spacing:.12em;text-transform:uppercase">Expires</th>
+            <th style="padding:12px;text-align:left;color:#ff8a2b;font-size:11px;letter-spacing:.12em;text-transform:uppercase">Due / Expiry Date</th>
             <th style="padding:12px;text-align:right;color:#ff8a2b;font-size:11px;letter-spacing:.12em;text-transform:uppercase">Status</th>
           </tr></thead>
           <tbody>${rows}</tbody>
@@ -130,8 +175,8 @@ async function runExpiryScan() {
     expiredItems.length > 0 && reminderItems.length === 0
       ? `⚠️ Fleet expiry warning — ${expiredItems.length} expired`
       : expiredItems.length > 0
-        ? `⚠️ Fleet expiry — ${expiredItems.length} expired, ${reminderItems.length} upcoming`
-        : `Fleet expiry reminder — ${reminderItems.length} upcoming`;
+        ? `⚠️ Fleet expiry & rent — ${expiredItems.length} expired, ${reminderItems.length} upcoming`
+        : `Fleet expiry & rent reminders — ${reminderItems.length} upcoming`;
 
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",

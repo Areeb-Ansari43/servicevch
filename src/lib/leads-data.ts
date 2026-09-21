@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { logAuditEvent } from "@/lib/audit-logger";
 
 export type WhatsappLead = {
   id: string;
@@ -80,34 +81,78 @@ export function useLeadsData() {
 
   const setLeadStatus = useCallback(
     async (id: string, status: string) => {
+      const target = leads.find((l) => l.id === id);
       await supabase.from("whatsapp_leads").update({ status }).eq("id", id);
+      await logAuditEvent({
+        actionType: "lead_status_updated",
+        targetTable: "whatsapp_leads",
+        targetId: id,
+        details: {
+          contact_name: target?.contact_name,
+          phone: target?.phone,
+          previous_status: target?.status,
+          new_status: status,
+        },
+      });
       await refresh();
     },
-    [refresh],
+    [leads, refresh],
   );
 
   const deleteLead = useCallback(
     async (id: string) => {
+      const target = leads.find((l) => l.id === id);
       await supabase.from("whatsapp_leads").delete().eq("id", id);
+      await logAuditEvent({
+        actionType: "lead_deleted",
+        targetTable: "whatsapp_leads",
+        targetId: id,
+        details: {
+          contact_name: target?.contact_name,
+          phone: target?.phone,
+        },
+      });
       await refresh();
     },
-    [refresh],
+    [leads, refresh],
   );
 
   const setAccidentStatus = useCallback(
     async (id: string, status: string) => {
+      const target = accidents.find((a) => a.id === id);
       await supabase.from("accident_cases").update({ status }).eq("id", id);
+      await logAuditEvent({
+        actionType: "accident_case_status_updated",
+        targetTable: "accident_cases",
+        targetId: id,
+        details: {
+          reg: target?.reg,
+          driver_name: target?.driver_name,
+          previous_status: target?.status,
+          new_status: status,
+        },
+      });
       await refresh();
     },
-    [refresh],
+    [accidents, refresh],
   );
 
   const deleteAccident = useCallback(
     async (id: string) => {
+      const target = accidents.find((a) => a.id === id);
       await supabase.from("accident_cases").delete().eq("id", id);
+      await logAuditEvent({
+        actionType: "accident_case_deleted",
+        targetTable: "accident_cases",
+        targetId: id,
+        details: {
+          reg: target?.reg,
+          driver_name: target?.driver_name,
+        },
+      });
       await refresh();
     },
-    [refresh],
+    [accidents, refresh],
   );
 
   return {
