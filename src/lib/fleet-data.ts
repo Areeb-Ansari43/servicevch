@@ -1331,7 +1331,6 @@ export function useFleetData() {
         custom: "New Notice from Virtual Car Hire",
       };
 
-      const isCustom = reminderType.toLowerCase() === "custom";
       const title = titleMap[reminderType.toLowerCase()] ?? `${reminderType} Reminder`;
       const defaultMessage = `Hello ${driver.driver_name}, this is a reminder regarding your vehicle ${driver.registration} for ${title}. Please check your portal for details or contact us if you have any questions.`;
       const message = customMessage || defaultMessage;
@@ -1347,54 +1346,29 @@ export function useFleetData() {
 
       if (notifErr) console.warn("Could not save driver notification:", notifErr.message);
 
-      // 2. Email driver if email exists (sending notice pointing to portal, keeping portal content secure)
-      if (driver.email && driver.email.trim()) {
-        const resendKey = (import.meta as any).env?.VITE_RESEND_API_KEY || (process as any).env?.RESEND_API_KEY;
-        if (resendKey) {
-          try {
-            const subject = isCustom
-              ? `Virtual Car Hire: You have a new reminder`
-              : `Virtual Car Hire: ${title}`;
-
-            const html = isCustom
-              ? `<div style="font-family:sans-serif;padding:24px;background:#0d1117;color:#fff;border-radius:12px;">
-                  <h2 style="color:#ff6a00;margin-top:0;">New Notice Available</h2>
-                  <p>Hello ${driver.driver_name},</p>
-                  <p style="font-size:15px;line-height:1.5;">You have a new reminder — please check your portal to view details.</p>
-                  <p style="margin-top:20px;">
-                    <a href="https://virtualcarhire.pages.dev/portal" style="display:inline-block;background:#ff6a00;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:bold;">Log in to Driver Portal &rarr;</a>
-                  </p>
-                  <br/>
-                  <p style="color:#8b95a8;font-size:12px;border-top:1px solid #21262d;padding-top:12px;">Virtual Car Hire Fleet Management</p>
-                </div>`
-              : `<div style="font-family:sans-serif;padding:24px;background:#0d1117;color:#fff;border-radius:12px;">
-                  <h2 style="color:#ff6a00;margin-top:0;">${title}</h2>
-                  <p>Hello ${driver.driver_name},</p>
-                  <p style="font-size:15px;line-height:1.5;">You have a new reminder regarding your vehicle <strong>${driver.registration}</strong> (${title}). Please log in to your portal to review.</p>
-                  <p style="margin-top:20px;">
-                    <a href="https://virtualcarhire.pages.dev/portal" style="display:inline-block;background:#ff6a00;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:bold;">View in Driver Portal &rarr;</a>
-                  </p>
-                  <br/>
-                  <p style="color:#8b95a8;font-size:12px;border-top:1px solid #21262d;padding-top:12px;">Virtual Car Hire Fleet Management</p>
-                </div>`;
-
-            await fetch("https://api.resend.com/emails", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${resendKey}`,
-              },
-              body: JSON.stringify({
-                from: "Virtual Car Hire <onboarding@resend.dev>",
-                to: [driver.email.trim()],
-                subject,
-                html,
-              }),
-            });
-          } catch (e) {
-            console.warn("Failed sending reminder email via Resend:", e);
-          }
-        }
+      // 2. Email driver if email exists, otherwise log skipped
+      const driverEmail = driver.email?.trim() || null;
+      try {
+        await supabase.functions.invoke("send-email", {
+          body: {
+            recipient: driverEmail || "none",
+            skip: !driverEmail,
+            skip_reason: `Driver ${driver.driver_name} has no email address on file`,
+            subject: `Virtual Car Hire: ${title}`,
+            template_type: "driver_notice",
+            template_data: {
+              recipientName: driver.driver_name,
+              headline: title,
+              singleMessageBody: message,
+              vehicleReg: driver.registration,
+              actionUrl: "https://virtualcarhire.pages.dev/portal",
+              actionText: "Log in to Driver Portal",
+            },
+            metadata: { driver_id: driver.id, reminder_type: reminderType },
+          },
+        });
+      } catch (e) {
+        console.warn("Failed invoking send-email for driver reminder:", e);
       }
 
       await refresh();

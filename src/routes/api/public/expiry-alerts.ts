@@ -1,12 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { getNextMotDate, getPcoExpiryDate } from "@/lib/vehicle-date-fields";
-import { getRuntimeEnv } from "@/integrations/supabase/config";
 import { calculateNextPaymentDueDate } from "@/lib/fleet-data";
+import { vehicleArtworkPath } from "@/lib/vehicle-display";
+import { CRM_BASE_URL } from "@/lib/domain-config";
 
-const ALERT_TO = "admin@fa-ibi.co.uk";
-// Until fa-ibi.co.uk is verified in Resend, send from the shared verified sender.
-const ALERT_FROM = "Virtual Car Hire <onboarding@resend.dev>";
+const STAFF_ALERT_EMAIL = "admin@fa-ibi.co.uk";
 
 export const Route = createFileRoute("/api/public/expiry-alerts")({
   server: {
@@ -18,186 +17,263 @@ export const Route = createFileRoute("/api/public/expiry-alerts")({
 });
 
 async function runExpiryScan() {
-  const resendKey = getRuntimeEnv("RESEND_API_KEY");
-  if (!resendKey) {
-    return new Response(
-      JSON.stringify({ ok: false, error: "Email not configured: RESEND_API_KEY missing" }),
-      { status: 500 },
-    );
-  }
-
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
   const [vRes, dRes] = await Promise.all([
     supabaseAdmin.from("vehicles").select("*"),
     supabaseAdmin.from("driver_tracks").select("*").neq("active", false).is("deleted_at", null),
   ]);
 
-  if (vRes.error)
+  if (vRes.error) {
     return new Response(JSON.stringify({ ok: false, error: vRes.error.message }), { status: 500 });
+  }
 
   const vehicles = vRes.data ?? [];
   const drivers = dRes.data ?? [];
 
   const now = Date.now();
-  type Item = {
-    reg: string;
-    description: string;
-    type: "MOT" | "PCO License" | "Driver Licence Expiry" | "Rent Due Tomorrow";
-    date: string;
-    days: number;
-    expired: boolean;
-  };
-  const items: Item[] = [];
+  let totalSent = 0;
+  let totalSkipped = 0;
 
-  // 1. Vehicle MOT & PCO License scans
+  // ---------------------------------------------------------------------------
+  // 1. Staff-Facing Fleet-Wide MOT & PCO Summary + Driver Single-Vehicle Notices
+  // ---------------------------------------------------------------------------
+  type FleetItem = {
+    registration: string;
+    model: string;
+    photoUrl?: string;
+    motExpiry?: string;
+    motDaysRemaining?: number;
+    pcoExpiry?: string;
+    pcoDaysRemaining?: number;
+    detailsUrl?: string;
+  };
+
+  const fleetSummaryItems: FleetItem[] = [];
+
   for (const v of vehicles) {
-    const check = (type: "MOT" | "PCO License", date: string | null, reminderDays: number) => {
-      if (!date) return;
-      const t = new Date(date).getTime();
-      if (isNaN(t)) return;
-      const days = Math.ceil((t - now) / 86400000);
-      if (days <= reminderDays) {
-        items.push({
-          reg: v.reg,
-          description: `${v.make} ${v.model}`,
-          type,
-          date,
-          days,
-          expired: days <= 0,
+    const motDate = getNextMotDate(v);
+    const pcoDate = getPcoExpiryDate(v);
+
+    let motDays: number | undefined = undefined;
+    let pcoDays: number | undefined = undefined;
+
+    if (motDate) {
+      const t = new Date(motDate).getTime();
+      if (!isNaN(t)) motDays = Math.ceil((t - now) / 86400000);
+    }
+
+    if (pcoDate) {
+      const t = new Date(pcoDate).getTime();
+      if (!isNaN(t)) pcoDays = Math.ceil((t - now) / 86400000);
+    }
+
+    const motExpiring = motDays !== undefined && motDays <= 7;
+    const pcoExpiring = pcoDays !== undefined && pcoDays <= 10;
+
+    if (motExpiring || pcoExpiring) {
+      const artwork = vehicleArtworkPath(v);
+      const photoUrl = artwork ? `${CRM_BASE_URL}${artwork}` : undefined;
+
+      fleetSummaryItems.push({
+        registration: v.reg,
+        model: `${v.make} ${v.model}`,
+        photoUrl,
+        motExpiry: motExpiring ? motDate! : undefined,
+        motDaysRemaining: motExpiring ? motDays : undefined,
+        pcoExpiry: pcoExpiring ? pcoDate! : undefined,
+        pcoDaysRemaining: pcoExpiring ? pcoDays : undefined,
+        detailsUrl: `${CRM_BASE_URL}/vehicles/${v.reg}`,
+      });
+
+      // Find driver assigned to this vehicle for single-vehicle driver-facing notice
+      const assignedDriver = drivers.find((d) => d.vehicle_id === v.id || d.reg === v.reg);
+
+      if (assignedDriver) {
+        const cards: any[] = [];
+        if (motExpiring && motDate) {
+          cards.push({
+            iconType: "mot",
+            title: "MOT Inspection Due",
+            dateStr: motDate,
+            vehicleReg: v.reg,
+            vehicleModel: `${v.make} ${v.model}`,
+            daysRemaining: motDays,
+          });
+        }
+        if (pcoExpiring && pcoDate) {
+          cards.push({
+            iconType: "pco",
+            title: "PCO Licence Renewal Due",
+            dateStr: pcoDate,
+            vehicleReg: v.reg,
+            vehicleModel: `${v.make} ${v.model}`,
+            daysRemaining: pcoDays,
+          });
+        }
+
+        const driverEmail = assignedDriver.email?.trim() || null;
+        const driverRes = await supabaseAdmin.functions.invoke("send-email", {
+          body: {
+            recipient: driverEmail || "none",
+            skip: !driverEmail,
+            skip_reason: `Driver ${assignedDriver.driver_name} has no email on file`,
+            subject: `Important Notice: Upcoming Vehicle Expiry for ${v.reg}`,
+            template_type: "driver_alert",
+            template_data: {
+              recipientName: assignedDriver.driver_name,
+              headline: `Vehicle Expiry Notice — ${v.reg}`,
+              subtext: "Please review the details below and schedule an inspection.",
+              cards,
+              actionUrl: "https://virtualcarhire.pages.dev/portal",
+              actionText: "View Details in Portal",
+            },
+            metadata: { vehicle_reg: v.reg, driver_id: assignedDriver.id },
+          },
         });
+
+        if (driverRes.data?.status === "sent") totalSent++;
+        if (driverRes.data?.status === "skipped") totalSkipped++;
       }
-    };
-    check("MOT", getNextMotDate(v), 7);
-    check("PCO License", getPcoExpiryDate(v), 10);
+    }
   }
 
-  // 2. Driver licence expiry scans (30 days default)
+  // Send Fleet Summary digest to staff if vehicles have upcoming expiries
+  if (fleetSummaryItems.length > 0) {
+    const staffFleetRes = await supabaseAdmin.functions.invoke("send-email", {
+      body: {
+        recipient: STAFF_ALERT_EMAIL,
+        subject: `Fleet MOT & PCO Expiry Summary — ${fleetSummaryItems.length} vehicle(s)`,
+        template_type: "fleet_summary",
+        template_data: {
+          headerLabel: "FLEET COMPLIANCE",
+          headline: `Multiple vehicles have upcoming MOT & PCO expiries (${fleetSummaryItems.length})`,
+          subtext: "Ensure your fleet remains road-legal, compliant, and ready for work.",
+          vehicles: fleetSummaryItems,
+          manageUrl: `${CRM_BASE_URL}/`,
+        },
+      },
+    });
+
+    if (staffFleetRes.data?.status === "sent") totalSent++;
+  }
+
+  // ---------------------------------------------------------------------------
+  // 2. Staff-Facing Driver Licence Expiry Summary (<= 30 days)
+  // ---------------------------------------------------------------------------
+  type LicenceItem = {
+    driverId: string;
+    name: string;
+    licenceType?: string;
+    expiryDate: string;
+    daysRemaining: number;
+    reviewUrl?: string;
+  };
+
+  const licenceExpiryItems: LicenceItem[] = [];
+
   for (const d of drivers) {
     if (d.licence_expiry_date) {
       const t = new Date(d.licence_expiry_date).getTime();
       if (!isNaN(t)) {
         const days = Math.ceil((t - now) / 86400000);
         if (days <= 30) {
-          items.push({
-            reg: d.reg || "N/A",
-            description: `Driver: ${d.driver_name}`,
-            type: "Driver Licence Expiry",
-            date: d.licence_expiry_date,
-            days,
-            expired: days <= 0,
+          licenceExpiryItems.push({
+            driverId: d.id ? d.id.slice(0, 8) : "DRIVER",
+            name: d.driver_name,
+            expiryDate: d.licence_expiry_date,
+            daysRemaining: days,
+            reviewUrl: `${CRM_BASE_URL}/drivers`,
           });
         }
       }
     }
+  }
 
-    // 3. Rent due reminders (1 day before)
-    if (Number(d.weekly_rent || 0) > 0) {
+  if (licenceExpiryItems.length > 0) {
+    const staffLicenceRes = await supabaseAdmin.functions.invoke("send-email", {
+      body: {
+        recipient: STAFF_ALERT_EMAIL,
+        subject: `Driver Licence Expiry Summary — ${licenceExpiryItems.length} driver(s)`,
+        template_type: "driver_licence_summary",
+        template_data: {
+          headerLabel: "LICENCE COMPLIANCE",
+          headline: "Driver Licences Expiring Soon",
+          subtext: "Review driver licence expiry dates across your team and take required action.",
+          introLine: "Hi there,\nHere are the upcoming driver licence expiry dates for your team:",
+          drivers: licenceExpiryItems,
+          helpUrl: `${CRM_BASE_URL}/drivers`,
+        },
+      },
+    });
+
+    if (staffLicenceRes.data?.status === "sent") totalSent++;
+  }
+
+  // ---------------------------------------------------------------------------
+  // 3. Rent-Due-Tomorrow Reminder to Driver (via notifications@fa-ibi.co.uk)
+  // ---------------------------------------------------------------------------
+  for (const d of drivers) {
+    if (Number(d.weekly_rent || 0) > 0 && d.start_date && d.rent_due_day) {
       const nextDue = calculateNextPaymentDueDate(d.start_date, d.rent_due_day, new Date(now));
       const days = Math.ceil((nextDue.getTime() - now) / 86400000);
+
       if (days === 1) {
-        items.push({
-          reg: d.reg || "N/A",
-          description: `Driver: ${d.driver_name} (£${Number(d.weekly_rent).toFixed(2)})`,
-          type: "Rent Due Tomorrow",
-          date: nextDue.toISOString().slice(0, 10),
-          days: 1,
-          expired: false,
+        const driverEmail = d.email?.trim() || null;
+        const dueStr = nextDue.toISOString().slice(0, 10);
+
+        // Also add in-app CRM alert notification for staff/driver tracking
+        await supabaseAdmin.from("driver_notifications").insert({
+          driver_id: d.id,
+          type: "rent_due",
+          title: "Rent Payment Due Tomorrow",
+          message: `Rent of £${Number(d.weekly_rent).toFixed(2)} is due tomorrow (${dueStr}).`,
         });
+
+        // Send email via notifications@fa-ibi.co.uk to driver's email address
+        const rentEmailRes = await supabaseAdmin.functions.invoke("send-email", {
+          body: {
+            recipient: driverEmail || "none",
+            skip: !driverEmail,
+            skip_reason: `Driver ${d.driver_name} has no email on file for rent reminder`,
+            subject: `Reminder: Your rent is due tomorrow — Virtual Car Hire`,
+            template_type: "rent_due_tomorrow",
+            template_data: {
+              recipientName: d.driver_name,
+              headline: "Rent Due Tomorrow",
+              introLine: `Hi ${d.driver_name}, your rent is due tomorrow.`,
+              cards: [
+                {
+                  iconType: "rent",
+                  title: `Weekly Rent Payment (£${Number(d.weekly_rent).toFixed(2)})`,
+                  dateStr: dueStr,
+                  vehicleReg: d.reg || "N/A",
+                  daysRemaining: 1,
+                },
+              ],
+              warningNote:
+                "Prompt rent payments help maintain your vehicle account in good standing. Please contact support if you have any questions.",
+              actionUrl: "https://virtualcarhire.pages.dev/portal",
+              actionText: "View Balance in Driver Portal",
+            },
+            metadata: { driver_id: d.id, weekly_rent: d.weekly_rent },
+          },
+        });
+
+        if (rentEmailRes.data?.status === "sent") totalSent++;
+        if (rentEmailRes.data?.status === "skipped") totalSkipped++;
       }
     }
   }
 
-  if (items.length === 0) {
-    return new Response(JSON.stringify({ ok: true, sent: false, count: 0 }));
-  }
-
-  const expiredItems = items.filter((i) => i.expired);
-  const reminderItems = items.filter((i) => !i.expired);
-
-  items.sort((a, b) => a.days - b.days);
-
-  const rows = items
-    .map((i) => {
-      const status =
-        i.days <= 0
-          ? i.days === 0
-            ? `<span style="color:#ff7a7a;font-weight:700">EXPIRES TODAY</span>`
-            : `<span style="color:#ff7a7a;font-weight:700">EXPIRED — ${Math.abs(i.days)}d ago</span>`
-          : i.days === 1 && i.type === "Rent Due Tomorrow"
-            ? `<span style="color:#60a5fa;font-weight:700">DUE TOMORROW</span>`
-            : `<span style="color:#ffab3d;font-weight:700">${i.days}d left</span>`;
-      return `<tr>
-        <td style="padding:12px;border-bottom:1px solid rgba(255,255,255,.07);font-family:ui-monospace,monospace;font-weight:700;color:#ffffff">${i.reg}</td>
-        <td style="padding:12px;border-bottom:1px solid rgba(255,255,255,.07);color:#d6d6de">${i.description}</td>
-        <td style="padding:12px;border-bottom:1px solid rgba(255,255,255,.07);color:#d6d6de">${i.type}</td>
-        <td style="padding:12px;border-bottom:1px solid rgba(255,255,255,.07);color:#d6d6de">${new Date(i.date).toLocaleDateString("en-GB")}</td>
-        <td style="padding:12px;border-bottom:1px solid rgba(255,255,255,.07);text-align:right">${status}</td>
-      </tr>`;
-    })
-    .join("");
-
-  const heading =
-    expiredItems.length > 0 && reminderItems.length === 0
-      ? "Fleet expiry & rent warnings"
-      : expiredItems.length > 0
-        ? "Fleet expiry & rent alerts"
-        : "Fleet expiry & rent reminders";
-  const summary = [
-    reminderItems.length > 0
-      ? `${reminderItems.length} upcoming alerts (Licence <=30d, MOT <=7d, PCO <=10d, Rent 1d)`
-      : null,
-    expiredItems.length > 0 ? `${expiredItems.length} expired` : null,
-  ]
-    .filter(Boolean)
-    .join(" • ");
-
-  const html = `
-    <div style="background:#07070b;padding:32px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-      <div style="max-width:720px;margin:0 auto;background:#101018;border:1px solid rgba(255,106,0,.22);border-radius:20px;padding:28px;color:#f4f4f6">
-        <div style="font-weight:700;color:#ff6a00;font-size:12px;letter-spacing:.18em;text-transform:uppercase">Virtual Car Hire · Fleet Tracker</div>
-        <h1 style="font-size:22px;margin:10px 0 4px;color:#ffffff">${heading}</h1>
-        <p style="color:#9a9aa6;font-size:14px;margin:0 0 20px">${summary}</p>
-        <table style="width:100%;border-collapse:collapse;font-size:13px;background:#14141d;border:1px solid rgba(255,255,255,.08);border-radius:14px;overflow:hidden">
-          <thead><tr style="background:rgba(255,106,0,.10)">
-            <th style="padding:12px;text-align:left;color:#ff8a2b;font-size:11px;letter-spacing:.12em;text-transform:uppercase">Reg</th>
-            <th style="padding:12px;text-align:left;color:#ff8a2b;font-size:11px;letter-spacing:.12em;text-transform:uppercase">Target / Details</th>
-            <th style="padding:12px;text-align:left;color:#ff8a2b;font-size:11px;letter-spacing:.12em;text-transform:uppercase">Type</th>
-            <th style="padding:12px;text-align:left;color:#ff8a2b;font-size:11px;letter-spacing:.12em;text-transform:uppercase">Due / Expiry Date</th>
-            <th style="padding:12px;text-align:right;color:#ff8a2b;font-size:11px;letter-spacing:.12em;text-transform:uppercase">Status</th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-        <p style="color:#74747f;font-size:12px;margin-top:20px;border-top:1px solid rgba(255,255,255,.08);padding-top:16px">Automated daily notice from VCH Fleet Tracker.</p>
-      </div>
-    </div>`;
-
-  const subject =
-    expiredItems.length > 0 && reminderItems.length === 0
-      ? `⚠️ Fleet expiry warning — ${expiredItems.length} expired`
-      : expiredItems.length > 0
-        ? `⚠️ Fleet expiry & rent — ${expiredItems.length} expired, ${reminderItems.length} upcoming`
-        : `Fleet expiry & rent reminders — ${reminderItems.length} upcoming`;
-
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${resendKey}`,
-    },
-    body: JSON.stringify({
-      from: ALERT_FROM,
-      to: [ALERT_TO],
-      subject,
-      html,
+  return new Response(
+    JSON.stringify({
+      ok: true,
+      sent: totalSent,
+      skipped: totalSkipped,
+      fleetExpiries: fleetSummaryItems.length,
+      licenceExpiries: licenceExpiryItems.length,
     }),
-  });
-
-  if (!res.ok) {
-    const txt = await res.text();
-    return new Response(
-      JSON.stringify({ ok: false, error: `Email send failed: ${res.status} ${txt}` }),
-      { status: 500 },
-    );
-  }
-  return new Response(JSON.stringify({ ok: true, sent: true, count: items.length }));
+    { status: 200, headers: { "Content-Type": "application/json" } },
+  );
 }
