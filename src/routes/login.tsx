@@ -56,6 +56,7 @@ function LoginPage() {
   const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState<"none" | "success" | "error">("none");
+  const [resendCooldown, setResendCooldown] = useState(0);
   const boxRefs = useRef<(HTMLInputElement | null)[]>([]);
   const submittedRef = useRef(false);
 
@@ -86,8 +87,16 @@ function LoginPage() {
     if (stage === "otp") setTimeout(() => boxRefs.current[0]?.focus(), 260);
   }, [stage]);
 
-  const submitCreds = async (e: React.FormEvent) => {
-    e.preventDefault();
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => (prev <= 1 ? 0 : prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
+
+  const submitCreds = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setError(null);
     setInfo(null);
     if (!email.trim() || !password) {
@@ -101,6 +110,7 @@ function LoginPage() {
       console.info("[Login] Login code sent successfully");
       setStage("otp");
       setInfo("We emailed a 6-digit verification code to the authorised account.");
+      setResendCooldown(30);
     } catch (err: any) {
       console.error("[Login] requestLoginCode failed:", err);
       setError(
@@ -111,6 +121,15 @@ function LoginPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleResendCode = async () => {
+    if (resendCooldown > 0 || loading) return;
+    setError(null);
+    setInfo("Requesting new verification code...");
+    setDigits(["", "", "", "", "", ""]);
+    submittedRef.current = false;
+    await submitCreds();
   };
 
   const verify = async (code: string) => {
@@ -127,13 +146,13 @@ function LoginPage() {
         type: "magiclink",
       });
       if (vErr) throw new Error(vErr.message);
-      console.info("[Login] Session established successfully, redirecting to dashboard");
+      console.info("[Login] Session established successfully, showing checkmark animation...");
       setFeedback("success");
-      setTimeout(() => navigate({ to: "/" }), 640);
+      setTimeout(() => navigate({ to: "/" }), 1000);
     } catch (err: any) {
       console.error("[Login] Verification failed:", err);
       setFeedback("error");
-      setError(err?.message ?? "Verification failed.");
+      setError(err?.message ?? "Verification failed. Check your code or request a new one.");
       setTimeout(() => {
         setFeedback("none");
         setDigits(["", "", "", "", "", ""]);
@@ -283,67 +302,100 @@ function LoginPage() {
               className="pointer-events-none absolute inset-x-8 -top-px h-px bg-gradient-to-r from-transparent via-white/50 to-transparent"
               aria-hidden
             />
-            <div className="text-center">
-              <h2 className="text-lg font-semibold text-white">Enter your verification code</h2>
-              <p className="mt-1.5 text-xs text-slate-400">
-                {info ?? "Enter the 6-digit code we emailed you."}
-              </p>
-            </div>
 
-            <div
-              className={`flex justify-center gap-2.5 ${feedback === "error" ? "vch-otp-error" : ""}`}
-            >
-              {digits.map((d, i) => (
-                <input
-                  key={i}
-                  ref={(el) => {
-                    boxRefs.current[i] = el;
-                  }}
-                  value={d}
-                  onChange={(e) => setDigit(i, e.target.value)}
-                  onKeyDown={(e) => onKeyDown(i, e)}
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={6}
-                  aria-label={`Digit ${i + 1}`}
-                  className={`vch-otp-box h-15 w-11 rounded-2xl border bg-white/[0.07] py-3.5 text-center text-xl font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] backdrop-blur-2xl focus:border-[#ff8a3d]/70 focus:outline-none focus:ring-4 focus:ring-[#ff6a00]/15 ${
-                    !d && feedback === "none" ? "vch-otp-empty" : ""
-                  } ${feedback === "success" ? "vch-otp-success" : ""} ${
-                    feedback === "error" ? "border-red-500/70 text-red-200" : "border-white/15"
-                  }`}
-                  style={{
-                    animationDelay:
-                      feedback === "success"
-                        ? `${i * 55}ms`
-                        : feedback === "none"
-                          ? `${i * 40}ms`
-                          : "0ms",
-                  }}
-                />
-              ))}
-            </div>
-
-            {error && (
-              <div className="rounded-2xl border border-red-400/25 bg-red-500/10 px-4 py-2.5 text-center text-xs text-red-200">
-                {error}
+            {feedback === "success" ? (
+              <div className="py-6 flex flex-col items-center justify-center space-y-3 animate-in fade-in zoom-in duration-300">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-lg shadow-emerald-500/20">
+                  <svg
+                    className="h-9 w-9 stroke-current animate-in zoom-in duration-300"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                </div>
+                <h2 className="text-lg font-bold text-white">Verification Successful!</h2>
+                <p className="text-xs text-emerald-300">Logging you in...</p>
               </div>
-            )}
-            {loading && <div className="text-center text-xs text-slate-400">Verifying…</div>}
+            ) : (
+              <>
+                <div className="text-center">
+                  <h2 className="text-lg font-semibold text-white">Enter your verification code</h2>
+                  <p className="mt-1.5 text-xs text-slate-400">
+                    {info ?? "Enter the 6-digit code we emailed you."}
+                  </p>
+                </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                setStage("creds");
-                setDigits(["", "", "", "", "", ""]);
-                setError(null);
-                setInfo(null);
-                setFeedback("none");
-                submittedRef.current = false;
-              }}
-              className="w-full text-center text-xs font-medium text-slate-400 transition-colors hover:text-white"
-            >
-              ← Use a different email
-            </button>
+                <div
+                  className={`flex justify-center gap-2.5 ${feedback === "error" ? "vch-otp-error" : ""}`}
+                >
+                  {digits.map((d, i) => (
+                    <input
+                      key={i}
+                      ref={(el) => {
+                        boxRefs.current[i] = el;
+                      }}
+                      value={d}
+                      onChange={(e) => setDigit(i, e.target.value)}
+                      onKeyDown={(e) => onKeyDown(i, e)}
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={6}
+                      aria-label={`Digit ${i + 1}`}
+                      className={`vch-otp-box h-15 w-11 rounded-2xl border bg-white/[0.07] py-3.5 text-center text-xl font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] backdrop-blur-2xl focus:border-[#ff8a3d]/70 focus:outline-none focus:ring-4 focus:ring-[#ff6a00]/15 ${
+                        !d && feedback === "none" ? "vch-otp-empty" : ""
+                      } ${feedback === "success" ? "vch-otp-success" : ""} ${
+                        feedback === "error" ? "border-red-500/70 text-red-200" : "border-white/15"
+                      }`}
+                      style={{
+                        animationDelay:
+                          feedback === "success"
+                            ? `${i * 55}ms`
+                            : feedback === "none"
+                              ? `${i * 40}ms`
+                              : "0ms",
+                      }}
+                    />
+                  ))}
+                </div>
+
+                {error && (
+                  <div className="rounded-2xl border border-red-400/25 bg-red-500/10 px-4 py-2.5 text-center text-xs text-red-200">
+                    {error}
+                  </div>
+                )}
+                {loading && <div className="text-center text-xs text-slate-400">Verifying…</div>}
+
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStage("creds");
+                      setDigits(["", "", "", "", "", ""]);
+                      setError(null);
+                      setInfo(null);
+                      setFeedback("none");
+                      submittedRef.current = false;
+                    }}
+                    className="font-medium text-slate-400 transition-colors hover:text-white"
+                  >
+                    ← Different email
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={resendCooldown > 0 || loading}
+                    onClick={handleResendCode}
+                    className="font-semibold text-[#ff8a3d] hover:text-[#ffab74] disabled:text-slate-500 transition-colors"
+                  >
+                    {resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : "Resend code"}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         )}
 

@@ -14,7 +14,7 @@ import {
   type DriverDocument,
 } from "@/lib/fleet-data";
 import { simplifyVehicleName, vehicleArtworkPath } from "@/lib/vehicle-display";
-import { exportServiceHistoryPdf } from "@/lib/pdf-export";
+import { exportServiceHistoryPdf, exportDriverInvoicePdf } from "@/lib/pdf-export";
 import { useLeadsData } from "@/lib/leads-data";
 import { ApexAssistant } from "@/components/apex-assistant";
 import { ChatSimulator } from "@/components/chat-simulator";
@@ -23,6 +23,7 @@ import { getLeadConversation } from "@/lib/chat.functions";
 import { GenerationsView } from "@/components/generations-view";
 import { type AuditLogEntry } from "@/lib/audit-logger";
 import { WEBSITE_BASE_URL } from "@/lib/domain-config";
+import { TermsModal } from "@/components/terms-modal";
 import { RouteErrorBoundary } from "@/components/error-boundary";
 import { calculateContractEndDate, getContractDaysRemaining } from "@/lib/contract-helpers";
 
@@ -1664,6 +1665,7 @@ export function FleetShell({ view }: { view: View }) {
       className="vch-app relative min-h-screen overflow-x-hidden text-[#eef2f8]"
       style={{ background: T.bg }}
     >
+      <TermsModal />
       <div className="vch-glow" />
       {isOffline && (
         <div className="sticky top-0 z-50 flex items-center justify-center gap-2 bg-amber-500/90 px-4 py-2 text-center text-xs font-bold text-slate-950 shadow-md backdrop-blur-md">
@@ -2817,6 +2819,126 @@ function Dashboard({
         >
           <LineChart data={monthly} height={expandedChart === "line" ? 320 : 210} />
         </ChartCard>
+      </div>
+
+      {/* Driver Rent & Deposit Payment Breakdown Card */}
+      <div
+        className="rounded-2xl border p-4 space-y-3"
+        style={{ borderColor: T.border, background: T.panel }}
+      >
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <h3 className="text-base font-semibold text-white">Driver Rent & Deposit Balances</h3>
+            <p className="text-xs text-[#8b95a8]">
+              Live rent, deposit payment status, itemised extra charges, and balance due
+            </p>
+          </div>
+          <button
+            onClick={() => goto("drivers")}
+            className="rounded-lg border px-3 py-1.5 text-[11px] text-[#aeb8c9] hover:text-white"
+            style={{ borderColor: T.borderSoft }}
+          >
+            View all drivers →
+          </button>
+        </div>
+
+        {drivers.length === 0 ? (
+          <div className="py-6 text-center text-xs text-[#8b95a8]">No drivers on record.</div>
+        ) : (
+          <div className="space-y-2.5">
+            {drivers.slice(0, 6).map((d) => {
+              const agreedDeposit = Number(d.deposit_total || 0);
+              const totalPaidDeposit = (d.deposit_payments || []).reduce(
+                (sum, p) => sum + Number(p.amount || 0),
+                0,
+              );
+
+              let depositLabel = "Unpaid";
+              let depositBadgeCls = "border-red-500/40 bg-red-500/15 text-red-300";
+
+              if (agreedDeposit > 0 && totalPaidDeposit >= agreedDeposit) {
+                depositLabel = "Fully Paid";
+                depositBadgeCls = "border-emerald-500/40 bg-emerald-500/15 text-emerald-300";
+              } else if (totalPaidDeposit > 0) {
+                depositLabel = `Partially Paid (£${totalPaidDeposit} / £${agreedDeposit})`;
+                depositBadgeCls = "border-amber-500/40 bg-amber-500/15 text-amber-300";
+              } else if (agreedDeposit === 0) {
+                depositLabel = "None Set";
+                depositBadgeCls = "border-slate-500/40 bg-slate-500/15 text-slate-300";
+              }
+
+              const extraChargesTotal = (d.charges || []).reduce(
+                (sum, c) => sum + Number(c.amount || 0),
+                0,
+              );
+
+              const selectedVeh = vehicles.find((v) => v.id === d.vehicle_id);
+
+              return (
+                <div
+                  key={d.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3.5 transition hover:border-[#ff6a00]/40"
+                  style={{ borderColor: T.borderSoft, background: T.panel2 }}
+                >
+                  <div className="flex items-center gap-3 min-w-[200px]">
+                    <UKPlate reg={d.registration} size="sm" />
+                    <div>
+                      <div className="text-sm font-bold text-white">{d.driver_name}</div>
+                      <div className="text-xs text-[#8b95a8]">
+                        Rent:{" "}
+                        <span className="font-semibold text-white">
+                          £{Number(d.weekly_rent || 0).toFixed(2)}/wk
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3.5 text-xs">
+                    <div>
+                      <span className="text-[10px] uppercase text-[#8b95a8] block">
+                        Deposit Status
+                      </span>
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold border ${depositBadgeCls}`}
+                      >
+                        {depositLabel}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] uppercase text-[#8b95a8] block">
+                        Extra Charges
+                      </span>
+                      <span className="font-semibold text-amber-300">
+                        {extraChargesTotal > 0 ? `+£${extraChargesTotal.toFixed(2)}` : "£0.00"}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] uppercase text-[#8b95a8] block">
+                        Balance Due
+                      </span>
+                      <span
+                        className={`font-bold ${Number(d.balance_due || 0) > 0 ? "text-red-400" : "text-emerald-400"}`}
+                      >
+                        £{Number(d.balance_due || 0).toFixed(2)}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => exportDriverInvoicePdf(d, selectedVeh)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/15 transition-colors shrink-0"
+                    >
+                      <Icon.Download className="h-3.5 w-3.5 text-[#ff8a3d]" />
+                      Download Invoice
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div
@@ -6009,22 +6131,33 @@ function DriverBalanceModal({
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 border-t pt-4" style={{ borderColor: T.border }}>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-4" style={{ borderColor: T.border }}>
             <button
               type="button"
-              onClick={onClose}
-              className="rounded-lg border px-4 py-2 hover:bg-white/10"
-              style={{ borderColor: T.border }}
+              onClick={() => exportDriverInvoicePdf(driver, selectedVehicle)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-4 py-2 font-semibold text-white hover:bg-white/15 transition-colors"
             >
-              Cancel
+              <Icon.Download className="h-4 w-4 text-[#ff8a3d]" />
+              Download Invoice
             </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-lg bg-[#ff6a00] px-4 py-2 font-semibold text-white hover:bg-[#e05d00] disabled:opacity-50"
-            >
-              {saving ? "Saving…" : "Save Financial Details"}
-            </button>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg border px-4 py-2 hover:bg-white/10"
+                style={{ borderColor: T.border }}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="rounded-lg bg-[#ff6a00] px-4 py-2 font-semibold text-white hover:bg-[#e05d00] disabled:opacity-50"
+              >
+                {saving ? "Saving…" : "Save Financial Details"}
+              </button>
+            </div>
           </div>
         </form>
       </div>

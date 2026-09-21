@@ -21,11 +21,9 @@ const OTP_DELIVERY_EMAIL = "admin@fa-ibi.co.uk";
 // back to "Virtual Car Hire <admin@fa-ibi.co.uk>".
 const OTP_FROM = "Virtual Car Hire <onboarding@resend.dev>";
 
-async function sendOtpEmail(_email: string, code: string) {
+async function sendOtpEmail(targetEmail: string, code: string) {
   const email = OTP_DELIVERY_EMAIL;
-  const resendKey = getRuntimeEnv("RESEND_API_KEY");
-  if (!resendKey) throw new Error("Email service not configured: RESEND_API_KEY missing");
-
+  const subject = `${code} is your VCH Fleet Tracker code`;
   const html = `<!DOCTYPE html>
 <html>
   <head>
@@ -72,6 +70,30 @@ async function sendOtpEmail(_email: string, code: string) {
   </body>
 </html>`;
 
+  // 1. First attempt sending via shared 'send-email' Edge Function
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: edgeRes, error: edgeErr } = await supabaseAdmin.functions.invoke("send-email", {
+      body: {
+        to: email,
+        subject,
+        html,
+        email_type: "2fa_code",
+      },
+    });
+
+    if (!edgeErr && edgeRes) {
+      console.info("[2FA] Email sent via send-email edge function:", edgeRes);
+      return;
+    }
+  } catch (err) {
+    console.warn("[2FA] Edge function invoke exception, proceeding to Resend direct call:", err);
+  }
+
+  // 2. Direct Resend API fallback if edge function is unhandled or unavailable
+  const resendKey = getRuntimeEnv("RESEND_API_KEY");
+  if (!resendKey) throw new Error("Email service not configured: RESEND_API_KEY missing");
+
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -80,8 +102,8 @@ async function sendOtpEmail(_email: string, code: string) {
     },
     body: JSON.stringify({
       from: OTP_FROM,
-      to: [OTP_DELIVERY_EMAIL],
-      subject: `${code} is your VCH Fleet Tracker code`,
+      to: [email],
+      subject,
       html,
     }),
   });
@@ -104,11 +126,23 @@ export const requestLoginCode = createServerFn({ method: "POST" })
       throw new Error("Invalid credentials");
     }
 
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // Rate limiting: prevent spamming codes faster than once every 30 seconds
+    const thirtySecsAgo = new Date(Date.now() - 30 * 1000).toISOString();
+    const { data: recentOtps } = await supabaseAdmin
+      .from("login_otps")
+      .select("created_at")
+      .eq("email", ALLOWED_EMAIL)
+      .gte("created_at", thirtySecsAgo);
+
+    if (recentOtps && recentOtps.length > 0) {
+      throw new Error("Please wait 30 seconds before requesting another code.");
+    }
+
     const code = String(Math.floor(100000 + Math.random() * 900000));
     const codeHash = await sha256(`${ALLOWED_EMAIL}:${code}`);
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     await supabaseAdmin
       .from("login_otps")
