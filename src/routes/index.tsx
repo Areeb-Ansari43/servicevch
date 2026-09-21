@@ -1072,10 +1072,8 @@ function UserSettingsView({
 }
 
 function AuditLogsView({
-  data,
   toast,
 }: {
-  data: ReturnType<typeof useFleetData>;
   toast: (m: string, t?: Toast["type"]) => void;
 }) {
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
@@ -1277,70 +1275,6 @@ function AuditLogsView({
           Refresh Logs
         </button>
       </div>
-
-      {/* RECENTLY DELETED DRIVERS (48-HOUR RECOVERY) */}
-      {data.deletedDrivers.length > 0 && (
-        <div
-          className="rounded-2xl border p-4 space-y-3"
-          style={{ borderColor: "rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.05)" }}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Icon.Alert className="h-4 w-4 text-red-400" />
-              <h3 className="text-sm font-bold text-white">
-                Recently Deleted Drivers ({data.deletedDrivers.length}) — 48-Hour Recovery Window
-              </h3>
-            </div>
-            <span className="text-[10px] font-bold text-red-300 bg-red-500/20 px-2 py-0.5 rounded-full border border-red-500/30">
-              Soft-Deleted
-            </span>
-          </div>
-
-          <div className="space-y-2">
-            {data.deletedDrivers.map((d) => {
-              const deletedTime = d.deleted_at ? new Date(d.deleted_at).getTime() : Date.now();
-              const expiresAt = deletedTime + 48 * 3600 * 1000;
-              const msLeft = expiresAt - Date.now();
-              const hoursLeft = Math.max(0, Math.floor(msLeft / (3600 * 1000)));
-              const minsLeft = Math.max(0, Math.floor((msLeft % (3600 * 1000)) / (60 * 1000)));
-
-              return (
-                <div
-                  key={d.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3 bg-black/40 border-white/10"
-                >
-                  <div className="flex items-center gap-3">
-                    <UKPlate reg={d.registration} size="sm" />
-                    <div>
-                      <div className="text-xs font-bold text-white">{d.driver_name}</div>
-                      <div className="text-[11px] text-[#8b95a8]">
-                        Deleted: {d.deleted_at ? new Date(d.deleted_at).toLocaleString("en-GB") : "Recently"} ·{" "}
-                        <span className="text-amber-300 font-semibold">{hoursLeft}h {minsLeft}m left before permanent purge</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        await data.restoreDriver(d.id);
-                        toast(`Driver ${d.driver_name} restored successfully! Portal access restored.`, "info");
-                      } catch (err: any) {
-                        toast(err?.message ?? "Failed to restore driver", "error");
-                      }
-                    }}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/25 transition"
-                  >
-                    <Icon.RotateCcw className="h-3.5 w-3.5" />
-                    Restore Driver & Portal
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* FILTER BAR */}
       <div
@@ -1853,7 +1787,7 @@ export function FleetShell({ view }: { view: View }) {
               fallbackTitle="Audit Logs Error"
               fallbackMessage="An error occurred while loading system audit logs."
             >
-              <AuditLogsView data={data} toast={toast} />
+              <AuditLogsView toast={toast} />
             </RouteErrorBoundary>
           ) : null}
         </main>
@@ -5094,7 +5028,6 @@ function AddDriverModal({
                 className={inputCls}
               />
             </Field>
-          <Grid2>
             <Field label="Rent Due Day">
               <DarkSelect
                 value={rentDueDay}
@@ -5156,6 +5089,21 @@ function AddDriverModal({
             </button>
           </div>
         </form>
+
+        {customMsgModalOpen && (
+          <CustomMessageModal
+            driver={driver}
+            onClose={() => setCustomMsgModalOpen(false)}
+            onSend={async (finalMessage) => {
+              try {
+                await data.sendDriverReminder(driver, "custom", finalMessage);
+                toast(`Custom message sent to ${driver.driver_name}'s portal & email`);
+              } catch (err: any) {
+                toast(err?.message ?? "Failed to send custom message", "error");
+              }
+            }}
+          />
+        )}
       </div>
     </div>
   );
@@ -5836,16 +5784,6 @@ function DriverProfileModal({
                 />
               </Field>
             </Grid2>
-            <Grid2>
-              <Field label="Driver Licence Expiry Date">
-                <input
-                  type="date"
-                  value={licenceExpiry}
-                  onChange={(e) => setLicenceExpiry(e.target.value)}
-                  className={inputCls}
-                />
-              </Field>
-            </Grid2>
           ) : null}
 
           {/* Contract Term & Renewal Tracking */}
@@ -5860,6 +5798,16 @@ function DriverProfileModal({
                   className={inputCls}
                 />
               </Field>
+              <Field label="Driver Licence Expiry Date">
+                <input
+                  type="date"
+                  value={licenceExpiry}
+                  onChange={(e) => setLicenceExpiry(e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+            </Grid2>
+            <Grid2>
               <Field label="Contract Length (Weeks)">
                 <input
                   type="number"
@@ -5923,21 +5871,6 @@ function DriverProfileModal({
             </button>
           </div>
         </form>
-
-        {customMsgModalOpen && (
-          <CustomMessageModal
-            driver={driver}
-            onClose={() => setCustomMsgModalOpen(false)}
-            onSend={async (finalMessage) => {
-              try {
-                await data.sendDriverReminder(driver, "custom", finalMessage);
-                toast(`Custom message sent to ${driver.driver_name}'s portal & email`);
-              } catch (err: any) {
-                toast(err?.message ?? "Failed to send custom message", "error");
-              }
-            }}
-          />
-        )}
       </div>
     </div>
   );
@@ -6724,7 +6657,6 @@ function MileageView({
   const [updateTarget, setUpdateTarget] = useState<DriverTrack | null>(null);
   const [eomTarget, setEomTarget] = useState<DriverTrack | null>(null);
   const [logsTarget, setLogsTarget] = useState<DriverTrack | null>(null);
-  const [trackingModalOpen, setTrackingModalOpen] = useState(false);
 
   // Mileage Submissions Queue State
   const [subFilter, setSubFilter] = useState<"pending" | "approved" | "rejected" | "all">("pending");
@@ -6934,27 +6866,127 @@ function MileageView({
         )}
       </div>
 
-      <div>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <h3 className="text-base font-semibold">Active Drivers ({drivers.length})</h3>
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedDriver(null);
-              setDriverSearchText("");
-              setDriverName("");
-              setRegText("");
-              setSelected(null);
-              setStartMileage("");
-              setTrackingModalOpen(true);
-            }}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#ff6a00] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#e05d00] transition-colors"
-          >
-            <Icon.Plus className="h-4 w-4" />
-            Add Tracking / Update Mileage
-          </button>
+      <form
+        onSubmit={submit}
+        className="space-y-4 rounded-xl border p-6"
+        style={{ borderColor: T.border, background: T.panel }}
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <h3 className="text-base font-semibold">
+            {selectedDriver ? `Update Mileage / Tracking for ${selectedDriver.driver_name}` : "Start Tracking / Update Driver Mileage"}
+          </h3>
+          {selectedDriver && (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedDriver(null);
+                setDriverSearchText("");
+                setDriverName("");
+                setRegText("");
+                setSelected(null);
+                setStartMileage("");
+              }}
+              className="text-xs text-[#8b95a8] hover:text-white underline"
+            >
+              Clear selected driver
+            </button>
+          )}
         </div>
 
+        <div>
+          <Label>Select Existing Driver (Auto-Fills Details)</Label>
+          <DriverSearch
+            drivers={drivers}
+            value={driverSearchText}
+            onTextChange={(s) => {
+              setDriverSearchText(s);
+              if (selectedDriver && s !== selectedDriver.driver_name) {
+                setSelectedDriver(null);
+              }
+            }}
+            onPick={handlePickDriver}
+          />
+        </div>
+
+        <Grid2>
+          <div>
+            <Label>Vehicle Registration *</Label>
+            <RegSearch
+              vehicles={vehicles}
+              value={regText}
+              onTextChange={(s) => {
+                setRegText(s);
+                setSelected(null);
+              }}
+              onPick={(v) => {
+                setSelected(v);
+                setRegText(v.registration);
+                if (!selectedDriver) {
+                  setStartMileage(String(v.current_mileage || ""));
+                }
+              }}
+            />
+          </div>
+          <Field label="Driver Name *">
+            <input
+              value={driverName}
+              onChange={(e) => setDriverName(e.target.value)}
+              placeholder="e.g. John Doe"
+              className={inputCls}
+            />
+          </Field>
+        </Grid2>
+        <Grid2>
+          <Field label="Month Start Mileage">
+            <input
+              type="number"
+              inputMode="numeric"
+              value={startMileage}
+              onChange={(e) => setStartMileage(e.target.value.replace(/^0+(?=\d)/, ""))}
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Tracking Start Date">
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className={inputCls}
+            />
+          </Field>
+        </Grid2>
+        <Grid2>
+          <Field label="Monthly Allowance (miles)">
+            <input
+              type="number"
+              inputMode="numeric"
+              value={allowance}
+              onChange={(e) => setAllowance(e.target.value.replace(/^0+(?=\d)/, ""))}
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Excess Rate (pence/mile)">
+            <input
+              type="number"
+              inputMode="numeric"
+              value={excessRate}
+              onChange={(e) => setExcessRate(e.target.value.replace(/^0+(?=\d)/, ""))}
+              className={inputCls}
+            />
+          </Field>
+        </Grid2>
+        <div className="flex justify-end">
+          <button
+            type="submit"
+            className="rounded-lg bg-[#ff6a00] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#e05d00]"
+          >
+            Start Tracking
+          </button>
+        </div>
+      </form>
+
+      <div>
+        <h3 className="mb-3 text-base font-semibold">Active Drivers ({drivers.length})</h3>
         {drivers.length === 0 ? (
           <div
             className="rounded-xl border border-dashed p-10 text-center text-sm text-[#8b95a8]"
@@ -7116,135 +7148,6 @@ function MileageView({
           photoUrl={previewPhotoUrl}
           onClose={() => setPreviewPhotoUrl(null)}
         />
-      )}
-
-      {trackingModalOpen && (
-        <div
-          className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-200"
-          onClick={() => setTrackingModalOpen(false)}
-        >
-          <div
-            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-3xl sm:rounded-2xl border border-white/15 bg-[#10141d] p-5 sm:p-6 shadow-2xl space-y-4"
-            style={{ borderColor: T.border }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: T.borderSoft }}>
-              <h3 className="text-base font-bold text-white">
-                {selectedDriver ? `Update Tracking for ${selectedDriver.driver_name}` : "Start Tracking / Update Driver Mileage"}
-              </h3>
-              <button onClick={() => setTrackingModalOpen(false)} className="text-[#8b95a8] hover:text-white">
-                <Icon.X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <form
-              onSubmit={async (e) => {
-                await submit(e);
-                setTrackingModalOpen(false);
-              }}
-              className="space-y-4 text-xs"
-            >
-              <div>
-                <Label>Select Existing Driver (Auto-Fills Details)</Label>
-                <DriverSearch
-                  drivers={drivers}
-                  value={driverSearchText}
-                  onTextChange={(s) => {
-                    setDriverSearchText(s);
-                    if (selectedDriver && s !== selectedDriver.driver_name) {
-                      setSelectedDriver(null);
-                    }
-                  }}
-                  onPick={handlePickDriver}
-                />
-              </div>
-
-              <Grid2>
-                <div>
-                  <Label>Vehicle Registration *</Label>
-                  <RegSearch
-                    vehicles={vehicles}
-                    value={regText}
-                    onTextChange={(s) => {
-                      setRegText(s);
-                      setSelected(null);
-                    }}
-                    onPick={(v) => {
-                      setSelected(v);
-                      setRegText(v.registration);
-                      if (!selectedDriver) {
-                        setStartMileage(String(v.current_mileage || ""));
-                      }
-                    }}
-                  />
-                </div>
-                <Field label="Driver Name *">
-                  <input
-                    value={driverName}
-                    onChange={(e) => setDriverName(e.target.value)}
-                    placeholder="e.g. John Doe"
-                    className={inputCls}
-                  />
-                </Field>
-              </Grid2>
-              <Grid2>
-                <Field label="Month Start Mileage">
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    value={startMileage}
-                    onChange={(e) => setStartMileage(e.target.value.replace(/^0+(?=\d)/, ""))}
-                    className={inputCls}
-                  />
-                </Field>
-                <Field label="Tracking Start Date">
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className={inputCls}
-                  />
-                </Field>
-              </Grid2>
-              <Grid2>
-                <Field label="Monthly Allowance (miles)">
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    value={allowance}
-                    onChange={(e) => setAllowance(e.target.value.replace(/^0+(?=\d)/, ""))}
-                    className={inputCls}
-                  />
-                </Field>
-                <Field label="Excess Rate (pence/mile)">
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    value={excessRate}
-                    onChange={(e) => setExcessRate(e.target.value.replace(/^0+(?=\d)/, ""))}
-                    className={inputCls}
-                  />
-                </Field>
-              </Grid2>
-              <div className="flex justify-end gap-2 pt-2 border-t border-white/10">
-                <button
-                  type="button"
-                  onClick={() => setTrackingModalOpen(false)}
-                  className="rounded-lg border px-4 py-2 font-semibold text-[#8b95a8] hover:bg-white/5"
-                  style={{ borderColor: T.border }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-lg bg-[#ff6a00] px-5 py-2 font-semibold text-white hover:bg-[#e05d00]"
-                >
-                  Save Tracking
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
       )}
     </div>
   );
