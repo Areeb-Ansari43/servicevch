@@ -10,6 +10,23 @@ const BRAND_ORANGE_LIGHT = "#FF8A2B";
 const BRAND_TEXT_WHITE = "#FFFFFF";
 const BRAND_TEXT_MUTED = "#94A3B8";
 
+// --- Email Address Routing ---
+function getFromAddress(type: string): string {
+  const legacyFrom = Deno.env.get("EMAIL_FROM_ADDRESS");
+  if (type === "2fa" || type === "2fa_code") {
+    return Deno.env.get("AUTH_EMAIL_FROM") || legacyFrom || "auth@fa-ibi.co.uk";
+  }
+  if (
+    type === "fleet_summary" ||
+    type === "driver_licence_summary" ||
+    type === "rent_due" ||
+    type === "rent_due_tomorrow"
+  ) {
+    return Deno.env.get("NOTIFICATIONS_EMAIL_FROM") || legacyFrom || "notifications@fa-ibi.co.uk";
+  }
+  return Deno.env.get("DRIVER_ALERTS_EMAIL_FROM") || legacyFrom || "driver-alerts@fa-ibi.co.uk";
+}
+
 // --- Template Renderers ---
 
 function renderHeader(label: string, headline: string, subtext?: string): string {
@@ -454,27 +471,55 @@ serve(async (req) => {
     );
   }
 
-  const recipient = payload.recipient || payload.to;
-  const subject = payload.subject;
-  const templateType = payload.template_type || "driver_alert";
+  const rawRecipient = payload.recipient || payload.to || "";
+  const recipient = typeof rawRecipient === "string" ? rawRecipient.trim() : "";
+  const subject = payload.subject || "Virtual Car Hire Notice";
+  const templateType = payload.template_type || payload.email_type || "driver_alert";
   const templateData = payload.template_data || payload.data || {};
   const metadata = payload.metadata || {};
 
-  if (!recipient || !subject) {
+  // Recipient Rule: If driver has no email on file (or explicitly skipped), skip gracefully and log to email_log
+  if (!recipient || payload.skip) {
+    const skipReason = payload.skip_reason || "Driver has no email address on file (signup pending)";
+
+    if (supabaseUrl && supabaseServiceKey) {
+      await supabase.from("email_log").insert({
+        recipient: recipient || "none",
+        subject,
+        type: templateType,
+        status: "skipped",
+        error_message: skipReason,
+        metadata,
+      });
+    }
+
     return new Response(
-      JSON.stringify({ success: false, error: "Missing required fields: recipient and subject" }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({
+        success: true,
+        status: "skipped",
+        message: skipReason,
+      }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
+
+  // Determine sender email address using 3-address routing rules
+  const emailFromAddress = payload.from || getFromAddress(templateType);
+  const resendApiKey = Deno.env.get("RESEND_API_KEY");
 
   // Render HTML based on template_type
   let html = payload.html || "";
   if (!html) {
     switch (templateType) {
       case "2fa":
+      case "2fa_code":
         html = render2FATemplate(templateData);
         break;
       case "driver_alert":
+      case "driver_notice":
+      case "custom_message":
+      case "rent_due":
+      case "rent_due_tomorrow":
         html = renderDriverAlertTemplate({ ...templateData, headline: templateData.headline || subject });
         break;
       case "fleet_summary":
@@ -487,35 +532,6 @@ serve(async (req) => {
         html = renderDriverAlertTemplate({ ...templateData, headline: subject });
         break;
     }
-  }
-
-  const emailFromAddress = Deno.env.get("EMAIL_FROM_ADDRESS");
-  const resendApiKey = Deno.env.get("RESEND_API_KEY");
-
-  // Check if EMAIL_FROM_ADDRESS is unconfigured (domain verification pending)
-  if (!emailFromAddress) {
-    const errorMsg = "EMAIL_FROM_ADDRESS env var is not configured. Email send simulated.";
-
-    // Log to email_log as simulated
-    if (supabaseUrl && supabaseServiceKey) {
-      await supabase.from("email_log").insert({
-        recipient,
-        subject,
-        type: templateType,
-        status: "simulated",
-        error_message: errorMsg,
-        metadata: { ...metadata, note: "Domain verification pending in Resend" },
-      });
-    }
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        status: "simulated",
-        message: "EMAIL_FROM_ADDRESS not set. Send simulated successfully and logged to email_log.",
-      }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
   }
 
   if (!resendApiKey) {
@@ -565,7 +581,7 @@ serve(async (req) => {
         type: templateType,
         status: "failed",
         error_message: `Resend API error (${resendRes.status}): ${errorDetail}`,
-        metadata,
+        metadata: { ...metadata, sender: emailFromAddress },
       });
 
       return new Response(
@@ -585,7 +601,7 @@ serve(async (req) => {
       subject,
       type: templateType,
       status: "sent",
-      metadata: { ...metadata, resend_id: resendData.id },
+      metadata: { ...metadata, resend_id: resendData.id, sender: emailFromAddress },
     });
 
     return new Response(
@@ -593,6 +609,7 @@ serve(async (req) => {
         success: true,
         status: "sent",
         id: resendData.id,
+        sender: emailFromAddress,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
@@ -605,7 +622,7 @@ serve(async (req) => {
       type: templateType,
       status: "failed",
       error_message: errorMsg,
-      metadata,
+      metadata: { ...metadata, sender: emailFromAddress },
     });
 
     return new Response(

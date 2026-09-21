@@ -1068,6 +1068,273 @@ function UserSettingsView({
           </button>
         </div>
       </div>
+
+      {/* EMAIL TEMPLATE PREVIEWS */}
+      <div
+        className="rounded-2xl border p-5"
+        style={{ borderColor: T.border, background: T.panel }}
+      >
+        <div className="flex items-center gap-2">
+          <Icon.Eye className="h-5 w-5 text-[#ff6a00]" />
+          <h2 className="text-base font-bold text-white">Email Template Previews</h2>
+        </div>
+        <p className="mt-1 text-xs text-[#9aa5b8]">
+          Send sample test copies of each branded HTML template to your email address ({email}) to inspect rendering and layout.
+        </p>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {/* 1. 2FA CODE */}
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                toast(`Sending 2FA test email to ${email}...`);
+                await supabase.functions.invoke("send-email", {
+                  body: {
+                    recipient: email,
+                    subject: "[Test Preview] Your Verification Code",
+                    template_type: "2fa_code",
+                    template_data: {
+                      code: "849201",
+                      recipientName: email.split("@")[0] || "Admin",
+                      expiresInMinutes: 10,
+                    },
+                  },
+                });
+                toast(`Test email sent to ${email}`);
+              } catch (e: any) {
+                toast(e?.message || "Failed to send test email", "error");
+              }
+            }}
+            className="flex flex-col items-start rounded-xl border p-3.5 text-left transition hover:border-[#ff6a00]/50 hover:bg-white/5"
+            style={{ borderColor: T.borderSoft, background: T.panel2 }}
+          >
+            <div className="text-xs font-bold text-white">2FA Verification Code</div>
+            <div className="mt-1 text-[11px] text-[#8b95a8]">
+              Sent via <span className="font-semibold text-[#ff8a3d]">auth@fa-ibi.co.uk</span>
+            </div>
+            <span className="mt-3 rounded-lg border border-[#ff6a00]/30 bg-[#ff6a00]/10 px-2.5 py-1 text-[10px] font-bold text-[#ff8a3d]">
+              Send Test Email &rarr;
+            </span>
+          </button>
+
+          {/* 2. FLEET SUMMARY */}
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                toast(`Sending Fleet Summary test email to ${email}...`);
+                await supabase.functions.invoke("send-email", {
+                  body: {
+                    recipient: email,
+                    subject: "[Test Preview] Fleet MOT & PCO Expiry Summary — 2 vehicles",
+                    template_type: "fleet_summary",
+                    template_data: {
+                      headerLabel: "FLEET COMPLIANCE",
+                      headline: "Multiple vehicles have upcoming MOT & PCO expiries (2)",
+                      subtext: "Ensure your fleet remains road-legal, compliant, and ready for work.",
+                      vehicles: [
+                        {
+                          registration: "KN73XLB",
+                          model: "Mercedes-Benz EQE",
+                          photoUrl: `${WEBSITE_BASE_URL}/vehicle-artwork/mercedes-eqe-transparent.png`,
+                          motExpiry: "2026-10-15",
+                          motDaysRemaining: 5,
+                          pcoExpiry: "2026-10-20",
+                          pcoDaysRemaining: 10,
+                          detailsUrl: "#",
+                        },
+                        {
+                          registration: "KF19UCJ",
+                          model: "Toyota Corolla",
+                          photoUrl: `${WEBSITE_BASE_URL}/vehicle-artwork/toyota-corolla-estate-transparent.png`,
+                          motExpiry: "2026-10-18",
+                          motDaysRemaining: 8,
+                          detailsUrl: "#",
+                        },
+                      ],
+                      manageUrl: `${WEBSITE_BASE_URL}/`,
+                    },
+                  },
+                });
+                toast(`Test email sent to ${email}`);
+              } catch (e: any) {
+                toast(e?.message || "Failed to send test email", "error");
+              }
+            }}
+            className="flex flex-col items-start rounded-xl border p-3.5 text-left transition hover:border-[#ff6a00]/50 hover:bg-white/5"
+            style={{ borderColor: T.borderSoft, background: T.panel2 }}
+          >
+            <div className="text-xs font-bold text-white">Fleet-Wide MOT/PCO Summary</div>
+            <div className="mt-1 text-[11px] text-[#8b95a8]">
+              Sent via <span className="font-semibold text-sky-400">notifications@fa-ibi.co.uk</span>
+            </div>
+            <span className="mt-3 rounded-lg border border-[#ff6a00]/30 bg-[#ff6a00]/10 px-2.5 py-1 text-[10px] font-bold text-[#ff8a3d]">
+              Send Test Email &rarr;
+            </span>
+          </button>
+
+          {/* 3. DRIVER LICENCE SUMMARY */}
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                toast(`Sending Licence Expiry Summary test email to ${email}...`);
+                await supabase.functions.invoke("send-email", {
+                  body: {
+                    recipient: email,
+                    subject: "[Test Preview] Driver Licence Expiry Summary — 2 drivers",
+                    template_type: "driver_licence_summary",
+                    template_data: {
+                      headerLabel: "LICENCE COMPLIANCE",
+                      headline: "Driver Licences Expiring Soon",
+                      subtext: "Review driver licence expiry dates across your team and take required action.",
+                      introLine: "Hi there,\nHere are the upcoming driver licence expiry dates for your team:",
+                      drivers: [
+                        {
+                          driverId: "DRV-1029",
+                          name: "Alexander Wright",
+                          licenceType: "Full UK Licence",
+                          expiryDate: "2026-10-12",
+                          daysRemaining: 12,
+                          reviewUrl: "#",
+                        },
+                        {
+                          driverId: "DRV-1044",
+                          name: "David Miller",
+                          licenceType: "PCO Licence",
+                          expiryDate: "2026-10-25",
+                          daysRemaining: 25,
+                          reviewUrl: "#",
+                        },
+                      ],
+                      helpUrl: `${WEBSITE_BASE_URL}/drivers`,
+                    },
+                  },
+                });
+                toast(`Test email sent to ${email}`);
+              } catch (e: any) {
+                toast(e?.message || "Failed to send test email", "error");
+              }
+            }}
+            className="flex flex-col items-start rounded-xl border p-3.5 text-left transition hover:border-[#ff6a00]/50 hover:bg-white/5"
+            style={{ borderColor: T.borderSoft, background: T.panel2 }}
+          >
+            <div className="text-xs font-bold text-white">Driver Licence Expiry Summary</div>
+            <div className="mt-1 text-[11px] text-[#8b95a8]">
+              Sent via <span className="font-semibold text-sky-400">notifications@fa-ibi.co.uk</span>
+            </div>
+            <span className="mt-3 rounded-lg border border-[#ff6a00]/30 bg-[#ff6a00]/10 px-2.5 py-1 text-[10px] font-bold text-[#ff8a3d]">
+              Send Test Email &rarr;
+            </span>
+          </button>
+
+          {/* 4. RENT DUE TOMORROW */}
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                const name = email.split("@")[0] || "Driver";
+                toast(`Sending Rent Due test email to ${email}...`);
+                await supabase.functions.invoke("send-email", {
+                  body: {
+                    recipient: email,
+                    subject: "[Test Preview] Reminder: Your rent is due tomorrow — Virtual Car Hire",
+                    template_type: "rent_due_tomorrow",
+                    template_data: {
+                      recipientName: name,
+                      headline: "Rent Due Tomorrow",
+                      introLine: `Hi ${name}, your rent is due tomorrow.`,
+                      cards: [
+                        {
+                          iconType: "rent",
+                          title: "Weekly Rent Payment (£260.00)",
+                          dateStr: "Tomorrow",
+                          vehicleReg: "KN73XLB",
+                          daysRemaining: 1,
+                        },
+                      ],
+                      warningNote:
+                        "Prompt rent payments help maintain your vehicle account in good standing. Please contact support if you have any questions.",
+                      actionUrl: `${WEBSITE_BASE_URL}/portal`,
+                      actionText: "View Balance in Driver Portal",
+                    },
+                  },
+                });
+                toast(`Test email sent to ${email}`);
+              } catch (e: any) {
+                toast(e?.message || "Failed to send test email", "error");
+              }
+            }}
+            className="flex flex-col items-start rounded-xl border p-3.5 text-left transition hover:border-[#ff6a00]/50 hover:bg-white/5"
+            style={{ borderColor: T.borderSoft, background: T.panel2 }}
+          >
+            <div className="text-xs font-bold text-white">Rent-Due-Tomorrow Reminder</div>
+            <div className="mt-1 text-[11px] text-[#8b95a8]">
+              Sent via <span className="font-semibold text-sky-400">notifications@fa-ibi.co.uk</span>
+            </div>
+            <span className="mt-3 rounded-lg border border-[#ff6a00]/30 bg-[#ff6a00]/10 px-2.5 py-1 text-[10px] font-bold text-[#ff8a3d]">
+              Send Test Email &rarr;
+            </span>
+          </button>
+
+          {/* 5. DRIVER MOT/PCO NOTICE */}
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                const name = email.split("@")[0] || "Driver";
+                toast(`Sending Driver Notice test email to ${email}...`);
+                await supabase.functions.invoke("send-email", {
+                  body: {
+                    recipient: email,
+                    subject: "[Test Preview] Important Notice: Upcoming Vehicle Expiry for KN73XLB",
+                    template_type: "driver_alert",
+                    template_data: {
+                      recipientName: name,
+                      headline: "Vehicle Expiry Notice — KN73XLB",
+                      subtext: "Please review the details below and schedule an inspection.",
+                      cards: [
+                        {
+                          iconType: "mot",
+                          title: "MOT Inspection Due",
+                          dateStr: "2026-10-15",
+                          vehicleReg: "KN73XLB",
+                          vehicleModel: "Mercedes-Benz EQE",
+                          daysRemaining: 5,
+                        },
+                        {
+                          iconType: "pco",
+                          title: "PCO Licence Renewal Due",
+                          dateStr: "2026-10-20",
+                          vehicleReg: "KN73XLB",
+                          vehicleModel: "Mercedes-Benz EQE",
+                          daysRemaining: 10,
+                        },
+                      ],
+                      actionUrl: `${WEBSITE_BASE_URL}/portal`,
+                      actionText: "View Details in Portal",
+                    },
+                  },
+                });
+                toast(`Test email sent to ${email}`);
+              } catch (e: any) {
+                toast(e?.message || "Failed to send test email", "error");
+              }
+            }}
+            className="flex flex-col items-start rounded-xl border p-3.5 text-left transition hover:border-[#ff6a00]/50 hover:bg-white/5"
+            style={{ borderColor: T.borderSoft, background: T.panel2 }}
+          >
+            <div className="text-xs font-bold text-white">Driver Single-Vehicle MOT/PCO Notice</div>
+            <div className="mt-1 text-[11px] text-[#8b95a8]">
+              Sent via <span className="font-semibold text-emerald-400">driver-alerts@fa-ibi.co.uk</span>
+            </div>
+            <span className="mt-3 rounded-lg border border-[#ff6a00]/30 bg-[#ff6a00]/10 px-2.5 py-1 text-[10px] font-bold text-[#ff8a3d]">
+              Send Test Email &rarr;
+            </span>
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
