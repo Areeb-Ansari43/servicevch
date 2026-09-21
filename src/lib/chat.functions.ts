@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { getRuntimeEnv } from "@/integrations/supabase/config";
 import { z } from "zod";
 
 const replySchema = z.object({
@@ -150,4 +151,55 @@ export const setLeadAiMode = createServerFn({ method: "POST" })
       .eq("id", data.leadId);
     if (error) throw new Error(error.message);
     return { ok: true, paused: data.paused };
+  });
+
+const rewordSchema = z.object({
+  driverName: z.string(),
+  registration: z.string(),
+  rawMessage: z.string().trim().min(1),
+});
+
+/** Reword a plain staff message into a polite, polished driver message using Gemini AI. */
+export const rewordCustomMessage = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => rewordSchema.parse(d))
+  .handler(async ({ data }) => {
+    const geminiKey =
+      getRuntimeEnv("GEMINI_API_KEY") ||
+      getRuntimeEnv("VITE_GEMINI_API_KEY") ||
+      getRuntimeEnv("GEMINI_API_TOKEN");
+
+    const prompt = `You are a polite, professional driver relations assistant for Virtual Car Hire (a premium vehicle rental company in the UK).
+Rewrite the following raw message from staff into a warm, polite, professional, and clear message for the driver (${data.driverName}, vehicle reg: ${data.registration}).
+Keep all key facts, dates, monetary amounts, and instructions intact. Do NOT use em dashes.
+Raw Message: ${data.rawMessage}
+Return ONLY the reworded message text.`;
+
+    if (geminiKey) {
+      try {
+        const model = (getRuntimeEnv("GEMINI_MODEL") ?? "gemini-2.5-flash").trim();
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.3, maxOutputTokens: 500 },
+          }),
+        });
+
+        if (res.ok) {
+          const json = await res.json();
+          const text = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text && typeof text === "string" && text.trim().length > 0) {
+            return { reworded: text.trim().replace(/—/g, ", ") };
+          }
+        }
+      } catch (err) {
+        console.warn("[rewordCustomMessage] Gemini call failed, using fallback:", err);
+      }
+    }
+
+    const fallback = `Hello ${data.driverName}, ${data.rawMessage}. Please check your portal or contact us if you have any questions. Thank you, Virtual Car Hire.`;
+    return { reworded: fallback };
   });

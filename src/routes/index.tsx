@@ -19,7 +19,7 @@ import { useLeadsData } from "@/lib/leads-data";
 import { ApexAssistant } from "@/components/apex-assistant";
 import { ChatSimulator } from "@/components/chat-simulator";
 import { LeadThread } from "@/components/lead-thread";
-import { getLeadConversation } from "@/lib/chat.functions";
+import { getLeadConversation, rewordCustomMessage } from "@/lib/chat.functions";
 import { GenerationsView } from "@/components/generations-view";
 import { type AuditLogEntry } from "@/lib/audit-logger";
 import { WEBSITE_BASE_URL } from "@/lib/domain-config";
@@ -2676,6 +2676,28 @@ function Dashboard({
     })
     .sort((a, b) => a.days - b.days);
 
+  // Driver licence expiry alerts (<= 30 days)
+  const driverLicenceAlerts = drivers
+    .filter((d) => !d.deleted_at && d.licence_expiry_date)
+    .flatMap((d) => {
+      const t = new Date(d.licence_expiry_date!).getTime();
+      if (isNaN(t)) return [];
+      const days = Math.ceil((t - now) / 86400000);
+      if (days <= 30) return [{ driver: d, date: d.licence_expiry_date!, days }];
+      return [];
+    })
+    .sort((a, b) => a.days - b.days);
+
+  // Rent due reminders (1 day before)
+  const rentDueReminders = drivers
+    .filter((d) => !d.deleted_at && d.weekly_rent > 0)
+    .flatMap((d) => {
+      const nextDue = calculateNextPaymentDueDate(d.start_date, d.rent_due_day, new Date(now));
+      const days = Math.ceil((nextDue.getTime() - now) / 86400000);
+      if (days === 1) return [{ driver: d, nextDue, days }];
+      return [];
+    });
+
   const [expandedChart, setExpandedChart] = useState<null | "donut" | "line">(null);
 
   return (
@@ -2747,6 +2769,85 @@ function Dashboard({
                     : days === 1
                       ? "Due tomorrow"
                       : "Due today"}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {rentDueReminders.length > 0 && (
+        <div
+          className="rounded-xl border p-5"
+          style={{ borderColor: "rgba(59,130,246,0.35)", background: "rgba(59,130,246,0.06)" }}
+        >
+          <div className="mb-3 flex items-center gap-2">
+            <Icon.Alert className="h-5 w-5 text-blue-400" />
+            <h3 className="text-base font-semibold text-blue-300">
+              Rent Due Tomorrow — 1 Day Reminder
+            </h3>
+            <span className="ml-auto rounded-full bg-blue-500 px-2 py-0.5 text-[10px] font-bold text-white">
+              {rentDueReminders.length}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {rentDueReminders.map(({ driver, nextDue }) => (
+              <button
+                key={driver.id + "-rent-due"}
+                onClick={() => goto("drivers")}
+                className="flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-[#1e222b]"
+                style={{ borderColor: T.border, background: T.panel }}
+              >
+                <UKPlate reg={driver.registration} size="sm" />
+                <div className="flex-1 text-sm">
+                  <span className="font-bold text-white">{driver.driver_name}</span> — Weekly rent of{" "}
+                  <span className="font-bold text-emerald-400">£{driver.weekly_rent.toFixed(2)}</span> is due tomorrow ({nextDue.toLocaleDateString("en-GB")})
+                  <div className="text-xs text-[#8b95a8]">Rent due day: {driver.rent_due_day}</div>
+                </div>
+                <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-[11px] font-bold text-blue-300">
+                  Due Tomorrow
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {driverLicenceAlerts.length > 0 && (
+        <div
+          className="rounded-xl border p-5"
+          style={{ borderColor: "rgba(245,158,11,0.35)", background: "rgba(245,158,11,0.06)" }}
+        >
+          <div className="mb-3 flex items-center gap-2">
+            <Icon.Alert className="h-5 w-5 text-amber-400" />
+            <h3 className="text-base font-semibold text-amber-300">
+              Alerts — Driver Licence Expiry
+            </h3>
+            <span className="ml-auto rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-bold text-white">
+              {driverLicenceAlerts.length}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {driverLicenceAlerts.map(({ driver, date, days }) => (
+              <button
+                key={driver.id + "-licence"}
+                onClick={() => goto("drivers")}
+                className="flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-[#1e222b]"
+                style={{ borderColor: T.border, background: T.panel }}
+              >
+                <UKPlate reg={driver.registration} size="sm" />
+                <div className="flex-1 text-sm">
+                  <span className="font-bold text-white">{driver.driver_name}</span> — Licence {days < 0 ? "expired" : "expiring"}
+                  <div className="text-xs text-[#8b95a8]">
+                    Expiry date: {new Date(date).toLocaleDateString("en-GB")}
+                  </div>
+                </div>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                    days < 0 ? "bg-red-500/20 text-red-300" : days <= 7 ? "bg-red-500/20 text-red-300" : "bg-amber-500/20 text-amber-300"
+                  }`}
+                >
+                  {days < 0 ? `${Math.abs(days)}d overdue` : days === 0 ? "Today" : `${days}d left`}
                 </span>
               </button>
             ))}
@@ -4913,6 +5014,7 @@ function AddDriverModal({
   const [phone, setPhone] = useState("");
   const [vehicleId, setVehicleId] = useState("");
   const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [licenceExpiry, setLicenceExpiry] = useState("");
   const [weeklyRent, setWeeklyRent] = useState("200");
   const [rentDueDay, setRentDueDay] = useState("Monday");
   const [rentStatus, setRentStatus] = useState<"paid" | "unpaid">("unpaid");
@@ -4940,6 +5042,7 @@ function AddDriverModal({
         allowance: parseInt(allowance) || 5000,
         excess_rate: parseInt(excessRate) || 20,
         start_date: startDate,
+        licence_expiry_date: licenceExpiry || null,
         weekly_rent: rentAmt,
         rent_due_day: rentDueDay,
         rent_status: rentStatus,
@@ -5028,6 +5131,16 @@ function AddDriverModal({
                 className={inputCls}
               />
             </Field>
+            <Field label="Licence Expiry Date">
+              <input
+                type="date"
+                value={licenceExpiry}
+                onChange={(e) => setLicenceExpiry(e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+          </Grid2>
+          <Grid2>
             <Field label="Weekly Rent (£)">
               <input
                 type="number"
@@ -5037,8 +5150,6 @@ function AddDriverModal({
                 className={inputCls}
               />
             </Field>
-          </Grid2>
-          <Grid2>
             <Field label="Rent Due Day">
               <DarkSelect
                 value={rentDueDay}
@@ -5100,6 +5211,152 @@ function AddDriverModal({
             </button>
           </div>
         </form>
+
+        {customMsgModalOpen && (
+          <CustomMessageModal
+            driver={driver}
+            onClose={() => setCustomMsgModalOpen(false)}
+            onSend={async (finalMessage) => {
+              try {
+                await data.sendDriverReminder(driver, "custom", finalMessage);
+                toast(`Custom message sent to ${driver.driver_name}'s portal & email`);
+              } catch (err: any) {
+                toast(err?.message ?? "Failed to send custom message", "error");
+              }
+            }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CustomMessageModal({
+  driver,
+  onClose,
+  onSend,
+}: {
+  driver: DriverTrack;
+  onClose: () => void;
+  onSend: (rewordedMessage: string) => Promise<void>;
+}) {
+  const [rawText, setRawText] = useState("");
+  const [rewordedText, setRewordedText] = useState("");
+  const [reworded, setReworded] = useState(false);
+  const [loadingAi, setLoadingAi] = useState(false);
+  const [sending, setSending] = useState(false);
+
+  const handleReword = async () => {
+    if (!rawText.trim()) return;
+    setLoadingAi(true);
+    try {
+      const res = await rewordCustomMessage({
+        data: {
+          driverName: driver.driver_name,
+          registration: driver.registration,
+          rawMessage: rawText.trim(),
+        },
+      });
+      setRewordedText(res.reworded);
+      setReworded(true);
+    } catch (e: any) {
+      setRewordedText(`Hello ${driver.driver_name}, ${rawText.trim()}. Please check your portal.`);
+      setReworded(true);
+    } finally {
+      setLoadingAi(false);
+    }
+  };
+
+  const handleConfirmSend = async () => {
+    const messageToSend = rewordedText.trim() || rawText.trim();
+    if (!messageToSend) return;
+    setSending(true);
+    try {
+      await onSend(messageToSend);
+      onClose();
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-3xl sm:rounded-2xl border border-white/15 bg-[#10141d] p-5 sm:p-6 shadow-2xl space-y-4"
+        style={{ borderColor: T.border }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: T.borderSoft }}>
+          <h3 className="text-base font-bold text-white flex items-center gap-2">
+            <Icon.Sparkles className="h-4 w-4 text-[#ff6a00]" /> Custom Message for {driver.driver_name}
+          </h3>
+          <button onClick={onClose} className="text-[#8b95a8] hover:text-white">
+            <Icon.X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="space-y-3 text-xs">
+          <div>
+            <label className="mb-1 block font-bold text-[#8b95a8]">Step 1: Type Plain Message</label>
+            <textarea
+              rows={3}
+              value={rawText}
+              onChange={(e) => {
+                setRawText(e.target.value);
+                setReworded(false);
+              }}
+              placeholder="e.g. Please bring vehicle reg LB22 OKM in for service on Thursday at 10am."
+              className={inputCls}
+            />
+          </div>
+
+          <button
+            type="button"
+            disabled={!rawText.trim() || loadingAi}
+            onClick={handleReword}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-2.5 font-bold text-white shadow-md hover:from-orange-600 hover:to-amber-600 disabled:opacity-50"
+          >
+            <Icon.Sparkles className="h-4 w-4" />
+            {loadingAi ? "AI Rewording..." : "AI Reword Message"}
+          </button>
+
+          {reworded && (
+            <div className="space-y-2 rounded-xl border p-3.5 bg-white/5 border-orange-500/30">
+              <label className="block font-bold text-[#ff8a3d]">
+                Step 2: Polished Message (Review / Edit before sending)
+              </label>
+              <textarea
+                rows={4}
+                value={rewordedText}
+                onChange={(e) => setRewordedText(e.target.value)}
+                className={inputCls}
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/10">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border px-4 py-2 text-xs font-semibold text-[#8b95a8] hover:bg-white/5"
+            style={{ borderColor: T.border }}
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            disabled={(!rewordedText.trim() && !rawText.trim()) || sending}
+            onClick={handleConfirmSend}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#ff6a00] px-4 py-2 text-xs font-semibold text-white hover:bg-[#e05d00] disabled:opacity-50"
+          >
+            {sending ? "Sending Notice..." : "Confirm & Send"}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -5434,9 +5691,11 @@ function DriverProfileModal({
   const [phone, setPhone] = useState(driver.phone || "");
   const [vehicleId, setVehicleId] = useState(driver.vehicle_id);
   const [startDate, setStartDate] = useState(driver.start_date || new Date().toISOString().slice(0, 10));
+  const [licenceExpiry, setLicenceExpiry] = useState(driver.licence_expiry_date || "");
   const [contractWeeks, setContractWeeks] = useState(String(driver.contract_length_weeks ?? 6));
   const [saving, setSaving] = useState(false);
   const [sendingReminder, setSendingReminder] = useState<string | null>(null);
+  const [customMsgModalOpen, setCustomMsgModalOpen] = useState(false);
 
   const selectedVehicle = vehicles.find((v) => v.id === vehicleId);
 
@@ -5478,6 +5737,7 @@ function DriverProfileModal({
         vehicle_id: selectedVehicle ? selectedVehicle.id : driver.vehicle_id,
         registration: selectedVehicle ? selectedVehicle.registration : driver.registration,
         start_date: startDate,
+        licence_expiry_date: licenceExpiry || null,
         contract_length_weeks: parseInt(contractWeeks) || 6,
       });
       onClose();
@@ -5566,6 +5826,15 @@ function DriverProfileModal({
               <Icon.Calendar className="h-3.5 w-3.5" />
               {sendingReminder === "contract" ? "Sending..." : "Contract Renewal Reminder"}
             </button>
+            <button
+              type="button"
+              disabled={sendingReminder !== null}
+              onClick={() => setCustomMsgModalOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-50"
+            >
+              <Icon.Sparkles className="h-3.5 w-3.5" />
+              Custom Message
+            </button>
           </div>
           <p className="text-[11px] text-[#8b95a8]">
             Sends a direct notification to the driver's portal dashboard and an email copy if connected.
@@ -5651,6 +5920,16 @@ function DriverProfileModal({
                   className={inputCls}
                 />
               </Field>
+              <Field label="Driver Licence Expiry Date">
+                <input
+                  type="date"
+                  value={licenceExpiry}
+                  onChange={(e) => setLicenceExpiry(e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+            </Grid2>
+            <Grid2>
               <Field label="Contract Length (Weeks)">
                 <input
                   type="number"
