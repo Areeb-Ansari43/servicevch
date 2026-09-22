@@ -457,6 +457,16 @@ serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  // Basic authorization header presence check for non-preflight requests
+  const authHeader = req.headers.get("Authorization");
+  const apiKeyHeader = req.headers.get("apikey");
+  if (!authHeader && !apiKeyHeader) {
+    return new Response(
+      JSON.stringify({ success: false, error: "Unauthorized: Missing authorization header" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
