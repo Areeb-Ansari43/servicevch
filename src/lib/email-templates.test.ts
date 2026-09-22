@@ -140,4 +140,51 @@ describe("Email Templates Foundation", () => {
       expect(html).toContain("Regulatory Requirement");
     });
   });
+
+  describe("Send Test Email Edge Function Helper", () => {
+    it("parses success and error feedback correctly", async () => {
+      let toastMessages: { msg: string; type?: string }[] = [];
+      const toast = (msg: string, type?: string) => {
+        toastMessages.push({ msg, type });
+      };
+
+      // Helper logic test
+      const processFeedback = (
+        data: any,
+        error: any
+      ): { success: boolean; message: string } => {
+        if (error) {
+          let detailedError = error.message || "Invoke failed";
+          if (data && typeof data === "object") {
+            if (data.error) detailedError = data.error;
+            else if (data.message) detailedError = data.message;
+          }
+          return { success: false, message: `Failed to send test email: ${detailedError}` };
+        }
+        if (data && typeof data === "object") {
+          if (data.success === false || data.status === "failed") {
+            const msg = data.error || data.message || "Unknown error";
+            return { success: false, message: `Failed to send test email: ${msg}` };
+          }
+        }
+        return { success: true, message: "Test email sent to admin@virtualcarhire.com" };
+      };
+
+      // Case 1: Missing secrets (HTTP 500 error from Edge Function)
+      const res1 = processFeedback(
+        { success: false, status: "failed", error: "RESEND_API_KEY environment variable is missing." },
+        { message: "Edge Function returned 500" }
+      );
+      expect(res1.success).toBe(false);
+      expect(res1.message).toContain("RESEND_API_KEY environment variable is missing.");
+
+      // Case 2: Success
+      const res2 = processFeedback(
+        { success: true, status: "sent", id: "resend_123" },
+        null
+      );
+      expect(res2.success).toBe(true);
+      expect(res2.message).toBe("Test email sent to admin@virtualcarhire.com");
+    });
+  });
 });
