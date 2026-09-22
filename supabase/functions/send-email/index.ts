@@ -573,7 +573,7 @@ serve(async (req) => {
     const resendData = await resendRes.json();
 
     if (!resendRes.ok) {
-      const errorDetail = resendData.message || JSON.stringify(resendData);
+      const errorDetail = resendData.message || resendData.error || JSON.stringify(resendData);
 
       await supabase.from("email_log").insert({
         recipient,
@@ -588,7 +588,7 @@ serve(async (req) => {
         JSON.stringify({
           success: false,
           status: "failed",
-          error: `Resend API returned status ${resendRes.status}`,
+          error: resendData.message ? `Resend API: ${resendData.message}` : `Resend API returned status ${resendRes.status}`,
           details: resendData,
         }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

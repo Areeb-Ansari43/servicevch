@@ -862,7 +862,7 @@ export async function sendTestEmail(
 
     if (data && typeof data === "object") {
       if (data.success === false || data.status === "failed") {
-        const msg = data.error || data.message || "Unknown error";
+        const msg = data.error || data.details?.message || data.message || "Unknown error";
         toast(`Failed to send test email: ${msg}`, "error");
         return;
       }
@@ -6294,6 +6294,21 @@ function DriverProfileModal({
             </button>
           </div>
         </form>
+
+        {customMsgModalOpen && (
+          <CustomMessageModal
+            driver={driver}
+            onClose={() => setCustomMsgModalOpen(false)}
+            onSend={async (finalMessage) => {
+              try {
+                await data.sendDriverReminder(driver, "custom", finalMessage);
+                toast(`Custom message sent to ${driver.driver_name}'s portal & email`);
+              } catch (err: any) {
+                toast(err?.message ?? "Failed to send custom message", "error");
+              }
+            }}
+          />
+        )}
       </div>
     </div>
   );
