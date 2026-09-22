@@ -815,6 +815,65 @@ function DriverSearch({
   );
 }
 
+export async function sendTestEmail(
+  payload: {
+    recipient: string;
+    subject: string;
+    template_type: string;
+    template_data: Record<string, any>;
+  },
+  toast: (msg: string, type?: Toast["type"]) => void
+) {
+  toast(`Sending test email to ${payload.recipient}...`, "info");
+  try {
+    const { data, error } = await supabase.functions.invoke("send-email", {
+      body: payload,
+    });
+
+    if (error) {
+      let detailedError = error.message;
+      try {
+        if (error.context && typeof (error.context as any).json === "function") {
+          const errBody = await (error.context as any).json();
+          if (errBody?.error) detailedError = errBody.error;
+          else if (errBody?.message) detailedError = errBody.message;
+        } else if (error.context && typeof (error.context as any).text === "function") {
+          const errText = await (error.context as any).text();
+          try {
+            const parsed = JSON.parse(errText);
+            if (parsed?.error) detailedError = parsed.error;
+            else if (parsed?.message) detailedError = parsed.message;
+          } catch {
+            if (errText) detailedError = errText;
+          }
+        }
+      } catch {
+        // Fall back to error.message
+      }
+
+      if (data && typeof data === "object") {
+        if (data.error) detailedError = data.error;
+        else if (data.message) detailedError = data.message;
+      }
+
+      toast(`Failed to send test email: ${detailedError}`, "error");
+      return;
+    }
+
+    if (data && typeof data === "object") {
+      if (data.success === false || data.status === "failed") {
+        const msg = data.error || data.message || "Unknown error";
+        toast(`Failed to send test email: ${msg}`, "error");
+        return;
+      }
+    }
+
+    toast(`Test email sent to ${payload.recipient}`);
+  } catch (err: any) {
+    toast(`Failed to send test email: ${err?.message || "Unexpected network error"}`, "error");
+  }
+}
+
 function UserSettingsView({
   account,
   toast,
@@ -1086,26 +1145,21 @@ function UserSettingsView({
           {/* 1. 2FA CODE */}
           <button
             type="button"
-            onClick={async () => {
-              try {
-                toast(`Sending 2FA test email to ${email}...`);
-                await supabase.functions.invoke("send-email", {
-                  body: {
-                    recipient: email,
-                    subject: "[Test Preview] Your Verification Code",
-                    template_type: "2fa_code",
-                    template_data: {
-                      code: "849201",
-                      recipientName: email.split("@")[0] || "Admin",
-                      expiresInMinutes: 10,
-                    },
+            onClick={() =>
+              sendTestEmail(
+                {
+                  recipient: email,
+                  subject: "[Test Preview] Your Verification Code",
+                  template_type: "2fa_code",
+                  template_data: {
+                    code: "849201",
+                    recipientName: email.split("@")[0] || "Admin",
+                    expiresInMinutes: 10,
                   },
-                });
-                toast(`Test email sent to ${email}`);
-              } catch (e: any) {
-                toast(e?.message || "Failed to send test email", "error");
-              }
-            }}
+                },
+                toast
+              )
+            }
             className="flex flex-col items-start rounded-xl border p-3.5 text-left transition hover:border-[#ff6a00]/50 hover:bg-white/5"
             style={{ borderColor: T.borderSoft, background: T.panel2 }}
           >
@@ -1121,47 +1175,42 @@ function UserSettingsView({
           {/* 2. FLEET SUMMARY */}
           <button
             type="button"
-            onClick={async () => {
-              try {
-                toast(`Sending Fleet Summary test email to ${email}...`);
-                await supabase.functions.invoke("send-email", {
-                  body: {
-                    recipient: email,
-                    subject: "[Test Preview] Fleet MOT & PCO Expiry Summary — 2 vehicles",
-                    template_type: "fleet_summary",
-                    template_data: {
-                      headerLabel: "FLEET COMPLIANCE",
-                      headline: "Multiple vehicles have upcoming MOT & PCO expiries (2)",
-                      subtext: "Ensure your fleet remains road-legal, compliant, and ready for work.",
-                      vehicles: [
-                        {
-                          registration: "KN73XLB",
-                          model: "Mercedes-Benz EQE",
-                          photoUrl: `${WEBSITE_BASE_URL}/vehicle-artwork/mercedes-eqe-transparent.png`,
-                          motExpiry: "2026-10-15",
-                          motDaysRemaining: 5,
-                          pcoExpiry: "2026-10-20",
-                          pcoDaysRemaining: 10,
-                          detailsUrl: "#",
-                        },
-                        {
-                          registration: "KF19UCJ",
-                          model: "Toyota Corolla",
-                          photoUrl: `${WEBSITE_BASE_URL}/vehicle-artwork/toyota-corolla-estate-transparent.png`,
-                          motExpiry: "2026-10-18",
-                          motDaysRemaining: 8,
-                          detailsUrl: "#",
-                        },
-                      ],
-                      manageUrl: `${WEBSITE_BASE_URL}/`,
-                    },
+            onClick={() =>
+              sendTestEmail(
+                {
+                  recipient: email,
+                  subject: "[Test Preview] Fleet MOT & PCO Expiry Summary — 2 vehicles",
+                  template_type: "fleet_summary",
+                  template_data: {
+                    headerLabel: "FLEET COMPLIANCE",
+                    headline: "Multiple vehicles have upcoming MOT & PCO expiries (2)",
+                    subtext: "Ensure your fleet remains road-legal, compliant, and ready for work.",
+                    vehicles: [
+                      {
+                        registration: "KN73XLB",
+                        model: "Mercedes-Benz EQE",
+                        photoUrl: `${WEBSITE_BASE_URL}/vehicle-artwork/mercedes-eqe-transparent.png`,
+                        motExpiry: "2026-10-15",
+                        motDaysRemaining: 5,
+                        pcoExpiry: "2026-10-20",
+                        pcoDaysRemaining: 10,
+                        detailsUrl: "#",
+                      },
+                      {
+                        registration: "KF19UCJ",
+                        model: "Toyota Corolla",
+                        photoUrl: `${WEBSITE_BASE_URL}/vehicle-artwork/toyota-corolla-estate-transparent.png`,
+                        motExpiry: "2026-10-18",
+                        motDaysRemaining: 8,
+                        detailsUrl: "#",
+                      },
+                    ],
+                    manageUrl: `${WEBSITE_BASE_URL}/`,
                   },
-                });
-                toast(`Test email sent to ${email}`);
-              } catch (e: any) {
-                toast(e?.message || "Failed to send test email", "error");
-              }
-            }}
+                },
+                toast
+              )
+            }
             className="flex flex-col items-start rounded-xl border p-3.5 text-left transition hover:border-[#ff6a00]/50 hover:bg-white/5"
             style={{ borderColor: T.borderSoft, background: T.panel2 }}
           >
@@ -1177,46 +1226,41 @@ function UserSettingsView({
           {/* 3. DRIVER LICENCE SUMMARY */}
           <button
             type="button"
-            onClick={async () => {
-              try {
-                toast(`Sending Licence Expiry Summary test email to ${email}...`);
-                await supabase.functions.invoke("send-email", {
-                  body: {
-                    recipient: email,
-                    subject: "[Test Preview] Driver Licence Expiry Summary — 2 drivers",
-                    template_type: "driver_licence_summary",
-                    template_data: {
-                      headerLabel: "LICENCE COMPLIANCE",
-                      headline: "Driver Licences Expiring Soon",
-                      subtext: "Review driver licence expiry dates across your team and take required action.",
-                      introLine: "Hi there,\nHere are the upcoming driver licence expiry dates for your team:",
-                      drivers: [
-                        {
-                          driverId: "DRV-1029",
-                          name: "Alexander Wright",
-                          licenceType: "Full UK Licence",
-                          expiryDate: "2026-10-12",
-                          daysRemaining: 12,
-                          reviewUrl: "#",
-                        },
-                        {
-                          driverId: "DRV-1044",
-                          name: "David Miller",
-                          licenceType: "PCO Licence",
-                          expiryDate: "2026-10-25",
-                          daysRemaining: 25,
-                          reviewUrl: "#",
-                        },
-                      ],
-                      helpUrl: `${WEBSITE_BASE_URL}/drivers`,
-                    },
+            onClick={() =>
+              sendTestEmail(
+                {
+                  recipient: email,
+                  subject: "[Test Preview] Driver Licence Expiry Summary — 2 drivers",
+                  template_type: "driver_licence_summary",
+                  template_data: {
+                    headerLabel: "LICENCE COMPLIANCE",
+                    headline: "Driver Licences Expiring Soon",
+                    subtext: "Review driver licence expiry dates across your team and take required action.",
+                    introLine: "Hi there,\nHere are the upcoming driver licence expiry dates for your team:",
+                    drivers: [
+                      {
+                        driverId: "DRV-1029",
+                        name: "Alexander Wright",
+                        licenceType: "Full UK Licence",
+                        expiryDate: "2026-10-12",
+                        daysRemaining: 12,
+                        reviewUrl: "#",
+                      },
+                      {
+                        driverId: "DRV-1044",
+                        name: "David Miller",
+                        licenceType: "PCO Licence",
+                        expiryDate: "2026-10-25",
+                        daysRemaining: 25,
+                        reviewUrl: "#",
+                      },
+                    ],
+                    helpUrl: `${WEBSITE_BASE_URL}/drivers`,
                   },
-                });
-                toast(`Test email sent to ${email}`);
-              } catch (e: any) {
-                toast(e?.message || "Failed to send test email", "error");
-              }
-            }}
+                },
+                toast
+              )
+            }
             className="flex flex-col items-start rounded-xl border p-3.5 text-left transition hover:border-[#ff6a00]/50 hover:bg-white/5"
             style={{ borderColor: T.borderSoft, background: T.panel2 }}
           >
@@ -1232,39 +1276,34 @@ function UserSettingsView({
           {/* 4. RENT DUE TOMORROW */}
           <button
             type="button"
-            onClick={async () => {
-              try {
-                const name = email.split("@")[0] || "Driver";
-                toast(`Sending Rent Due test email to ${email}...`);
-                await supabase.functions.invoke("send-email", {
-                  body: {
-                    recipient: email,
-                    subject: "[Test Preview] Reminder: Your rent is due tomorrow — Virtual Car Hire",
-                    template_type: "rent_due_tomorrow",
-                    template_data: {
-                      recipientName: name,
-                      headline: "Rent Due Tomorrow",
-                      introLine: `Hi ${name}, your rent is due tomorrow.`,
-                      cards: [
-                        {
-                          iconType: "rent",
-                          title: "Weekly Rent Payment (£260.00)",
-                          dateStr: "Tomorrow",
-                          vehicleReg: "KN73XLB",
-                          daysRemaining: 1,
-                        },
-                      ],
-                      warningNote:
-                        "Prompt rent payments help maintain your vehicle account in good standing. Please contact support if you have any questions.",
-                      actionUrl: `${WEBSITE_BASE_URL}/portal`,
-                      actionText: "View Balance in Driver Portal",
-                    },
+            onClick={() => {
+              const name = email.split("@")[0] || "Driver";
+              sendTestEmail(
+                {
+                  recipient: email,
+                  subject: "[Test Preview] Reminder: Your rent is due tomorrow — Virtual Car Hire",
+                  template_type: "rent_due_tomorrow",
+                  template_data: {
+                    recipientName: name,
+                    headline: "Rent Due Tomorrow",
+                    introLine: `Hi ${name}, your rent is due tomorrow.`,
+                    cards: [
+                      {
+                        iconType: "rent",
+                        title: "Weekly Rent Payment (£260.00)",
+                        dateStr: "Tomorrow",
+                        vehicleReg: "KN73XLB",
+                        daysRemaining: 1,
+                      },
+                    ],
+                    warningNote:
+                      "Prompt rent payments help maintain your vehicle account in good standing. Please contact support if you have any questions.",
+                    actionUrl: `${WEBSITE_BASE_URL}/portal`,
+                    actionText: "View Balance in Driver Portal",
                   },
-                });
-                toast(`Test email sent to ${email}`);
-              } catch (e: any) {
-                toast(e?.message || "Failed to send test email", "error");
-              }
+                },
+                toast
+              );
             }}
             className="flex flex-col items-start rounded-xl border p-3.5 text-left transition hover:border-[#ff6a00]/50 hover:bg-white/5"
             style={{ borderColor: T.borderSoft, background: T.panel2 }}
@@ -1281,46 +1320,41 @@ function UserSettingsView({
           {/* 5. DRIVER MOT/PCO NOTICE */}
           <button
             type="button"
-            onClick={async () => {
-              try {
-                const name = email.split("@")[0] || "Driver";
-                toast(`Sending Driver Notice test email to ${email}...`);
-                await supabase.functions.invoke("send-email", {
-                  body: {
-                    recipient: email,
-                    subject: "[Test Preview] Important Notice: Upcoming Vehicle Expiry for KN73XLB",
-                    template_type: "driver_alert",
-                    template_data: {
-                      recipientName: name,
-                      headline: "Vehicle Expiry Notice — KN73XLB",
-                      subtext: "Please review the details below and schedule an inspection.",
-                      cards: [
-                        {
-                          iconType: "mot",
-                          title: "MOT Inspection Due",
-                          dateStr: "2026-10-15",
-                          vehicleReg: "KN73XLB",
-                          vehicleModel: "Mercedes-Benz EQE",
-                          daysRemaining: 5,
-                        },
-                        {
-                          iconType: "pco",
-                          title: "PCO Licence Renewal Due",
-                          dateStr: "2026-10-20",
-                          vehicleReg: "KN73XLB",
-                          vehicleModel: "Mercedes-Benz EQE",
-                          daysRemaining: 10,
-                        },
-                      ],
-                      actionUrl: `${WEBSITE_BASE_URL}/portal`,
-                      actionText: "View Details in Portal",
-                    },
+            onClick={() => {
+              const name = email.split("@")[0] || "Driver";
+              sendTestEmail(
+                {
+                  recipient: email,
+                  subject: "[Test Preview] Important Notice: Upcoming Vehicle Expiry for KN73XLB",
+                  template_type: "driver_alert",
+                  template_data: {
+                    recipientName: name,
+                    headline: "Vehicle Expiry Notice — KN73XLB",
+                    subtext: "Please review the details below and schedule an inspection.",
+                    cards: [
+                      {
+                        iconType: "mot",
+                        title: "MOT Inspection Due",
+                        dateStr: "2026-10-15",
+                        vehicleReg: "KN73XLB",
+                        vehicleModel: "Mercedes-Benz EQE",
+                        daysRemaining: 5,
+                      },
+                      {
+                        iconType: "pco",
+                        title: "PCO Licence Renewal Due",
+                        dateStr: "2026-10-20",
+                        vehicleReg: "KN73XLB",
+                        vehicleModel: "Mercedes-Benz EQE",
+                        daysRemaining: 10,
+                      },
+                    ],
+                    actionUrl: `${WEBSITE_BASE_URL}/portal`,
+                    actionText: "View Details in Portal",
                   },
-                });
-                toast(`Test email sent to ${email}`);
-              } catch (e: any) {
-                toast(e?.message || "Failed to send test email", "error");
-              }
+                },
+                toast
+              );
             }}
             className="flex flex-col items-start rounded-xl border p-3.5 text-left transition hover:border-[#ff6a00]/50 hover:bg-white/5"
             style={{ borderColor: T.borderSoft, background: T.panel2 }}
