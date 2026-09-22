@@ -502,6 +502,23 @@ const Icon = {
       <path d="M3 17v-4l2-3h4" />
     </svg>
   ),
+  Sparkles: (p: { className?: string }) => (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={p.className}
+    >
+      <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3z" />
+      <path d="M5 3v4" />
+      <path d="M19 17v4" />
+      <path d="M3 5h4" />
+      <path d="M17 19h4" />
+    </svg>
+  ),
   AirCan: (p: { className?: string }) => (
     <svg
       viewBox="0 0 24 24"
@@ -1205,7 +1222,7 @@ function UserSettingsView({
                         detailsUrl: "#",
                       },
                     ],
-                    manageUrl: `${WEBSITE_BASE_URL}/`,
+                    manageUrl: "https://hq.virtual-carhire.co.uk/vehicles",
                   },
                 },
                 toast
@@ -1244,7 +1261,7 @@ function UserSettingsView({
                         licenceType: "Full UK Licence",
                         expiryDate: "2026-10-12",
                         daysRemaining: 12,
-                        reviewUrl: "#",
+                        reviewUrl: "https://hq.virtual-carhire.co.uk/drivers",
                       },
                       {
                         driverId: "DRV-1044",
@@ -1252,10 +1269,10 @@ function UserSettingsView({
                         licenceType: "PCO Licence",
                         expiryDate: "2026-10-25",
                         daysRemaining: 25,
-                        reviewUrl: "#",
+                        reviewUrl: "https://hq.virtual-carhire.co.uk/drivers",
                       },
                     ],
-                    helpUrl: `${WEBSITE_BASE_URL}/drivers`,
+                    helpUrl: "https://hq.virtual-carhire.co.uk/drivers",
                   },
                 },
                 toast
@@ -1298,7 +1315,7 @@ function UserSettingsView({
                     ],
                     warningNote:
                       "Prompt rent payments help maintain your vehicle account in good standing. Please contact support if you have any questions.",
-                    actionUrl: `${WEBSITE_BASE_URL}/portal`,
+                    actionUrl: "https://virtual-carhire.co.uk/portal/dashboard",
                     actionText: "View Balance in Driver Portal",
                   },
                 },
@@ -1349,7 +1366,7 @@ function UserSettingsView({
                         daysRemaining: 10,
                       },
                     ],
-                    actionUrl: `${WEBSITE_BASE_URL}/portal`,
+                    actionUrl: "https://virtual-carhire.co.uk/portal/dashboard",
                     actionText: "View Details in Portal",
                   },
                 },

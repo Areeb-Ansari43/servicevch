@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { getNextMotDate, getPcoExpiryDate } from "@/lib/vehicle-date-fields";
 import { calculateNextPaymentDueDate } from "@/lib/fleet-data";
 import { vehicleArtworkPath } from "@/lib/vehicle-display";
-import { CRM_BASE_URL } from "@/lib/domain-config";
+import { CRM_BASE_URL, DRIVER_PORTAL_URL } from "@/lib/domain-config";
 
 const STAFF_ALERT_EMAIL = "admin@fa-ibi.co.uk";
 
@@ -125,7 +125,7 @@ async function runExpiryScan() {
               headline: `Vehicle Expiry Notice — ${v.reg}`,
               subtext: "Please review the details below and schedule an inspection.",
               cards,
-              actionUrl: "https://virtualcarhire.pages.dev/portal",
+              actionUrl: DRIVER_PORTAL_URL,
               actionText: "View Details in Portal",
             },
             metadata: { vehicle_reg: v.reg, driver_id: assignedDriver.id },
@@ -253,7 +253,7 @@ async function runExpiryScan() {
               ],
               warningNote:
                 "Prompt rent payments help maintain your vehicle account in good standing. Please contact support if you have any questions.",
-              actionUrl: "https://virtualcarhire.pages.dev/portal",
+              actionUrl: DRIVER_PORTAL_URL,
               actionText: "View Balance in Driver Portal",
             },
             metadata: { driver_id: d.id, weekly_rent: d.weekly_rent },

@@ -4,6 +4,7 @@ import { getNextMotDate, getPcoExpiryDate } from "@/lib/vehicle-date-fields";
 import { PDF_FLEET } from "@/lib/pdf-fleet";
 import { logAuditEvent } from "@/lib/audit-logger";
 import { getVehicleDefaultDeposit } from "@/lib/contract-helpers";
+import { DRIVER_PORTAL_URL } from "@/lib/domain-config";
 
 export { getVehicleDefaultDeposit };
 
@@ -1361,7 +1362,7 @@ export function useFleetData() {
               headline: title,
               singleMessageBody: message,
               vehicleReg: driver.registration,
-              actionUrl: "https://virtualcarhire.pages.dev/portal",
+              actionUrl: DRIVER_PORTAL_URL,
               actionText: "Log in to Driver Portal",
             },
             metadata: { driver_id: driver.id, reminder_type: reminderType },
