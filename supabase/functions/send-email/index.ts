@@ -11,20 +11,30 @@ const BRAND_TEXT_WHITE = "#FFFFFF";
 const BRAND_TEXT_MUTED = "#94A3B8";
 
 // --- Email Address Routing ---
+function formatFromAddress(rawAddress: string): string {
+  const trimmed = rawAddress.trim();
+  if (trimmed.includes("<") && trimmed.includes(">")) {
+    return trimmed;
+  }
+  return `Virtual Car Hire <${trimmed}>`;
+}
+
 function getFromAddress(type: string): string {
   const legacyFrom = Deno.env.get("EMAIL_FROM_ADDRESS");
+  let address = "";
   if (type === "2fa" || type === "2fa_code") {
-    return Deno.env.get("AUTH_EMAIL_FROM") || legacyFrom || "auth@fa-ibi.co.uk";
-  }
-  if (
+    address = Deno.env.get("AUTH_EMAIL_FROM") || legacyFrom || "auth@fa-ibi.co.uk";
+  } else if (
     type === "fleet_summary" ||
     type === "driver_licence_summary" ||
     type === "rent_due" ||
     type === "rent_due_tomorrow"
   ) {
-    return Deno.env.get("NOTIFICATIONS_EMAIL_FROM") || legacyFrom || "notifications@fa-ibi.co.uk";
+    address = Deno.env.get("NOTIFICATIONS_EMAIL_FROM") || legacyFrom || "notifications@fa-ibi.co.uk";
+  } else {
+    address = Deno.env.get("DRIVER_ALERTS_EMAIL_FROM") || legacyFrom || "driver-alerts@fa-ibi.co.uk";
   }
-  return Deno.env.get("DRIVER_ALERTS_EMAIL_FROM") || legacyFrom || "driver-alerts@fa-ibi.co.uk";
+  return formatFromAddress(address);
 }
 
 // --- Template Renderers ---
@@ -514,7 +524,8 @@ serve(async (req) => {
   }
 
   // Determine sender email address using 3-address routing rules
-  const emailFromAddress = payload.from || getFromAddress(templateType);
+  const rawFrom = payload.from || getFromAddress(templateType);
+  const emailFromAddress = formatFromAddress(rawFrom);
   const resendApiKey = Deno.env.get("RESEND_API_KEY");
 
   // Render HTML based on template_type

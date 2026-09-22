@@ -11,11 +11,12 @@
  * 5. Update GitHub Actions workflows (.github/workflows/whatsapp-inactivity.yml) if endpoint domain changes.
  */
 
-export const CRM_DOMAIN = "servicevch.pages.dev";
-export const WEBSITE_DOMAIN = "virtualcarhire.pages.dev";
+export const CRM_DOMAIN = "hq.virtual-carhire.co.uk";
+export const WEBSITE_DOMAIN = "virtual-carhire.co.uk";
 
 export const CRM_BASE_URL = `https://${CRM_DOMAIN}`;
 export const WEBSITE_BASE_URL = `https://${WEBSITE_DOMAIN}`;
+export const DRIVER_PORTAL_URL = `https://${WEBSITE_DOMAIN}/portal/dashboard`;
 
 /** Allowed browser origins for CORS handling in API responses */
 export const ALLOWED_BROWSER_ORIGINS = new Set([
