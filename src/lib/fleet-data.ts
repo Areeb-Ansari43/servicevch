@@ -366,6 +366,7 @@ export function useFleetData() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [services, setServices] = useState<ServiceRecord[]>([]);
   const [drivers, setDrivers] = useState<DriverTrack[]>([]);
+  const [deletedDrivers, setDeletedDrivers] = useState<DriverTrack[]>([]);
   const [mileageSubmissions, setMileageSubmissions] = useState<MileageSubmission[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -384,7 +385,6 @@ export function useFleetData() {
       supabase
         .from("driver_tracks")
         .select("*")
-        .neq("active", false)
         .order("created_at", { ascending: false }),
       supabase.from("mileage_logs").select("*").order("period_end", { ascending: false }),
       supabase.from("driver_charges").select("*").order("created_at", { ascending: false }),
@@ -424,24 +424,29 @@ export function useFleetData() {
       depositPaymentsByDriver.set(dp.driver_id, arr);
     }
 
-    setDrivers(
-      (dRes.data ?? []).map((r) => {
-        const matchedCharges = [
-          ...(chargesByDriver.get(r.id) ?? []),
-          ...(r.auth_user_id && r.auth_user_id !== r.id ? chargesByDriver.get(r.auth_user_id) ?? [] : []),
-        ];
-        const uniqueChargesMap = new Map<string, DriverCharge>();
-        for (const ch of matchedCharges) {
-          uniqueChargesMap.set(ch.id, ch);
-        }
-        const chargesList = Array.from(uniqueChargesMap.values());
-        const depositPaymentsList = [
-          ...(depositPaymentsByDriver.get(r.id) ?? []),
-          ...(r.auth_user_id && r.auth_user_id !== r.id ? depositPaymentsByDriver.get(r.auth_user_id) ?? [] : []),
-        ];
-        return dFromRow(r, logsByTrack.get(r.id) ?? [], chargesList, depositPaymentsList);
-      }),
-    );
+    const allDriverTracks = (dRes.data ?? []).map((r) => {
+      const matchedCharges = [
+        ...(chargesByDriver.get(r.id) ?? []),
+        ...(r.auth_user_id && r.auth_user_id !== r.id ? chargesByDriver.get(r.auth_user_id) ?? [] : []),
+      ];
+      const uniqueChargesMap = new Map<string, DriverCharge>();
+      for (const ch of matchedCharges) {
+        uniqueChargesMap.set(ch.id, ch);
+      }
+      const chargesList = Array.from(uniqueChargesMap.values());
+      const depositPaymentsList = [
+        ...(depositPaymentsByDriver.get(r.id) ?? []),
+        ...(r.auth_user_id && r.auth_user_id !== r.id ? depositPaymentsByDriver.get(r.auth_user_id) ?? [] : []),
+      ];
+      return dFromRow(r, logsByTrack.get(r.id) ?? [], chargesList, depositPaymentsList);
+    });
+
+    // Active drivers vs soft-deleted drivers (48-hour recovery window)
+    const active = allDriverTracks.filter((d) => !d.deleted_at && d.active !== false);
+    const softDeleted = allDriverTracks.filter((d) => Boolean(d.deleted_at) || d.active === false);
+
+    setDrivers(active);
+    setDeletedDrivers(softDeleted);
     setLoading(false);
   }, []);
 
@@ -1415,25 +1420,19 @@ export function useFleetData() {
       setDrivers((prev) => prev.filter((d) => d.id !== id));
       const { data: track } = await supabase
         .from("driver_tracks")
-        .select("vehicle_id")
+        .select("vehicle_id, auth_user_id, driver_name")
         .eq("id", id)
         .maybeSingle();
 
-      // Revoke portal access immediately by clearing auth link and tokens
+      // Soft-delete driver track retaining auth_user_id for 48-hour recovery window
       await supabase
         .from("driver_tracks")
         .update({
-          auth_user_id: null,
-          invite_token: null,
-          invite_status: "none",
+          deleted_at: new Date().toISOString(),
           active: false,
         })
         .eq("id", id);
 
-      const { error } = await supabase.from("driver_tracks").delete().eq("id", id);
-      if (error) {
-        await supabase.from("driver_tracks").update({ active: false }).eq("id", id);
-      }
       if (track?.vehicle_id) {
         await supabase
           .from("vehicles")
@@ -1447,8 +1446,10 @@ export function useFleetData() {
         targetTable: "driver_tracks",
         targetId: id,
         details: {
-          driver_name: target?.driver_name ?? null,
+          driver_name: target?.driver_name ?? track?.driver_name ?? null,
           reg: target?.registration ?? null,
+          auth_user_id: target?.auth_user_id ?? track?.auth_user_id ?? null,
+          recovery_window: "48h",
         },
       });
 
@@ -1457,12 +1458,45 @@ export function useFleetData() {
     [drivers, refresh],
   );
 
+  const restoreDriver = useCallback(
+    async (id: string) => {
+      const { data: track } = await supabase
+        .from("driver_tracks")
+        .select("id, driver_name, reg, auth_user_id")
+        .eq("id", id)
+        .maybeSingle();
+
+      await supabase
+        .from("driver_tracks")
+        .update({
+          deleted_at: null,
+          active: true,
+        })
+        .eq("id", id);
+
+      await logAuditEvent({
+        actionType: "driver_restored" as any,
+        targetTable: "driver_tracks",
+        targetId: id,
+        details: {
+          driver_name: track?.driver_name ?? "Driver",
+          reg: track?.reg ?? null,
+          auth_user_id: track?.auth_user_id ?? null,
+        },
+      });
+
+      await refresh();
+    },
+    [refresh],
+  );
+
   const removeDriver = deleteDriver;
 
   return {
     vehicles,
     services,
     drivers,
+    deletedDrivers,
     mileageSubmissions,
     loading,
     saveVehicle,
@@ -1478,6 +1512,7 @@ export function useFleetData() {
     sendDriverReminder,
     generatePortalInvite,
     deleteDriver,
+    restoreDriver,
     updateDriverMileage,
     approveMileageSubmission,
     rejectMileageSubmission,

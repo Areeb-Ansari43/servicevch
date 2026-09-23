@@ -26,6 +26,12 @@ import { WEBSITE_BASE_URL } from "@/lib/domain-config";
 import { TermsModal } from "@/components/terms-modal";
 import { RouteErrorBoundary } from "@/components/error-boundary";
 import { calculateContractEndDate, getContractDaysRemaining } from "@/lib/contract-helpers";
+import {
+  listPortalAuthUsers,
+  deletePortalAccount,
+  restoreDriverAccount,
+  type PortalAuthUser,
+} from "@/lib/portal.functions";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -891,6 +897,251 @@ export async function sendTestEmail(
   }
 }
 
+function PortalAccountsAdminCard({
+  toast,
+}: {
+  toast: (m: string, t?: Toast["type"]) => void;
+}) {
+  const listUsersFn = useServerFn(listPortalAuthUsers);
+  const deletePortalFn = useServerFn(deletePortalAccount);
+
+  const [authUsers, setAuthUsers] = useState<PortalAuthUser[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<"all" | "orphaned" | "linked">("all");
+  const [targetAccount, setTargetAccount] = useState<PortalAuthUser | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const loadAuthUsers = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await listUsersFn();
+      setAuthUsers(res.users || []);
+    } catch (err: any) {
+      console.error("[PortalAccountsAdminCard] Failed to list portal auth users:", err);
+      toast(err?.message || "Failed to load portal accounts", "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [listUsersFn, toast]);
+
+  useEffect(() => {
+    loadAuthUsers();
+  }, [loadAuthUsers]);
+
+  const handleDeleteAccount = async (account: PortalAuthUser) => {
+    setDeletingId(account.id);
+    try {
+      await deletePortalFn({
+        data: {
+          authUserId: account.id,
+          driverId: account.linkedDriver?.id,
+          permanent: true,
+        },
+      });
+      toast(`Deleted account ${account.email || account.id} from Supabase Auth`);
+      setTargetAccount(null);
+      await loadAuthUsers();
+    } catch (err: any) {
+      toast(err?.message || "Failed to delete Auth account", "error");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const filteredUsers = useMemo(() => {
+    return authUsers.filter((u) => {
+      if (filter === "orphaned") return u.isOrphaned;
+      if (filter === "linked") return !u.isOrphaned;
+      return true;
+    });
+  }, [authUsers, filter]);
+
+  const orphanedCount = useMemo(() => authUsers.filter((u) => u.isOrphaned).length, [authUsers]);
+  const linkedCount = useMemo(() => authUsers.filter((u) => !u.isOrphaned).length, [authUsers]);
+
+  return (
+    <div
+      className="rounded-2xl border p-5 space-y-4"
+      style={{ borderColor: T.border, background: T.panel }}
+    >
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b pb-3" style={{ borderColor: T.borderSoft }}>
+        <div>
+          <div className="flex items-center gap-2">
+            <Icon.Shield className="h-5 w-5 text-[#ff6a00]" />
+            <h2 className="text-base font-bold text-white">Portal Accounts & Stray Credentials Audit</h2>
+          </div>
+          <p className="mt-0.5 text-xs text-[#9aa5b8]">
+            Review all Supabase Auth user accounts (`auth.users`) and clean up stray/orphaned test credentials individually.
+          </p>
+        </div>
+
+        <button
+          onClick={loadAuthUsers}
+          disabled={loading}
+          className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/10 transition-colors shrink-0"
+          style={{ borderColor: T.borderSoft }}
+        >
+          <Icon.RotateCcw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+          Refresh Accounts
+        </button>
+      </div>
+
+      {/* Summary Pills & Filter Tabs */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setFilter("all")}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+              filter === "all" ? "bg-[#ff6a00] text-white" : "bg-white/5 text-[#8b95a8] hover:bg-white/10"
+            }`}
+          >
+            All Accounts ({authUsers.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilter("linked")}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+              filter === "linked" ? "bg-emerald-600 text-[#edf2f8]" : "bg-white/5 text-[#8b95a8] hover:bg-white/10"
+            }`}
+          >
+            Valid Driver Linked ({linkedCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilter("orphaned")}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+              filter === "orphaned" ? "bg-red-600 text-[#edf2f8]" : "bg-white/5 text-[#8b95a8] hover:bg-white/10"
+            }`}
+          >
+            Orphaned / Stray ({orphanedCount})
+          </button>
+        </div>
+
+        {orphanedCount > 0 && (
+          <div className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/15 px-3 py-1 text-xs font-semibold text-amber-300">
+            <span>⚠️ {orphanedCount} orphaned Auth account{orphanedCount === 1 ? "" : "s"} detected</span>
+          </div>
+        )}
+      </div>
+
+      {/* Account Table */}
+      {loading ? (
+        <div className="p-8 text-center text-xs text-[#8b95a8]">Scanning Supabase Auth users...</div>
+      ) : filteredUsers.length === 0 ? (
+        <div className="p-8 text-center text-xs text-[#8b95a8]">No portal accounts matching filter.</div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border" style={{ borderColor: T.borderSoft }}>
+          <table className="w-full text-left text-xs">
+            <thead className="border-b bg-black/30 text-[10px] font-bold uppercase tracking-wider text-[#8b95a8]" style={{ borderColor: T.borderSoft }}>
+              <tr>
+                <th className="px-4 py-3">User Email / Auth ID</th>
+                <th className="px-4 py-3">Created / Last Login</th>
+                <th className="px-4 py-3">Linked Driver Record</th>
+                <th className="px-4 py-3">Account Status</th>
+                <th className="px-4 py-3 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/[0.06]">
+              {filteredUsers.map((u) => {
+                return (
+                  <tr key={u.id} className="transition-colors hover:bg-white/[0.02]">
+                    <td className="px-4 py-3">
+                      <div className="font-bold text-white">{u.email || "No email"}</div>
+                      <div className="font-mono text-[10px] text-[#8b95a8] truncate max-w-[200px]">{u.id}</div>
+                    </td>
+                    <td className="px-4 py-3 text-[#aeb8c9]">
+                      <div>Created: {new Date(u.created_at).toLocaleDateString("en-GB")}</div>
+                      <div className="text-[10px] text-[#8b95a8]">
+                        Sign in: {u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleDateString("en-GB") : "Never"}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {u.linkedDriver ? (
+                        <div>
+                          <div className="font-bold text-emerald-400 flex items-center gap-1">
+                            <span>✓ {u.linkedDriver.driver_name}</span>
+                          </div>
+                          <div className="text-[10px] text-[#8b95a8]">{u.linkedDriver.registration}</div>
+                        </div>
+                      ) : (
+                        <div className="text-red-400 font-semibold flex items-center gap-1">
+                          <span>⚠️ No matching active driver</span>
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {u.isOrphaned ? (
+                        <span className="inline-flex items-center rounded-full border border-red-500/40 bg-red-500/15 px-2.5 py-0.5 text-[10px] font-bold text-red-300">
+                          Orphaned Stray
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-0.5 text-[10px] font-bold text-emerald-300">
+                          Valid Active Driver
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setTargetAccount(u)}
+                        className="inline-flex items-center gap-1 rounded-md border border-red-500/40 bg-red-500/15 px-2.5 py-1 text-[11px] font-bold text-red-300 hover:bg-red-500/25 transition-colors"
+                      >
+                        <Icon.X className="h-3 w-3" />
+                        Delete Account
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {targetAccount && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="max-w-md rounded-2xl border border-red-500/30 bg-[#121622] p-5 shadow-2xl space-y-3">
+            <h4 className="text-base font-bold text-white">Permanently Delete Auth Account?</h4>
+            <p className="text-xs text-[#aeb8c9] leading-relaxed">
+              Are you sure you want to delete the Supabase Auth user <strong className="text-white">{targetAccount.email || targetAccount.id}</strong>?
+              <br /><br />
+              {targetAccount.linkedDriver ? (
+                <span className="text-amber-300">
+                  Note: This user is currently linked to driver <strong>{targetAccount.linkedDriver.driver_name}</strong> ({targetAccount.linkedDriver.registration}). Deleting it will revoke their portal login access.
+                </span>
+              ) : (
+                <span className="text-emerald-300">
+                  This user is orphaned (not linked to any active driver). Deleting it will cleanly purge the stray test credentials from Supabase Auth.
+                </span>
+              )}
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setTargetAccount(null)}
+                className="rounded-lg border px-3.5 py-2 text-xs font-semibold text-[#8b95a8] hover:bg-white/5"
+                style={{ borderColor: T.border }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deletingId === targetAccount.id}
+                onClick={() => handleDeleteAccount(targetAccount)}
+                className="rounded-lg bg-red-600 px-4 py-2 text-xs font-bold text-white hover:bg-red-500 transition-colors disabled:opacity-50"
+              >
+                {deletingId === targetAccount.id ? "Deleting..." : "Confirm Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function UserSettingsView({
   account,
   toast,
@@ -1144,6 +1395,9 @@ function UserSettingsView({
           </button>
         </div>
       </div>
+
+      {/* PORTAL ACCOUNTS & STRAY CREDENTIALS AUDIT */}
+      <PortalAccountsAdminCard toast={toast} />
 
       {/* EMAIL TEMPLATE PREVIEWS */}
       <div
@@ -5230,6 +5484,48 @@ function DriversView({
         </div>
       </div>
 
+      {/* Recently Deleted Drivers — 48-Hour Recovery Window */}
+      {data.deletedDrivers && data.deletedDrivers.length > 0 && (
+        <div className="rounded-xl border p-4 space-y-2.5" style={{ borderColor: "rgba(245,158,11,0.3)", background: "rgba(245,158,11,0.05)" }}>
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
+              <Icon.RotateCcw className="h-3.5 w-3.5" /> Recently Deleted Drivers (48-Hour Recovery Window)
+            </h3>
+            <span className="text-[10px] text-[#8b95a8]">{data.deletedDrivers.length} in recovery window</span>
+          </div>
+          <div className="space-y-2">
+            {data.deletedDrivers.map((d) => (
+              <div key={d.id} className="flex items-center justify-between rounded-lg border p-2.5 text-xs" style={{ borderColor: T.borderSoft, background: T.panel2 }}>
+                <div>
+                  <span className="font-bold text-white">{d.driver_name}</span>{" "}
+                  <span className="text-[#8b95a8]">({d.registration || "No reg"})</span>
+                  {d.email && <span className="text-[#8b95a8] ml-2">· {d.email}</span>}
+                  {d.deleted_at && (
+                    <span className="text-[10px] text-[#8b95a8] ml-2 block sm:inline">
+                      Deleted: {new Date(d.deleted_at).toLocaleString("en-GB")}
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await data.restoreDriver(d.id);
+                      toast(`Restored driver ${d.driver_name} and reactivated portal access`);
+                    } catch (err: any) {
+                      toast(err?.message || "Failed to restore driver", "error");
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1 text-[11px] font-bold text-emerald-300 hover:bg-emerald-500/25 transition-colors shrink-0"
+                >
+                  <Icon.RotateCcw className="h-3 w-3" /> Restore Driver & Portal Access
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Add Driver Modal */}
       {addModalOpen && (
         <AddDriverModal
@@ -5989,6 +6285,122 @@ function DriverDocumentsSection({
   );
 }
 
+function DriverPortalSettingsCard({
+  driver,
+  data,
+  toast,
+  onCloseModal,
+}: {
+  driver: DriverTrack;
+  data: ReturnType<typeof useFleetData>;
+  toast: (m: string, t?: Toast["type"]) => void;
+  onCloseModal: () => void;
+}) {
+  const deletePortalFn = useServerFn(deletePortalAccount);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const hasAuthUser = Boolean(driver.auth_user_id);
+
+  const handleDeletePortalAccount = async () => {
+    if (!driver.auth_user_id) {
+      toast("No active Supabase Auth user linked to this driver.", "error");
+      return;
+    }
+    setDeleting(true);
+    try {
+      await deletePortalFn({
+        data: {
+          authUserId: driver.auth_user_id,
+          driverId: driver.id,
+          permanent: true,
+        },
+      });
+      toast(`Portal account deleted and Supabase Auth access revoked for ${driver.driver_name}`);
+      await data.refresh();
+      setConfirmOpen(false);
+      onCloseModal();
+    } catch (err: any) {
+      toast(err?.message || "Failed to delete portal account", "error");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: T.borderSoft, background: T.panel }}>
+      <div className="flex items-center justify-between">
+        <div className="font-bold text-white text-xs flex items-center gap-2">
+          <Icon.Key className="h-4 w-4 text-[#ff6a00]" />
+          Portal Settings & Credentials
+        </div>
+        {portalStatusBadge(driver)}
+      </div>
+
+      <div className="grid gap-2 text-xs text-[#8b95a8] bg-black/20 p-3 rounded-lg border" style={{ borderColor: T.borderSoft }}>
+        <div className="flex justify-between items-center">
+          <span>Portal Login Email:</span>
+          <span className="font-mono text-white">{driver.email || "Not set"}</span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span>Supabase Auth User ID:</span>
+          <span className="font-mono text-white truncate max-w-[220px]">{driver.auth_user_id || "None linked"}</span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span>Invite Status:</span>
+          <span className="font-semibold text-white capitalize">{driver.invite_status || "none"}</span>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between pt-1 gap-2">
+        <p className="text-[11px] text-[#8b95a8] leading-tight max-w-sm">
+          Revoke driver's portal credentials and permanently delete their Supabase Auth user record.
+        </p>
+
+        <button
+          type="button"
+          disabled={!hasAuthUser || deleting}
+          onClick={() => setConfirmOpen(true)}
+          className="rounded-lg border border-red-500/40 bg-red-500/15 px-3 py-1.5 text-xs font-bold text-red-300 hover:bg-red-500/25 disabled:opacity-50 transition-colors shrink-0"
+        >
+          {deleting ? "Revoking..." : "Delete Portal Account"}
+        </button>
+      </div>
+
+      {confirmOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="max-w-md rounded-2xl border border-red-500/30 bg-[#121622] p-5 shadow-2xl space-y-3">
+            <h4 className="text-base font-bold text-white">Revoke & Delete Portal Account?</h4>
+            <p className="text-xs text-[#aeb8c9] leading-relaxed">
+              Are you sure you want to delete the Supabase Auth user credentials for <strong className="text-white">{driver.driver_name}</strong> ({driver.email || driver.auth_user_id})?
+              <br /><br />
+              This will call Supabase Auth's delete capability via service role, revoking their login access completely so old credentials cannot be used again.
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmOpen(false)}
+                className="rounded-lg border px-3.5 py-2 text-xs font-semibold text-[#8b95a8] hover:bg-white/5"
+                style={{ borderColor: T.border }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={handleDeletePortalAccount}
+                className="rounded-lg bg-red-600 px-4 py-2 text-xs font-bold text-white hover:bg-red-500 transition-colors disabled:opacity-50"
+              >
+                {deleting ? "Deleting Auth User..." : "Confirm Delete Account"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DriverProfileModal({
   driver,
   vehicles,
@@ -6292,6 +6704,9 @@ function DriverProfileModal({
 
           {/* Document Upload Section */}
           <DriverDocumentsSection driver={driver} toast={toast} />
+
+          {/* Portal Settings Section */}
+          <DriverPortalSettingsCard driver={driver} data={data} toast={toast} onCloseModal={onClose} />
 
           <div className="flex justify-end gap-2 border-t pt-4" style={{ borderColor: T.border }}>
             <button
