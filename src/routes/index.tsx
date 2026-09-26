@@ -241,6 +241,20 @@ const Icon = {
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
     </svg>
   ),
+  IdCard: (p: { className?: string }) => (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={p.className}
+    >
+      <path d="M16 10h2M16 14h2M6.17 15a3 3 0 0 1 5.66 0M9 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" />
+      <rect x="2" y="4" width="20" height="16" rx="2" />
+    </svg>
+  ),
   FileText: (p: { className?: string }) => (
     <svg
       viewBox="0 0 24 24"
@@ -3391,8 +3405,8 @@ function Dashboard({
           style={{ borderColor: "rgba(245,158,11,0.35)", background: "rgba(245,158,11,0.06)" }}
         >
           <div className="mb-3 flex items-center gap-2">
-            <Icon.Alert className="h-5 w-5 text-amber-400" />
-            <h3 className="text-base font-semibold text-amber-300">
+            <Icon.IdCard className="h-5 w-5 text-amber-400" />
+            <h3 className="text-base font-semibold text-amber-300 flex items-center gap-1.5">
               Alerts — Driver Licence Expiry
             </h3>
             <span className="ml-auto rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-bold text-white">
@@ -5745,7 +5759,14 @@ function AddDriverModal({
                 className={inputCls}
               />
             </Field>
-            <Field label="Licence Expiry Date">
+            <Field
+              label={
+                <span className="flex items-center gap-1.5">
+                  <Icon.IdCard className="h-4 w-4 text-[#ff6a00]" />
+                  Licence Expiry Date
+                </span>
+              }
+            >
               <input
                 type="date"
                 value={licenceExpiry}
@@ -6650,7 +6671,14 @@ function DriverProfileModal({
                   className={inputCls}
                 />
               </Field>
-              <Field label="Driver Licence Expiry Date">
+              <Field
+                label={
+                  <span className="flex items-center gap-1.5">
+                    <Icon.IdCard className="h-4 w-4 text-[#ff6a00]" />
+                    Driver Licence Expiry Date
+                  </span>
+                }
+              >
                 <input
                   type="date"
                   value={licenceExpiry}
