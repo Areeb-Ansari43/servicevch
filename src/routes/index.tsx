@@ -5647,6 +5647,7 @@ function AddDriverModal({
   const [rentDueDay, setRentDueDay] = useState("Monday");
   const [rentStatus, setRentStatus] = useState<"paid" | "unpaid">("unpaid");
   const [balanceDue, setBalanceDue] = useState("200");
+  const [depositTotal, setDepositTotal] = useState("500");
   const [allowance, setAllowance] = useState("5000");
   const [excessRate, setExcessRate] = useState("20");
   const [saving, setSaving] = useState(false);
@@ -5675,6 +5676,7 @@ function AddDriverModal({
         rent_due_day: rentDueDay,
         rent_status: rentStatus,
         balance_due: parseFloat(balanceDue) ?? rentAmt,
+        deposit_total: parseFloat(depositTotal) || 0,
       });
       onClose();
     } catch {
@@ -5846,21 +5848,6 @@ function AddDriverModal({
             </button>
           </div>
         </form>
-
-        {customMsgModalOpen && (
-          <CustomMessageModal
-            driver={driver}
-            onClose={() => setCustomMsgModalOpen(false)}
-            onSend={async (finalMessage) => {
-              try {
-                await data.sendDriverReminder(driver, "custom", finalMessage);
-                toast(`Custom message sent to ${driver.driver_name}'s portal & email`);
-              } catch (err: any) {
-                toast(err?.message ?? "Failed to send custom message", "error");
-              }
-            }}
-          />
-        )}
       </div>
     </div>
   );
