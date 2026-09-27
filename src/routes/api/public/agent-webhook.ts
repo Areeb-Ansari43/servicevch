@@ -853,25 +853,71 @@ function formatCustomerFleet(fleet: FleetVehicle[]): string {
 }
 
 export function findSelectedVehicle(text: string, fleet: FleetVehicle[]): FleetVehicle | undefined {
+  if (!text || !text.trim()) return undefined;
   const value = text.toLowerCase();
   const compactValue = value.replace(/[^a-z0-9]/g, "");
   const available = fleet.filter(isAvailable);
+
   return available.find((vehicle) => {
-    const make = vehicle.make.toLowerCase();
-    const model = vehicle.model.toLowerCase();
+    const rawMake = vehicle.make.toLowerCase();
+    const rawModel = vehicle.model.toLowerCase();
     const reg = vehicle.reg.toLowerCase();
-    const compactMake = make.replace(/[^a-z0-9]/g, "");
-    const compactModel = model.replace(/[^a-z0-9]/g, "");
-    const modelQuery = compactValue.replace(compactMake, "");
-    return (
-      value.includes(reg) ||
-      (value.includes(make) && value.includes(model)) ||
-      value.includes(model) ||
-      (modelQuery.length >= 3 && compactModel.includes(modelQuery)) ||
-      (value.includes(make) &&
-        /\b(?:300|350|220)\b/.test(value) &&
-        model.includes(value.match(/\b(?:300|350|220)\b/)?.[0] ?? ""))
-    );
+    const simp = simplifyVehicleName(vehicle.make, vehicle.model);
+    const simpMake = simp.make.toLowerCase();
+    const simpModel = simp.model.toLowerCase();
+    const compactSimpModel = simpModel.replace(/[^a-z0-9]/g, "");
+
+    // 1. Exact registration match
+    if (reg.length >= 4 && (value.includes(reg) || compactValue.includes(reg.replace(/[^a-z0-9]/g, "")))) {
+      return true;
+    }
+
+    // 2. Direct string containment
+    if (value.includes(rawModel) || value.includes(simpModel)) {
+      return true;
+    }
+
+    if (
+      (value.includes(rawMake) || value.includes(simpMake)) &&
+      (value.includes(rawModel) || value.includes(simpModel))
+    ) {
+      return true;
+    }
+
+    // 3. Compact model matching (e.g., "model3" matching "model 3")
+    if (compactSimpModel.length >= 3 && compactValue.includes(compactSimpModel)) {
+      return true;
+    }
+
+    // 4. Normalized model token & alias matching
+    const modelAliases: Record<string, RegExp[]> = {
+      ioniq: [/\bioniq\b/i],
+      corolla: [/\bcorolla\b/i],
+      auris: [/\bauris\b/i],
+      prius: [/\bprius\b/i],
+      "model 3": [/\bmodel\s*3\b/i, /\btesla\s*3\b/i],
+      e220d: [/\be\s*220\b/i, /\be220d?\b/i],
+      e300: [/\be\s*300\b/i],
+      eqe: [/\beqe\b/i],
+      eqs: [/\beqs\b/i],
+      vito: [/\bvito\b/i],
+      "v-class": [/\bv\s*class\b/i, /\bv250\b/i],
+      "mg5 ev": [/\bmg\s*5\b/i, /\bmg5\b/i, /\b5\s*ev\b/i],
+      "i-pace": [/\bi\s*pace\b/i, /\bipace\b/i],
+      multivan: [/\bmultivan\b/i],
+      "tourneo custom": [/\btourneo\b/i],
+    };
+
+    const targetKey = simpModel;
+    for (const [key, patterns] of Object.entries(modelAliases)) {
+      if (targetKey.includes(key)) {
+        if (patterns.some((pattern) => pattern.test(value))) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   });
 }
 
@@ -977,83 +1023,133 @@ async function sendWelcomeMenu(phone: unknown, date = new Date()) {
   };
 }
 
-async function callGroqFallback(
+async function callSecondaryAiFallback(
   system: string,
   userText: string,
   geminiErrorReason: string,
 ): Promise<AiResult | null> {
+  // Try xAI Grok API first if GROK or XAI keys are set
+  const grokKeyBindings = ["GROK_API_KEY", "XAI_API_KEY", "VITE_GROK_API_KEY", "GROK_API_TOKEN"];
+  const grokKeyBinding = grokKeyBindings.find((b) => Boolean(getRuntimeEnv(b)));
+  const grokKey = grokKeyBinding ? getRuntimeEnv(grokKeyBinding) : undefined;
+
+  if (grokKey) {
+    const grokModel = (getRuntimeEnv("GROK_MODEL") ?? "grok-2-latest").trim();
+    console.info("[agent-webhook] Attempting xAI Grok fallback", {
+      geminiErrorReason,
+      grokModel,
+      grokKeyBinding,
+    });
+    try {
+      const grokRes = await fetch("https://api.x.ai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${grokKey.trim()}`,
+        },
+        body: JSON.stringify({
+          model: grokModel,
+          messages: [
+            { role: "system", content: system },
+            { role: "user", content: userText },
+          ],
+          temperature: 0.2,
+        }),
+      });
+      const grokBody = await grokRes.text();
+      if (grokRes.ok) {
+        const grokData = JSON.parse(grokBody) as { choices?: { message?: { content?: string } }[] };
+        const grokText = grokData.choices?.[0]?.message?.content ?? "";
+        const parsed = parseAiReply(grokText);
+        if (parsed.reply) {
+          console.info("[agent-webhook] xAI Grok fallback succeeded", { geminiErrorReason, grokModel });
+          return { ...parsed, reason: `grok_fallback_used_after_${geminiErrorReason}` };
+        }
+      } else {
+        console.error("[agent-webhook] xAI Grok fallback API error", {
+          status: grokRes.status,
+          statusText: grokRes.statusText,
+          body: grokBody.slice(0, 500),
+          grokModel,
+          geminiErrorReason,
+        });
+      }
+    } catch (grokError) {
+      console.error("[agent-webhook] xAI Grok fallback exception", {
+        error: grokError instanceof Error ? grokError.message : String(grokError),
+        geminiErrorReason,
+      });
+    }
+  }
+
+  // Try Groq API next if GROQ keys are set
   const groqKeyBindings = ["GROQ_API_KEY", "GROQ_API_TOKEN", "VITE_GROQ_API_KEY"];
   const groqKeyBinding = groqKeyBindings.find((b) => Boolean(getRuntimeEnv(b)));
   const groqKey = groqKeyBinding ? getRuntimeEnv(groqKeyBinding) : undefined;
 
-  if (!groqKey) {
-    console.error("[agent-webhook] Groq fallback skipped: no GROQ_API_KEY configured", {
+  if (groqKey) {
+    const groqModel = (getRuntimeEnv("GROQ_MODEL") ?? "llama-3.3-70b-versatile").trim();
+    console.info("[agent-webhook] Attempting Groq fallback", {
       geminiErrorReason,
-      checkedBindings: groqKeyBindings,
+      groqModel,
+      groqKeyBinding,
     });
-    return null;
-  }
 
-  const groqModel = (getRuntimeEnv("GROQ_MODEL") ?? "llama-3.3-70b-versatile").trim();
-  console.info("[agent-webhook] Attempting Groq fallback", {
-    geminiErrorReason,
-    groqModel,
-    groqKeyBinding,
-  });
-
-  try {
-    const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${groqKey.trim()}`,
-      },
-      body: JSON.stringify({
-        model: groqModel,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: userText },
-        ],
-        response_format: { type: "json_object" },
-        temperature: 0.2,
-      }),
-    });
-    const groqBody = await groqRes.text();
-    if (groqRes.ok) {
-      const groqData = JSON.parse(groqBody) as {
-        choices?: { message?: { content?: string } }[];
-      };
-      const groqText = groqData.choices?.[0]?.message?.content ?? "";
-      const parsed = parseAiReply(groqText);
-      if (parsed.reply) {
-        console.log("[agent-webhook] Groq fallback succeeded", {
-          geminiErrorReason,
-          groqModel,
-        });
-        return { ...parsed, reason: `groq_fallback_used_after_${geminiErrorReason}` };
+    try {
+      const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${groqKey.trim()}`,
+        },
+        body: JSON.stringify({
+          model: groqModel,
+          messages: [
+            { role: "system", content: system },
+            { role: "user", content: userText },
+          ],
+          response_format: { type: "json_object" },
+          temperature: 0.2,
+        }),
+      });
+      const groqBody = await groqRes.text();
+      if (groqRes.ok) {
+        const groqData = JSON.parse(groqBody) as { choices?: { message?: { content?: string } }[] };
+        const groqText = groqData.choices?.[0]?.message?.content ?? "";
+        const parsed = parseAiReply(groqText);
+        if (parsed.reply) {
+          console.info("[agent-webhook] Groq fallback succeeded", { geminiErrorReason, groqModel });
+          return { ...parsed, reason: `groq_fallback_used_after_${geminiErrorReason}` };
+        }
       } else {
-        console.error("[agent-webhook] Groq fallback returned empty reply", {
-          geminiErrorReason,
+        console.error("[agent-webhook] Groq fallback API error", {
+          status: groqRes.status,
+          statusText: groqRes.statusText,
+          body: groqBody.slice(0, 500),
           groqModel,
-          groqBody: groqBody.slice(0, 500),
+          geminiErrorReason,
         });
       }
-    } else {
-      console.error("[agent-webhook] Groq fallback API error", {
-        status: groqRes.status,
-        statusText: groqRes.statusText,
-        body: groqBody.slice(0, 1000),
-        groqModel,
+    } catch (groqError) {
+      console.error("[agent-webhook] Groq fallback exception", {
+        error: groqError instanceof Error ? groqError.message : String(groqError),
         geminiErrorReason,
       });
     }
-  } catch (groqError) {
-    console.error("[agent-webhook] Groq fallback exception", {
-      error: groqError instanceof Error ? groqError.message : String(groqError),
-      geminiErrorReason,
-    });
   }
+
+  console.error("[agent-webhook] No working fallback provider (Grok/Groq) available or all failed", {
+    geminiErrorReason,
+  });
   return null;
+}
+
+export async function callGroqFallback(
+  system: string,
+  userText: string,
+  geminiErrorReason: string,
+): Promise<AiResult | null> {
+  return callSecondaryAiFallback(system, userText, geminiErrorReason);
 }
 
 async function generateReply(
@@ -1122,10 +1218,10 @@ async function generateReply(
         { supportedBindings: geminiKeyBindings },
       );
       await alertAiDegraded("gemini_api_key_missing", "unknown");
-      const groqResult = await callGroqFallback(system, userText, "gemini_api_key_missing");
-      if (groqResult) return groqResult;
+      const fallbackResult = await callSecondaryAiFallback(system, userText, "gemini_api_key_missing");
+      if (fallbackResult) return fallbackResult;
       console.error(
-        "[agent-webhook] Scripted fallback used as last resort (Gemini key missing, Groq failed)",
+        "[agent-webhook] Scripted fallback used as last resort (Gemini key missing, secondary fallback failed)",
       );
       return { ...fallback, reason: "gemini_api_key_missing" };
     }
@@ -1160,79 +1256,70 @@ async function generateReply(
       );
       return { response, body: await response.text(), model, apiVersion };
     };
-    let configuredModel = (getRuntimeEnv("GEMINI_MODEL") ?? "gemini-2.5-flash").trim();
-    if (configuredModel.includes("3.6")) {
-      console.warn("[agent-webhook] Swapping invalid Gemini model 'gemini-3.6-flash' for stable model 'gemini-2.5-flash'");
-      configuredModel = "gemini-2.5-flash";
-    }
-    const model = configuredModel;
-    let generation = await callModel("v1beta", model);
-    if (generation.response.status === 503 || generation.response.status === 429) {
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      generation = await callModel("v1beta", model);
-    }
-    if (!generation.response.ok) {
-      console.error("[agent-webhook] Gemini API error", {
-        status: generation.response.status,
-        statusText: generation.response.statusText,
-        responseBody: generation.body.slice(0, 2000),
-        model: generation.model,
-      });
-      await alertAiDegraded(
-        `gemini_http_${generation.response.status}`,
-        generation.model,
-        generation.body,
-      );
-      const groqResult = await callGroqFallback(
-        system,
-        userText,
-        `gemini_http_${generation.response.status}`,
-      );
-      if (groqResult) return groqResult;
 
-      console.error(
-        "[agent-webhook] Scripted fallback used as last resort (Gemini HTTP status failure, Groq failed)",
-        { geminiStatus: generation.response.status },
-      );
-      return { ...fallback, reason: `gemini_http_${generation.response.status}` };
-    }
-    const data = JSON.parse(generation.body) as {
-      candidates?: { content?: { parts?: { text?: string }[] } }[];
-      promptFeedback?: { blockReason?: string };
-    };
-    const contentText =
-      data.candidates?.[0]?.content?.parts
-        ?.map((part) => part.text ?? "")
-        .join("")
-        .trim() ?? "";
-    if (!contentText) {
-      console.error("[agent-webhook] Gemini API error: empty or blocked response", {
-        promptFeedback: data.promptFeedback,
-      });
-      const emptyReason = data.promptFeedback?.blockReason
-        ? `gemini_blocked_${data.promptFeedback.blockReason}`
-        : "gemini_empty_response";
-      await alertAiDegraded(emptyReason, model);
-      const groqResult = await callGroqFallback(system, userText, emptyReason);
-      if (groqResult) return groqResult;
+    const configuredModel = (getRuntimeEnv("GEMINI_MODEL") ?? "gemini-2.5-flash").trim();
+    const geminiModels = [
+      configuredModel,
+      "gemini-2.5-flash",
+      "gemini-2.0-flash",
+      "gemini-1.5-flash",
+    ].filter((m, index, self) => m && self.indexOf(m) === index && !m.includes("3.6"));
 
-      console.error(
-        "[agent-webhook] Scripted fallback used as last resort (Gemini empty/blocked response, Groq failed)",
-      );
-      return { ...fallback, reason: emptyReason };
+    let lastGeminiErrorReason = "gemini_failed";
+    for (const model of geminiModels) {
+      console.info(`[agent-webhook] Attempting Gemini model '${model}'...`);
+      let generation = await callModel("v1beta", model);
+      if (generation.response.status === 503 || generation.response.status === 429) {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        generation = await callModel("v1beta", model);
+      }
+      if (!generation.response.ok) {
+        lastGeminiErrorReason = `gemini_http_${generation.response.status}`;
+        console.warn(
+          `[agent-webhook] Gemini model '${model}' failed with status ${generation.response.status} (${generation.response.statusText}). Body: ${generation.body.slice(0, 300)}. Downgrading to next model in fallback chain...`,
+        );
+        continue;
+      }
+      const data = JSON.parse(generation.body) as {
+        candidates?: { content?: { parts?: { text?: string }[] } }[];
+        promptFeedback?: { blockReason?: string };
+      };
+      const contentText =
+        data.candidates?.[0]?.content?.parts
+          ?.map((part) => part.text ?? "")
+          .join("")
+          .trim() ?? "";
+      if (!contentText) {
+        lastGeminiErrorReason = data.promptFeedback?.blockReason
+          ? `gemini_blocked_${data.promptFeedback.blockReason}`
+          : "gemini_empty_response";
+        console.warn(
+          `[agent-webhook] Gemini model '${model}' returned empty or blocked response (${lastGeminiErrorReason}). Downgrading to next model in fallback chain...`,
+        );
+        continue;
+      }
+      const parsed = parseAiReply(contentText);
+      if (!parsed.reply) {
+        lastGeminiErrorReason = "gemini_parse_error";
+        console.warn(`[agent-webhook] Gemini model '${model}' returned unparseable reply. Downgrading to next model in fallback chain...`);
+        continue;
+      }
+      console.info(`[agent-webhook] AI generation complete using Gemini model '${model}'`, {
+        replyLength: parsed.reply.length,
+        needsHuman: parsed.needs_human,
+      });
+      return parsed;
     }
-    const parsed = parseAiReply(contentText);
-    if (!parsed.reply) {
-      const groqResult = await callGroqFallback(system, userText, "gemini_parse_error");
-      if (groqResult) return groqResult;
-      console.error("[agent-webhook] Scripted fallback used as last resort (Gemini parse error, Groq failed)");
-      return fallback;
-    }
-    console.info("[agent-webhook] AI generation complete", {
-      replyLength: parsed.reply.length,
-      needsHuman: parsed.needs_human,
-    });
-    return parsed;
+
+    await alertAiDegraded(lastGeminiErrorReason, geminiModels.join(","));
+    const secondaryResult = await callSecondaryAiFallback(system, userText, lastGeminiErrorReason);
+    if (secondaryResult) return secondaryResult;
+
+    console.error(
+      "[agent-webhook] Scripted fallback used as last resort (all Gemini models failed, Grok/Groq fallback failed)",
+      { lastGeminiErrorReason },
+    );
+    return { ...fallback, reason: lastGeminiErrorReason };
   } catch (error) {
     console.error("[agent-webhook] Gemini API exception", error);
     await alertAiDegraded(
@@ -1240,11 +1327,11 @@ async function generateReply(
       "unknown",
       error instanceof Error ? error.message : String(error),
     );
-    const groqResult = await callGroqFallback(system, userText, "gemini_exception");
-    if (groqResult) return groqResult;
+    const secondaryResult = await callSecondaryAiFallback(system, userText, "gemini_exception");
+    if (secondaryResult) return secondaryResult;
 
     console.error(
-      "[agent-webhook] Scripted fallback used as last resort (Gemini exception, Groq failed)",
+      "[agent-webhook] Scripted fallback used as last resort (Gemini exception, Grok/Groq fallback failed)",
     );
     return { ...fallback, reason: "gemini_exception" };
   }
@@ -1542,11 +1629,13 @@ export async function handleAgentWebhookRequest(request: Request) {
   let accidentData: AccidentData = {};
   let breakdownData: BreakdownData = {};
   let carEligibility: CarEligibility = {};
+  let previousLastMessageAt: string | null = null;
+
   const canonicalPhone = identityPhone && !/@lid$/i.test(identityPhone) ? identityPhone : null;
   if (canonicalPhone) {
     const { data: existing } = await (db.from("whatsapp_leads") as any)
       .select(
-        "id, contact_name, ai_paused, status, closed_at, intent, accident_data, breakdown_data, car_enquiry_data, customer_type",
+        "id, contact_name, ai_paused, status, closed_at, intent, accident_data, breakdown_data, car_enquiry_data, customer_type, last_message_at",
       )
       .eq("user_id", userId)
       .eq("phone", canonicalPhone)
@@ -1565,6 +1654,7 @@ export async function handleAgentWebhookRequest(request: Request) {
     accidentData = (existing?.accident_data ?? {}) as AccidentData;
     breakdownData = (existing?.breakdown_data ?? {}) as BreakdownData;
     carEligibility = (existing?.car_enquiry_data ?? {}) as CarEligibility;
+    previousLastMessageAt = existing?.last_message_at ?? null;
   }
   if (!leadId && canonicalPhone) {
     const { data: candidates } = await (db.from("whatsapp_leads") as any)
@@ -1689,6 +1779,33 @@ export async function handleAgentWebhookRequest(request: Request) {
   }
 
   if (!leadId) return json({ ok: false, error: "Lead could not be created" }, 500);
+
+  const fiveMinutesMs = 5 * 60 * 1000;
+  const isInactiveTimeout =
+    previousLastMessageAt &&
+    Date.now() - new Date(previousLastMessageAt).getTime() >= fiveMinutesMs;
+
+  if (isInactiveTimeout) {
+    console.info(
+      `[agent-webhook] Lead ${leadId} auto-ended due to 5-minute inactivity (last message was at ${previousLastMessageAt}). Resetting conversation state for fresh session.`,
+    );
+    leadIntent = null;
+    carEligibility = {};
+    accidentData = {};
+    breakdownData = {};
+    closed = true;
+    await db
+      .from("whatsapp_leads")
+      .update({
+        status: "closed",
+        closed_at: new Date().toISOString(),
+        car_enquiry_data: {},
+        accident_data: {},
+        breakdown_data: {},
+        intent: null,
+      } as never)
+      .eq("id", leadId);
+  }
 
   if (metaMessageId) {
     const { data: duplicateMessage } = await (db.from("messages") as any)

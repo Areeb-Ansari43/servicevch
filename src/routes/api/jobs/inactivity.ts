@@ -174,6 +174,9 @@ export const Route = createFileRoute("/api/jobs/inactivity")({
             .select("id")
             .maybeSingle();
           if (!closureClaim?.data) continue;
+          console.info(
+            `[inactivity-job] Conversation ${leadId} auto-ended due to 5-minute inactivity (last message was at ${typeof lead.last_message_at === "string" ? lead.last_message_at : "unknown"})`,
+          );
           await sendWhatsAppText({
             phone: chatId,
             text: "This conversation has been closed due to inactivity. If you need further assistance, please reply to start a new chat.",

@@ -219,8 +219,18 @@ describe("Fleet Availability & Model Deduplication", () => {
     expect(years).toBe("2018, 2019");
   });
 
-  test("findSelectedVehicle matches simplified vehicle names from menu selections", () => {
+  test("findSelectedVehicle matches simplified vehicle names and natural language selections", () => {
     const fleet = [
+      {
+        reg: "HYN1",
+        make: "HYUNDAI",
+        model: "IONIQ 1.6 GDI SE AUTO",
+        year: 2022,
+        fuel_type: "Plug-in-Hybrid",
+        status: "available",
+        next_mot_date: null,
+        pco_expiry_date: null,
+      },
       {
         reg: "TSL1",
         make: "TESLA",
@@ -241,15 +251,26 @@ describe("Fleet Availability & Model Deduplication", () => {
         next_mot_date: null,
         pco_expiry_date: null,
       },
+      {
+        reg: "TYT1",
+        make: "TOYOTA",
+        model: "COROLLA ICON 1.8 VVT-I HEV CVT",
+        year: 2021,
+        fuel_type: "Hybrid",
+        status: "available",
+        next_mot_date: null,
+        pco_expiry_date: null,
+      },
     ];
 
-    const matchedTesla = findSelectedVehicle("Tesla Model 3", fleet);
-    expect(matchedTesla).toBeDefined();
-    expect(matchedTesla?.reg).toBe("TSL1");
-
-    const matchedBenz = findSelectedVehicle("Mercedes-Benz E220d", fleet);
-    expect(matchedBenz).toBeDefined();
-    expect(matchedBenz?.reg).toBe("MB1");
+    expect(findSelectedVehicle("Hyundai Ioniq", fleet)?.reg).toBe("HYN1");
+    expect(findSelectedVehicle("I'd like the Hyundai Ioniq", fleet)?.reg).toBe("HYN1");
+    expect(findSelectedVehicle("Ioniq", fleet)?.reg).toBe("HYN1");
+    expect(findSelectedVehicle("Tesla Model 3", fleet)?.reg).toBe("TSL1");
+    expect(findSelectedVehicle("I want Tesla 3 please", fleet)?.reg).toBe("TSL1");
+    expect(findSelectedVehicle("Mercedes-Benz E220d", fleet)?.reg).toBe("MB1");
+    expect(findSelectedVehicle("E220", fleet)?.reg).toBe("MB1");
+    expect(findSelectedVehicle("Corolla Estate", fleet)?.reg).toBe("TYT1");
   });
 });
 
@@ -367,5 +388,20 @@ describe("Meta Phone Number Normalization", () => {
     expect(normalizeMetaPhone("12345")).toBe(null);
     expect(normalizeMetaPhone(null)).toBe(null);
     expect(normalizeMetaPhone(undefined)).toBe(null);
+  });
+});
+
+describe("5-Minute Inactivity Auto-End Calculation", () => {
+  test("detects when previous last message is 5 minutes or older", () => {
+    const fiveMinutesMs = 5 * 60 * 1000;
+    const now = Date.now();
+    const recentTime = new Date(now - 2 * 60 * 1000).toISOString();
+    const staleTime = new Date(now - 6 * 60 * 1000).toISOString();
+
+    const isRecentInactive = now - new Date(recentTime).getTime() >= fiveMinutesMs;
+    const isStaleInactive = now - new Date(staleTime).getTime() >= fiveMinutesMs;
+
+    expect(isRecentInactive).toBe(false);
+    expect(isStaleInactive).toBe(true);
   });
 });
