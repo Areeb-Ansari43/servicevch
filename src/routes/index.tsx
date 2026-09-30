@@ -5129,27 +5129,28 @@ function ServiceDetailsModal({
 
 /* ---------------- Drivers ---------------- */
 function portalStatusBadge(driver: DriverTrack) {
-  const isActive = Boolean(driver.auth_user_id) || driver.invite_status === "accepted";
-  if (isActive) {
+  const status = driver.status || (Boolean(driver.auth_user_id) || driver.invite_status === "accepted" ? "active" : driver.invite_status === "pending" ? "pending" : "active");
+
+  if (status === "active") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-0.5 text-[10px] font-bold text-emerald-300">
         <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-        Portal active
+        Active
       </span>
     );
   }
-  const status = driver.invite_status ?? "none";
   if (status === "pending") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-sky-400/30 bg-sky-400/10 px-2 py-0.5 text-[10px] font-bold text-sky-300">
+      <span className="inline-flex items-center gap-1 rounded-full border border-sky-400/30 bg-sky-400/10 px-2.5 py-0.5 text-[10px] font-bold text-sky-300">
         <span className="h-1.5 w-1.5 rounded-full bg-sky-400 animate-pulse" />
-        Invite sent
+        Pending
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-slate-500/30 bg-slate-500/10 px-2 py-0.5 text-[10px] font-bold text-slate-400">
-      Not invited
+    <span className="inline-flex items-center gap-1 rounded-full border border-rose-500/30 bg-rose-500/10 px-2.5 py-0.5 text-[10px] font-bold text-rose-300">
+      <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />
+      Inactive
     </span>
   );
 }
@@ -5178,9 +5179,9 @@ function DriversView({
   const [inviteModalDriver, setInviteModalDriver] = useState<DriverTrack | null>(null);
 
   const totalDrivers = drivers.length;
-  const activeDrivers = drivers.length; // Active driver tracks
-  const inactiveDrivers = 0;
-  const pendingActionDrivers = drivers.filter((d) => !d.phone || !d.vehicle_id).length;
+  const activeDrivers = drivers.filter((d) => d.status === "active" || (!d.status && d.active !== false)).length;
+  const inactiveDrivers = drivers.filter((d) => d.status === "inactive" || d.active === false).length;
+  const pendingActionDrivers = drivers.filter((d) => d.status === "pending" || (!d.status && (!d.phone || !d.vehicle_id))).length;
 
   const filteredDrivers = drivers.filter((d) => {
     const q = searchQuery.trim().toLowerCase();
@@ -5191,8 +5192,9 @@ function DriversView({
       d.registration.toLowerCase().includes(q);
     const matchesS =
       statusFilter === "all" ||
-      (statusFilter === "active" && true) ||
-      (statusFilter === "pending" && (!d.phone || !d.vehicle_id));
+      (statusFilter === "active" && (d.status === "active" || (!d.status && d.active !== false))) ||
+      (statusFilter === "inactive" && (d.status === "inactive" || d.active === false)) ||
+      (statusFilter === "pending" && (d.status === "pending" || (!d.status && (!d.phone || !d.vehicle_id))));
     return matchesQ && matchesS;
   });
 
@@ -6335,14 +6337,44 @@ function DriverPortalSettingsCard({
     }
   };
 
+  const handleMakeInactive = async () => {
+    try {
+      await data.updateDriverStatus(driver.id, "inactive");
+      toast(`Driver ${driver.driver_name} status updated to INACTIVE.`);
+    } catch (err: any) {
+      toast(err?.message || "Failed to update driver status", "error");
+    }
+  };
+
   return (
     <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: T.borderSoft, background: T.panel }}>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-3" style={{ borderColor: T.borderSoft }}>
         <div className="font-bold text-white text-xs flex items-center gap-2">
           <Icon.Key className="h-4 w-4 text-[#ff6a00]" />
           Portal Settings & Credentials
         </div>
-        {portalStatusBadge(driver)}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-[#8b95a8] font-medium">Status:</span>
+          <select
+            value={driver.status || "active"}
+            onChange={async (e) => {
+              const newStatus = e.target.value as "active" | "inactive" | "pending";
+              try {
+                await data.updateDriverStatus(driver.id, newStatus);
+                toast(`Driver status updated to ${newStatus.toUpperCase()}`);
+              } catch (err: any) {
+                toast(err?.message || "Failed to update status", "error");
+              }
+            }}
+            className="rounded-lg border bg-[#0b0f19] px-2.5 py-1 text-xs font-semibold text-white focus:outline-none focus:ring-1 focus:ring-[#ff6a00]"
+            style={{ borderColor: T.border }}
+          >
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+            <option value="pending">Pending</option>
+          </select>
+          {portalStatusBadge(driver)}
+        </div>
       </div>
 
       <div className="grid gap-2 text-xs text-[#8b95a8] bg-black/20 p-3 rounded-lg border" style={{ borderColor: T.borderSoft }}>
@@ -6360,19 +6392,30 @@ function DriverPortalSettingsCard({
         </div>
       </div>
 
-      <div className="flex items-center justify-between pt-1 gap-2">
+      <div className="flex flex-wrap items-center justify-between pt-2 gap-2 border-t" style={{ borderColor: T.borderSoft }}>
         <p className="text-[11px] text-[#8b95a8] leading-tight max-w-sm">
-          Revoke driver's portal credentials and permanently delete their Supabase Auth user record.
+          Set driver status, block portal login access & disable reminder emails, or revoke portal credentials.
         </p>
 
-        <button
-          type="button"
-          disabled={!hasAuthUser || deleting}
-          onClick={() => setConfirmOpen(true)}
-          className="rounded-lg border border-red-500/40 bg-red-500/15 px-3 py-1.5 text-xs font-bold text-red-300 hover:bg-red-500/25 disabled:opacity-50 transition-colors shrink-0"
-        >
-          {deleting ? "Revoking..." : "Delete Portal Account"}
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            disabled={driver.status === "inactive"}
+            onClick={handleMakeInactive}
+            className="rounded-lg border border-amber-500/40 bg-amber-500/15 px-3 py-1.5 text-xs font-bold text-amber-300 hover:bg-amber-500/25 disabled:opacity-50 transition-colors"
+          >
+            {driver.status === "inactive" ? "Driver Inactive" : "Make Driver Inactive"}
+          </button>
+
+          <button
+            type="button"
+            disabled={!hasAuthUser || deleting}
+            onClick={() => setConfirmOpen(true)}
+            className="rounded-lg border border-red-500/40 bg-red-500/15 px-3 py-1.5 text-xs font-bold text-red-300 hover:bg-red-500/25 disabled:opacity-50 transition-colors"
+          >
+            {deleting ? "Revoking..." : "Delete Portal Account"}
+          </button>
+        </div>
       </div>
 
       {confirmOpen && (
@@ -6441,6 +6484,16 @@ function DriverProfileModal({
   const [insuranceExpiry, setInsuranceExpiry] = useState(selectedVehicle?.insurance_expiry || "");
 
   useEffect(() => {
+    setName(driver.driver_name);
+    setEmail(driver.email || "");
+    setPhone(driver.phone || "");
+    setVehicleId(driver.vehicle_id);
+    setStartDate(driver.start_date || new Date().toISOString().slice(0, 10));
+    setLicenceExpiry(driver.licence_expiry_date || "");
+    setContractWeeks(String(driver.contract_length_weeks ?? 6));
+  }, [driver]);
+
+  useEffect(() => {
     const v = vehicles.find((item) => item.id === vehicleId);
     if (v) {
       setNextMotDate(v.next_mot_date || "");
@@ -6500,11 +6553,11 @@ function DriverProfileModal({
 
   return (
     <div
-      className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-200"
+      className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 backdrop-blur-sm p-2 sm:p-4 animate-in fade-in duration-200 overflow-y-auto"
       onClick={onClose}
     >
       <div
-        className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-t-3xl sm:rounded-2xl border border-white/15 bg-[#10141d] p-6 shadow-2xl animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200 space-y-5"
+        className="my-auto max-h-[85vh] sm:max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-white/15 bg-[#10141d] p-4 sm:p-6 shadow-2xl animate-in zoom-in-95 duration-200 space-y-5"
         style={{ borderColor: T.border }}
         onClick={(e) => e.stopPropagation()}
       >

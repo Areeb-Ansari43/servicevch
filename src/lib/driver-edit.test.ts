@@ -27,6 +27,7 @@ describe("Driver File Editing & Payload Persistence", () => {
       ...originalDriver,
       driver_name: "John Doe Updated",
       start_date: "2025-02-01",
+      licence_expiry_date: "2028-06-15",
       weekly_rent: 250,
       rent_due_day: "Friday",
       rent_status: "paid",
@@ -40,6 +41,7 @@ describe("Driver File Editing & Payload Persistence", () => {
       vehicle_id: updatedDriver.vehicle_id || null,
       reg: updatedDriver.registration,
       start_date: updatedDriver.start_date,
+      licence_expiry_date: updatedDriver.licence_expiry_date || null,
       allowance: updatedDriver.allowance,
       rate_pence: updatedDriver.excess_rate,
       weekly_rent: updatedDriver.weekly_rent,
@@ -50,6 +52,7 @@ describe("Driver File Editing & Payload Persistence", () => {
 
     expect(updatePayload.driver_name).toBe("John Doe Updated");
     expect(updatePayload.start_date).toBe("2025-02-01");
+    expect(updatePayload.licence_expiry_date).toBe("2028-06-15");
     expect(updatePayload.weekly_rent).toBe(250);
     expect(updatePayload.rent_due_day).toBe("Friday");
     expect(updatePayload.rent_status).toBe("paid");
@@ -83,11 +86,13 @@ describe("Driver File Editing & Payload Persistence", () => {
     const updated = {
       ...driversList[0],
       driver_name: "New Edited Name",
+      licence_expiry_date: "2027-11-30",
     };
 
     const newDrivers = driversList.map((item) => (item.id === updated.id ? updated : item));
 
     expect(newDrivers[0].driver_name).toBe("New Edited Name");
+    expect(newDrivers[0].licence_expiry_date).toBe("2027-11-30");
   });
 
   it("includes drivers with active: true or active: null when filtering active drivers", () => {
