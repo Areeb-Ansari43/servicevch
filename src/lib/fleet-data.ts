@@ -87,6 +87,8 @@ export type DepositPayment = {
   created_at: string;
 };
 
+export type DriverStatus = "active" | "inactive" | "pending";
+
 export type DriverTrack = {
   id: string;
   driver_name: string;
@@ -101,6 +103,7 @@ export type DriverTrack = {
   start_date: string;
   licence_expiry_date?: string | null;
   deleted_at?: string | null;
+  status: DriverStatus;
   contract_length_weeks?: number;
   deposit_total?: number;
   deposit_payments?: DepositPayment[];
@@ -323,33 +326,46 @@ const dFromRow = (
   logs: MonthlyLog[],
   charges: DriverCharge[] = [],
   depositPayments: DepositPayment[] = [],
-): DriverTrack => ({
-  id: r.id,
-  driver_name: r.driver_name ?? "Driver",
-  email: r.email ?? "",
-  phone: r.phone ?? "",
-  vehicle_id: r.vehicle_id ?? "",
-  registration: r.reg ?? "",
-  start_mileage: Number(r.start_mileage ?? 0),
-  current_mileage: Number(r.current_mileage ?? 0),
-  allowance: Number(r.allowance ?? 5000),
-  excess_rate: Number(r.rate_pence ?? 20),
-  start_date: r.start_date ?? new Date().toISOString().slice(0, 10),
-  licence_expiry_date: r.licence_expiry_date ?? null,
-  deleted_at: r.deleted_at ?? null,
-  contract_length_weeks: Number(r.contract_length_weeks ?? 6),
-  deposit_total: Number(r.deposit_total ?? 0),
-  deposit_payments: depositPayments,
-  invite_token: r.invite_token ?? null,
-  invite_status: (r.invite_status as InviteStatus) ?? "none",
-  auth_user_id: r.auth_user_id ?? null,
-  weekly_rent: Number(r.weekly_rent ?? 0),
-  rent_due_day: r.rent_due_day ?? "Monday",
-  rent_status: (r.rent_status as "paid" | "unpaid") ?? "unpaid",
-  balance_due: Number(r.balance_due ?? 0),
-  charges,
-  monthly_logs: logs,
-});
+): DriverTrack => {
+  const rawStatus = (r.status as string)?.toLowerCase();
+  let statusVal: DriverStatus = "active";
+  if (rawStatus === "inactive" || rawStatus === "pending" || rawStatus === "active") {
+    statusVal = rawStatus as DriverStatus;
+  } else if (r.active === false) {
+    statusVal = "inactive";
+  } else if (r.invite_status === "pending" && !r.auth_user_id) {
+    statusVal = "pending";
+  }
+
+  return {
+    id: r.id,
+    driver_name: r.driver_name ?? "Driver",
+    email: r.email ?? "",
+    phone: r.phone ?? "",
+    vehicle_id: r.vehicle_id ?? "",
+    registration: r.reg ?? "",
+    start_mileage: Number(r.start_mileage ?? 0),
+    current_mileage: Number(r.current_mileage ?? 0),
+    allowance: Number(r.allowance ?? 5000),
+    excess_rate: Number(r.rate_pence ?? 20),
+    start_date: r.start_date ?? new Date().toISOString().slice(0, 10),
+    licence_expiry_date: r.licence_expiry_date ?? null,
+    deleted_at: r.deleted_at ?? null,
+    status: statusVal,
+    contract_length_weeks: Number(r.contract_length_weeks ?? 6),
+    deposit_total: Number(r.deposit_total ?? 0),
+    deposit_payments: depositPayments,
+    invite_token: r.invite_token ?? null,
+    invite_status: (r.invite_status as InviteStatus) ?? "none",
+    auth_user_id: r.auth_user_id ?? null,
+    weekly_rent: Number(r.weekly_rent ?? 0),
+    rent_due_day: r.rent_due_day ?? "Monday",
+    rent_status: (r.rent_status as "paid" | "unpaid") ?? "unpaid",
+    balance_due: Number(r.balance_due ?? 0),
+    charges,
+    monthly_logs: logs,
+  };
+};
 
 const lFromRow = (r: any): MonthlyLog => ({
   id: r.id,
@@ -716,10 +732,11 @@ export function useFleetData() {
         rent_due_day: d.rent_due_day ?? "Monday",
         rent_status: d.rent_status ?? "unpaid",
         balance_due: d.balance_due ?? (d.weekly_rent ?? 0),
+        status: d.status || "active",
       };
       let { error } = await (supabase.from("driver_tracks") as any).insert(driverPayload);
-      if (error && /email|phone|column|contract_length_weeks|deposit_total|licence_expiry_date/i.test(error.message)) {
-        const { contract_length_weeks: _c, deposit_total: _d, email: _email, phone: _phone, licence_expiry_date: _lic, ...legacyPayload } = driverPayload;
+      if (error && /email|phone|column|contract_length_weeks|deposit_total/i.test(error.message)) {
+        const { contract_length_weeks: _c, deposit_total: _d, email: _email, phone: _phone, ...legacyPayload } = driverPayload;
         ({ error } = await (supabase.from("driver_tracks") as any).insert(legacyPayload));
       }
       if (error) throw new Error(error.message);
@@ -1036,6 +1053,45 @@ export function useFleetData() {
     [refresh],
   );
 
+  const updateDriverStatus = useCallback(
+    async (id: string, newStatus: DriverStatus) => {
+      const target = drivers.find((item) => item.id === id);
+      const previousStatus = target?.status ?? "active";
+
+      setDrivers((prev) =>
+        prev.map((item) =>
+          item.id === id ? { ...item, status: newStatus } : item,
+        ),
+      );
+
+      const { error } = await supabase
+        .from("driver_tracks")
+        .update({
+          status: newStatus,
+          active: newStatus !== "inactive",
+        })
+        .eq("id", id);
+
+      if (error) throw new Error(error.message);
+
+      await logAuditEvent({
+        actionType: "driver_status_updated" as any,
+        targetTable: "driver_tracks",
+        targetId: id,
+        details: {
+          driver_id: id,
+          driver_name: target?.driver_name ?? "Driver",
+          reg: target?.registration ?? null,
+          previous_status: previousStatus,
+          new_status: newStatus,
+        },
+      });
+
+      await refresh();
+    },
+    [drivers, refresh],
+  );
+
   const editDriver = useCallback(
     async (d: DriverTrack) => {
       setDrivers((prev) =>
@@ -1049,6 +1105,7 @@ export function useFleetData() {
                 vehicle_id: d.vehicle_id,
                 registration: d.registration,
                 start_date: d.start_date,
+                licence_expiry_date: d.licence_expiry_date || null,
                 contract_length_weeks: d.contract_length_weeks ?? 6,
                 deposit_total: d.deposit_total ?? 0,
                 allowance: d.allowance,
@@ -1057,6 +1114,7 @@ export function useFleetData() {
                 rent_due_day: d.rent_due_day,
                 rent_status: d.rent_status,
                 balance_due: d.balance_due,
+                status: d.status || "active",
               }
             : item,
         ),
@@ -1078,10 +1136,11 @@ export function useFleetData() {
         rent_due_day: d.rent_due_day,
         rent_status: d.rent_status,
         balance_due: d.balance_due,
+        status: d.status || "active",
       };
       let { error } = await supabase.from("driver_tracks").update(payload).eq("id", d.id);
-      if (error && /email|phone|column|contract_length_weeks|deposit_total|licence_expiry_date/i.test(error.message)) {
-        const { contract_length_weeks: _c, deposit_total: _d, email: _email, phone: _phone, licence_expiry_date: _lic, ...legacyPayload } = payload;
+      if (error && /email|phone|column|contract_length_weeks|deposit_total/i.test(error.message)) {
+        const { contract_length_weeks: _c, deposit_total: _d, email: _email, phone: _phone, ...legacyPayload } = payload;
         ({ error } = await supabase.from("driver_tracks").update(legacyPayload).eq("id", d.id));
       }
       if (error) throw new Error(error.message);
@@ -1511,6 +1570,7 @@ export function useFleetData() {
     addDriverCharge,
     sendDriverReminder,
     generatePortalInvite,
+      updateDriverStatus,
     deleteDriver,
     restoreDriver,
     updateDriverMileage,
