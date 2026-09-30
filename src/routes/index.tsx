@@ -3328,21 +3328,38 @@ function Dashboard({
               <button
                 key={d.id}
                 onClick={() => goto("mileage")}
-                className="flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-[#1e222b]"
+                className="flex w-full flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-[#1e222b]"
                 style={{ borderColor: T.border, background: T.panel }}
               >
-                <UKPlate reg={d.registration} size="sm" />
-                <div className="flex-1 text-sm">
+                <div className="flex w-full sm:w-auto items-center justify-between sm:justify-start gap-2">
+                  <UKPlate reg={d.registration} size="sm" />
+                  <span
+                    className={`sm:hidden rounded-full px-2 py-0.5 text-[11px] font-bold shrink-0 ${
+                      days < 0
+                        ? "bg-red-500/20 text-red-300"
+                        : days === 1
+                          ? "bg-amber-500/20 text-amber-300"
+                          : "bg-red-500/20 text-red-300"
+                    }`}
+                  >
+                    {days < 0
+                      ? `${Math.abs(days)}d overdue`
+                      : days === 1
+                        ? "Due tomorrow"
+                        : "Due today"}
+                  </span>
+                </div>
+                <div className="w-full min-w-0 flex-1 text-sm">
                   <span className="font-bold text-[#ff8a3d]">Please update driver mileage:</span>{" "}
                   Ask <span className="font-bold">{d.driver_name}</span> to send a photo of the
                   current mileage for <span className="font-semibold">{d.registration}</span>.
-                  <div className="text-xs text-[#8b95a8]">
+                  <div className="text-xs text-[#8b95a8] mt-0.5">
                     Due {dueDate.toLocaleDateString("en-GB")} · Dismisses when you log End of Month
                     mileage
                   </div>
                 </div>
                 <span
-                  className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                  className={`hidden sm:inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold shrink-0 ${
                     days < 0
                       ? "bg-red-500/20 text-red-300"
                       : days === 1
@@ -3381,16 +3398,21 @@ function Dashboard({
               <button
                 key={driver.id + "-rent-due"}
                 onClick={() => goto("drivers")}
-                className="flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-[#1e222b]"
+                className="flex w-full flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-[#1e222b]"
                 style={{ borderColor: T.border, background: T.panel }}
               >
-                <UKPlate reg={driver.registration} size="sm" />
-                <div className="flex-1 text-sm">
+                <div className="flex w-full sm:w-auto items-center justify-between sm:justify-start gap-2">
+                  <UKPlate reg={driver.registration} size="sm" />
+                  <span className="sm:hidden rounded-full bg-blue-500/20 px-2 py-0.5 text-[11px] font-bold text-blue-300 shrink-0">
+                    Due Tomorrow
+                  </span>
+                </div>
+                <div className="w-full min-w-0 flex-1 text-sm">
                   <span className="font-bold text-white">{driver.driver_name}</span> — Weekly rent of{" "}
                   <span className="font-bold text-emerald-400">£{driver.weekly_rent.toFixed(2)}</span> is due tomorrow ({nextDue.toLocaleDateString("en-GB")})
-                  <div className="text-xs text-[#8b95a8]">Rent due day: {driver.rent_due_day}</div>
+                  <div className="text-xs text-[#8b95a8] mt-0.5">Rent due day: {driver.rent_due_day}</div>
                 </div>
-                <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-[11px] font-bold text-blue-300">
+                <span className="hidden sm:inline-flex rounded-full bg-blue-500/20 px-2 py-0.5 text-[11px] font-bold text-blue-300 shrink-0">
                   Due Tomorrow
                 </span>
               </button>
@@ -9108,6 +9130,7 @@ function WhatsAppLeadsView({ toast }: { toast: (m: string, t?: Toast["type"]) =>
 /* ---------------- Accident Cases ---------------- */
 function AccidentCasesView({ toast }: { toast: (m: string, t?: Toast["type"]) => void }) {
   const { accidents, loading, setAccidentStatus, deleteAccident } = useLeadsData();
+  const [selectedAccident, setSelectedAccident] = useState<AccidentCase | null>(null);
 
   return (
     <div className="space-y-6">
@@ -9135,85 +9158,132 @@ function AccidentCasesView({ toast }: { toast: (m: string, t?: Toast["type"]) =>
           </div>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {accidents.map((a) => (
             <div
               key={a.id}
-              className="rounded-2xl border p-5"
+              onClick={() => setSelectedAccident(a)}
+              className="flex items-center justify-between gap-4 rounded-xl border p-4 transition-colors hover:border-[#ff6a00]/50 hover:bg-[#1e222b] cursor-pointer"
               style={{ borderColor: T.border, background: T.panel }}
             >
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-3 min-w-0">
                 {a.reg ? (
                   <UKPlate reg={a.reg} size="sm" />
                 ) : (
-                  <span className="text-sm text-[#9aa5b8]">No reg</span>
+                  <span className="text-sm font-bold text-[#9aa5b8]">No reg</span>
                 )}
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold">{a.driver_name || "Unknown driver"}</div>
-                  <div className="text-xs text-[#9aa5b8]">
-                    {new Date(a.incident_date).toLocaleDateString("en-GB")} ·{" "}
-                    {a.location || "Location unknown"}
+                  <div className="text-sm font-semibold text-white truncate">
+                    {a.driver_name || "Unknown driver"}
                   </div>
-                </div>
-                <div className="ml-auto flex items-center gap-2">
-                  <span
-                    className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold capitalize ${severityPill(a.severity)}`}
-                  >
-                    {a.severity}
-                  </span>
-                  <span
-                    className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold capitalize ${statusPill(a.status)}`}
-                  >
-                    {a.status}
-                  </span>
+                  <div className="text-xs text-[#9aa5b8]">
+                    {new Date(a.incident_date).toLocaleDateString("en-GB")}
+                  </div>
                 </div>
               </div>
 
-              {a.ai_summary && (
-                <div
-                  className="mt-4 rounded-xl border p-3 text-sm"
-                  style={{ borderColor: T.borderSoft, background: T.panel2 }}
+              <div className="flex items-center gap-2 shrink-0">
+                <span
+                  className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold capitalize ${severityPill(a.severity)}`}
                 >
-                  <div
-                    className="mb-1 text-[10px] font-bold uppercase tracking-[0.18em]"
-                    style={{ color: T.orange }}
-                  >
-                    AI Summary
-                  </div>
-                  {a.ai_summary}
+                  {a.severity}
+                </span>
+                <span
+                  className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold capitalize ${statusPill(a.status)}`}
+                >
+                  {a.status}
+                </span>
+                <Icon.Eye className="h-4 w-4 text-[#8b95a8] ml-1" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Case Details Modal */}
+      {selectedAccident && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-200"
+          onClick={() => setSelectedAccident(null)}
+        >
+          <div
+            className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl border p-6 shadow-2xl space-y-6"
+            style={{ borderColor: T.border, background: T.panel }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div
+              className="flex items-start justify-between border-b pb-4"
+              style={{ borderColor: T.borderSoft }}
+            >
+              <div>
+                <div className="flex items-center gap-3">
+                  {selectedAccident.reg && <UKPlate reg={selectedAccident.reg} size="sm" />}
+                  <h3 className="text-lg font-bold text-white">
+                    {selectedAccident.driver_name || "Unknown Driver"}
+                  </h3>
                 </div>
-              )}
+                <div className="mt-1 text-xs text-[#8b95a8]">
+                  Accident Date: {new Date(selectedAccident.incident_date).toLocaleDateString("en-GB")}
+                  {selectedAccident.incident_time ? ` at ${selectedAccident.incident_time}` : ""}
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedAccident(null)}
+                className="rounded-lg p-1.5 text-[#8b95a8] hover:bg-[#1e222b] hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
 
-              <p className="mt-3 whitespace-pre-wrap text-sm text-[#c8d0dd]">{a.description}</p>
-
-              <div className="mt-4 flex flex-wrap justify-end gap-2">
-                {a.status !== "in progress" && (
+            {/* Badges & Actions */}
+            <div
+              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3"
+              style={{ borderColor: T.borderSoft, background: T.panel2 }}
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold capitalize ${severityPill(selectedAccident.severity)}`}
+                >
+                  {selectedAccident.severity}
+                </span>
+                <span
+                  className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold capitalize ${statusPill(selectedAccident.status)}`}
+                >
+                  {selectedAccident.status}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {selectedAccident.status !== "in progress" && (
                   <button
                     onClick={async () => {
-                      await setAccidentStatus(a.id, "in progress");
+                      await setAccidentStatus(selectedAccident.id, "in progress");
+                      setSelectedAccident({ ...selectedAccident, status: "in progress" });
                       toast("Case moved to in progress");
                     }}
                     className="rounded-lg border px-3 py-1.5 text-xs font-semibold"
-                    style={{ borderColor: T.border, background: T.panel2 }}
+                    style={{ borderColor: T.border, background: T.panel }}
                   >
                     In progress
                   </button>
                 )}
-                {a.status !== "closed" && (
+                {selectedAccident.status !== "closed" && (
                   <button
                     onClick={async () => {
-                      await setAccidentStatus(a.id, "closed");
+                      await setAccidentStatus(selectedAccident.id, "closed");
+                      setSelectedAccident({ ...selectedAccident, status: "closed" });
                       toast("Case closed", "info");
                     }}
                     className="rounded-lg border px-3 py-1.5 text-xs font-semibold"
-                    style={{ borderColor: T.border, background: T.panel2 }}
+                    style={{ borderColor: T.border, background: T.panel }}
                   >
                     Close case
                   </button>
                 )}
                 <button
                   onClick={async () => {
-                    await deleteAccident(a.id);
+                    await deleteAccident(selectedAccident.id);
+                    setSelectedAccident(null);
                     toast("Case removed", "info");
                   }}
                   className="rounded-lg border border-red-400/30 bg-red-400/10 px-3 py-1.5 text-xs font-semibold text-red-300"
@@ -9222,7 +9292,161 @@ function AccidentCasesView({ toast }: { toast: (m: string, t?: Toast["type"]) =>
                 </button>
               </div>
             </div>
-          ))}
+
+            {/* AI Summary */}
+            {selectedAccident.ai_summary && (
+              <div
+                className="rounded-xl border p-4 text-sm whitespace-pre-wrap"
+                style={{ borderColor: T.orange, background: T.orangeSoft }}
+              >
+                <div
+                  className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em]"
+                  style={{ color: T.orange }}
+                >
+                  Confirmed AI Summary
+                </div>
+                <div className="text-white/90 leading-relaxed">{selectedAccident.ai_summary}</div>
+              </div>
+            )}
+
+            {/* Report Details */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-[#8b95a8]">
+                Report Details
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div
+                  className="rounded-lg border p-2.5"
+                  style={{ borderColor: T.borderSoft, background: T.panel2 }}
+                >
+                  <span className="text-[#8b95a8] block">Driver Name</span>
+                  <span className="font-semibold text-white">
+                    {selectedAccident.driver_name || "N/A"}
+                  </span>
+                </div>
+                <div
+                  className="rounded-lg border p-2.5"
+                  style={{ borderColor: T.borderSoft, background: T.panel2 }}
+                >
+                  <span className="text-[#8b95a8] block">Vehicle Registration</span>
+                  <span className="font-semibold text-white">{selectedAccident.reg || "N/A"}</span>
+                </div>
+                <div
+                  className="rounded-lg border p-2.5"
+                  style={{ borderColor: T.borderSoft, background: T.panel2 }}
+                >
+                  <span className="text-[#8b95a8] block">Location</span>
+                  <span className="font-semibold text-white">
+                    {selectedAccident.location || "N/A"}
+                  </span>
+                </div>
+                <div
+                  className="rounded-lg border p-2.5"
+                  style={{ borderColor: T.borderSoft, background: T.panel2 }}
+                >
+                  <span className="text-[#8b95a8] block">Customer Phone</span>
+                  <span className="font-semibold text-white">
+                    {selectedAccident.customer_phone || "N/A"}
+                  </span>
+                </div>
+                <div
+                  className="rounded-lg border p-2.5"
+                  style={{ borderColor: T.borderSoft, background: T.panel2 }}
+                >
+                  <span className="text-[#8b95a8] block">Other Driver Name</span>
+                  <span className="font-semibold text-white">
+                    {selectedAccident.at_fault_driver_name || "N/A"}
+                  </span>
+                </div>
+                <div
+                  className="rounded-lg border p-2.5"
+                  style={{ borderColor: T.borderSoft, background: T.panel2 }}
+                >
+                  <span className="text-[#8b95a8] block">Other Vehicle Reg</span>
+                  <span className="font-semibold text-white">
+                    {selectedAccident.at_fault_vehicle_reg || "N/A"}
+                  </span>
+                </div>
+                <div
+                  className="rounded-lg border p-2.5 sm:col-span-2"
+                  style={{ borderColor: T.borderSoft, background: T.panel2 }}
+                >
+                  <span className="text-[#8b95a8] block">Insurance Provider</span>
+                  <span className="font-semibold text-white">
+                    {selectedAccident.insurance_provider || "N/A"}
+                  </span>
+                </div>
+                <div
+                  className="rounded-lg border p-3 sm:col-span-2"
+                  style={{ borderColor: T.borderSoft, background: T.panel2 }}
+                >
+                  <span className="text-[#8b95a8] block mb-1">Description</span>
+                  <p className="text-white whitespace-pre-wrap leading-relaxed">
+                    {selectedAccident.description || "N/A"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Media Gallery */}
+            {((selectedAccident.evidence_urls && selectedAccident.evidence_urls.length > 0) ||
+              selectedAccident.key_photo_url ||
+              selectedAccident.key_video_url) && (
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-[#8b95a8]">
+                  Attached Photos & Videos
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {[
+                    ...(selectedAccident.evidence_urls || []),
+                    ...(selectedAccident.key_photo_url ? [selectedAccident.key_photo_url] : []),
+                    ...(selectedAccident.key_video_url ? [selectedAccident.key_video_url] : []),
+                  ]
+                    .filter((url, idx, self) => Boolean(url) && self.indexOf(url) === idx)
+                    .map((url, i) => {
+                      const isVideo =
+                        /\.(mp4|webm|ogg|mov)(\?|$)/i.test(url) || url.includes("video");
+                      return (
+                        <div
+                          key={i}
+                          className="rounded-xl border p-2 space-y-2"
+                          style={{ borderColor: T.borderSoft, background: T.panel2 }}
+                        >
+                          {isVideo ? (
+                            <video
+                              src={url}
+                              controls
+                              className="w-full max-h-48 rounded-lg object-cover"
+                            />
+                          ) : (
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="block overflow-hidden rounded-lg"
+                            >
+                              <img
+                                src={url}
+                                alt={`Evidence ${i + 1}`}
+                                className="w-full h-36 object-cover hover:scale-105 transition-transform"
+                              />
+                            </a>
+                          )}
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[11px] font-semibold text-[#ff6a00] hover:underline block truncate text-center"
+                          >
+                            Open File {i + 1}
+                          </a>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

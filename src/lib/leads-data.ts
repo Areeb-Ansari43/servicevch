@@ -21,12 +21,25 @@ export type AccidentCase = {
   reg: string;
   driver_name: string | null;
   incident_date: string;
+  incident_time?: string | null;
   location: string | null;
   description: string;
   ai_summary: string | null;
   severity: string;
   status: string;
   created_at: string;
+  customer_phone?: string | null;
+  at_fault_driver_name?: string | null;
+  at_fault_driver_license_url?: string | null;
+  at_fault_vehicle_reg?: string | null;
+  insurance_provider?: string | null;
+  evidence_urls?: string[];
+  case_type?: string;
+  garage_name?: string | null;
+  garage_address?: string | null;
+  garage_map_url?: string | null;
+  key_photo_url?: string | null;
+  key_video_url?: string | null;
 };
 
 export function useLeadsData() {

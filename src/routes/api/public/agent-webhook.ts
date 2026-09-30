@@ -404,21 +404,131 @@ function accidentMissing(data: AccidentData): string[] {
   return missing;
 }
 
+export async function generateAccidentSummaryWithAi(data: AccidentData): Promise<string> {
+  const fallbackSummary = [
+    "🚨 Accident Report Summary:",
+    "",
+    "📋 Driver & Vehicle",
+    `• Driver: ${data.driverName ?? "Not supplied"}`,
+    `• Vehicle Reg: ${data.driverReg ?? "Not supplied"}`,
+    "",
+    "📌 Accident Details",
+    `• Incident Date: ${data.incidentDate ?? "Not supplied"}`,
+    `• Incident Time: ${data.incidentTime ?? "Not supplied"}`,
+    `• Location: ${data.location ?? "Not supplied"}`,
+    "",
+    ...(data.atFaultDriverName || data.atFaultVehicleReg || data.insuranceProvider
+      ? [
+          "🚗 Other Party",
+          ...(data.atFaultDriverName ? [`• Driver Name: ${data.atFaultDriverName}`] : []),
+          ...(data.atFaultVehicleReg ? [`• Vehicle Reg: ${data.atFaultVehicleReg}`] : []),
+          ...(data.insuranceProvider ? [`• Insurance Provider: ${data.insuranceProvider}`] : []),
+          "",
+        ]
+      : []),
+    ...(data.description
+      ? [
+          "💥 Damage Description",
+          `• Details: ${data.description}`,
+          "",
+        ]
+      : []),
+    ...(data.evidenceUrls?.length
+      ? [
+          "📸 Media Attached",
+          `• Files Received: ${data.evidenceUrls.length} file(s)`,
+          "",
+        ]
+      : []),
+    "Reply YES if this is correct, or tell me what to change.",
+  ].join("\n");
+
+  const geminiKeyBindings = [
+    "GEMINI_API_KEY",
+    "GOOGLE_API_KEY",
+    "GOOGLE_GEMINI_API_KEY",
+    "GOOGLE_GENERATIVE_AI_API_KEY",
+    "VITE_GEMINI_API_KEY",
+  ];
+  const geminiKeyBinding = geminiKeyBindings.find((binding) => Boolean(getRuntimeEnv(binding)));
+  const geminiKey = geminiKeyBinding ? getRuntimeEnv(geminiKeyBinding) : undefined;
+  if (!geminiKey) return fallbackSummary;
+
+  const system =
+    "You are an AI assistant for Virtual Car Hire. Your task is to summarize provided accident report details into clear bullet points grouped by sensible categories.\n" +
+    "Category Examples: Driver & Vehicle, Accident Details, Other Party, Damage Description, Media Attached.\n" +
+    "RULES:\n" +
+    "1. Group sensibly based on what was actually provided. Do NOT include empty categories or force placeholder rows.\n" +
+    "2. Use concise bullet points for each detail provided.\n" +
+    "3. End with exact prompt line: 'Reply YES if this is correct, or tell me what to change.'\n" +
+    "4. Output clean plain text with category headers and bullet points.";
+
+  const prompt = `Accident Details:\n${JSON.stringify(data, null, 2)}`;
+
+  try {
+    const res = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey.trim() },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.2 },
+        }),
+      },
+    );
+    if (!res.ok) return fallbackSummary;
+    const body = await res.text();
+    const parsed = JSON.parse(body) as {
+      candidates?: { content?: { parts?: { text?: string }[] } }[];
+    };
+    const text =
+      parsed.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("").trim();
+    if (text) return text;
+  } catch (err) {
+    console.error("[agent-webhook] Gemini accident summary generation failed", err);
+  }
+  return fallbackSummary;
+}
+
 function formatAccidentSummary(data: AccidentData): string {
   return [
     "🚨 Accident Report Summary:",
-    `• Your driver: ${data.driverName ?? "Not supplied"}`,
-    `• Your vehicle registration: ${data.driverReg ?? "Not supplied"}`,
-    `• Other driver: ${data.atFaultDriverName ?? "Not supplied"}`,
-    `• Other vehicle registration: ${data.atFaultVehicleReg ?? "Not supplied"}`,
-    `• Insurance provider: ${data.insuranceProvider ?? "Not supplied"}`,
-    `• Incident date: ${data.incidentDate ?? "Not supplied"}`,
-    `• Incident time: ${data.incidentTime ?? "Not supplied"}`,
-    `• Location: ${data.location ?? "Not supplied"}`,
-    `• Description: ${data.description ?? "Not supplied"}`,
-    `• Photos/Videos: ${data.evidenceUrls?.length ? `${data.evidenceUrls.length} file(s) received` : "None"}`,
     "",
-    "Is this information correct? Reply Yes to confirm or No to edit.",
+    "📋 Driver & Vehicle",
+    `• Driver: ${data.driverName ?? "Not supplied"}`,
+    `• Vehicle Reg: ${data.driverReg ?? "Not supplied"}`,
+    "",
+    "📌 Accident Details",
+    `• Incident Date: ${data.incidentDate ?? "Not supplied"}`,
+    `• Incident Time: ${data.incidentTime ?? "Not supplied"}`,
+    `• Location: ${data.location ?? "Not supplied"}`,
+    "",
+    ...(data.atFaultDriverName || data.atFaultVehicleReg || data.insuranceProvider
+      ? [
+          "🚗 Other Party",
+          ...(data.atFaultDriverName ? [`• Driver Name: ${data.atFaultDriverName}`] : []),
+          ...(data.atFaultVehicleReg ? [`• Vehicle Reg: ${data.atFaultVehicleReg}`] : []),
+          ...(data.insuranceProvider ? [`• Insurance Provider: ${data.insuranceProvider}`] : []),
+          "",
+        ]
+      : []),
+    ...(data.description
+      ? [
+          "💥 Damage Description",
+          `• Details: ${data.description}`,
+          "",
+        ]
+      : []),
+    ...(data.evidenceUrls?.length
+      ? [
+          "📸 Media Attached",
+          `• Files Received: ${data.evidenceUrls.length} file(s)`,
+          "",
+        ]
+      : []),
+    "Reply YES if this is correct, or tell me what to change.",
   ].join("\n");
 }
 
@@ -2555,48 +2665,6 @@ export async function handleAgentWebhookRequest(request: Request) {
     }
   }
 
-  const accidentIdentity = parseAccidentIdentity(content);
-  if (
-    !option &&
-    accidentActive &&
-    /full name|provide your full name|vehicle registration/i.test(lastAgentMessage) &&
-    (accidentIdentity || isLikelyFullName(content))
-  ) {
-    const customerName = accidentIdentity?.name ?? content.trim();
-    const suppliedRegistration = accidentIdentity?.registration ?? "";
-    const reply = suppliedRegistration
-      ? `Accident Support\n\nThank you, ${customerName}. I have recorded vehicle registration ${suppliedRegistration}. I am checking these details against our driver records now. If verified, I will collect the accident details next.`
-      : `Accident Support\n\nThank you, ${customerName}. Please now send the vehicle registration, incident date, location, a short description of what happened, and any photos.`;
-    const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
-    if (outbound.sent) {
-      await db
-        .from("whatsapp_leads")
-        .update({
-          contact_name: customerName,
-          vehicle_registration: suppliedRegistration || undefined,
-          intent: "report_accident",
-          ai_summary: reply,
-          last_message_at: new Date().toISOString(),
-        } as never)
-        .eq("id", leadId);
-      await insertWithSessionFallback(db, "messages", {
-        user_id: userId,
-        lead_id: leadId,
-        sender: "ai_agent",
-        content: reply,
-        session_id: sessionId,
-      });
-    }
-    return json({
-      ok: true,
-      lead_id: leadId,
-      reply: outbound.sent ? reply : null,
-      outbound,
-      needs_human: !outbound.sent,
-      accident_identity: accidentIdentity,
-    });
-  }
-
   if (option === 1 || option === 2 || option === 3) {
     if (option === 2) {
       // Send exactly 3 separate messages in this order:
@@ -2990,11 +3058,13 @@ export async function handleAgentWebhookRequest(request: Request) {
         let reply = "";
         if (regMatches.length > 0) {
           reply =
-            "Your name has not been recognized in our database for this vehicle. Please reply with your full name as shown on your rental agreement.";
+            "Your name has not been recognized in our database for this vehicle registration. Please double check your full name as shown on your rental agreement and re-enter both your name and registration.";
           next.driverName = undefined;
+          next.driverReg = undefined;
         } else {
           reply =
-            "The vehicle registration has not been recorded in our database. Please check your registration plate and try again.";
+            "The vehicle registration has not been recorded in our active driver database. Please double check your registration plate and re-enter both your full name and vehicle registration.";
+          next.driverName = undefined;
           next.driverReg = undefined;
         }
         const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
@@ -3149,15 +3219,18 @@ export async function handleAgentWebhookRequest(request: Request) {
     }
 
     if (
-      (lowerLast.includes("is this information correct") ||
+      (lowerLast.includes("reply yes") ||
+        lowerLast.includes("is this information correct") ||
+        lowerLast.includes("summary is correct") ||
         lowerLast.includes("accident report summary")) &&
       (isPositiveConfirmation(content) || isNegativeConfirmation(content))
     ) {
       if (isPositiveConfirmation(content)) {
-        const summary = formatAccidentSummary(next).replace(
-          /\n\nIs this information correct\? Reply Yes to confirm or No to edit\./,
-          "",
-        );
+        const summary =
+          lastAgentMessage.replace(
+            /\n\n?Reply YES if this is correct, or tell me what to change\./i,
+            "",
+          ) || (await generateAccidentSummaryWithAi(next));
         const { error: caseError } = await db.from("accident_cases").insert({
           user_id: userId,
           vehicle_id: next.vehicleId ?? null,
@@ -3255,8 +3328,8 @@ export async function handleAgentWebhookRequest(request: Request) {
     }
 
     const reply = missing.length
-      ? `🚨 Accident report\\n\\nThank you. I still need ${missing.join(", ")}. Please send the missing information; you can send photos and videos as separate messages.`
-      : formatAccidentSummary(next);
+      ? `🚨 Accident report\n\nThank you. I still need ${missing.join(", ")}. Please send the missing information; you can send photos and videos as separate messages.`
+      : await generateAccidentSummaryWithAi(next);
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
     if (outbound.sent)
       await insertWithSessionFallback(db, "messages", {
