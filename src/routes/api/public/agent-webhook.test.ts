@@ -14,6 +14,7 @@ import {
   isMenuReset,
   isOffScriptQuestion,
   applyAntiRepetition,
+  generateAccidentSummaryWithAi,
 } from "./agent-webhook";
 import { normalizeMetaPhone } from "@/lib/meta-whatsapp.server";
 
@@ -403,5 +404,30 @@ describe("5-Minute Inactivity Auto-End Calculation", () => {
 
     expect(isRecentInactive).toBe(false);
     expect(isStaleInactive).toBe(true);
+  });
+});
+
+describe("Accident Summary AI Formatting", () => {
+  test("generates category-grouped bulleted summary and asks for confirmation", async () => {
+    const data = {
+      driverName: "Varun Bagga",
+      driverReg: "LC71 YZB",
+      incidentDate: "2025-02-20",
+      incidentTime: "14:30:00",
+      location: "Hayes High Street",
+      atFaultDriverName: "Jane Smith",
+      atFaultVehicleReg: "AB12 CDE",
+      insuranceProvider: "Admiral",
+      description: "Rear-ended while stopped at traffic light.",
+      evidenceUrls: ["https://example.com/photo1.jpg"],
+    };
+
+    const summary = await generateAccidentSummaryWithAi(data);
+    expect(summary).toContain("Driver & Vehicle");
+    expect(summary).toContain("Varun Bagga");
+    expect(summary).toContain("LC71 YZB");
+    expect(summary).toContain("Other Party");
+    expect(summary).toContain("Admiral");
+    expect(summary).toContain("Reply YES if this is correct, or tell me what to change.");
   });
 });
