@@ -1,4 +1,4 @@
-import { LogoLoader } from @/components/logo-loader;
+import { LogoLoader } from "@/components/logo-loader";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
