@@ -257,13 +257,9 @@ function LoginPage() {
     }, 1200);
   };
 
-  const handleContactSupport = () => {
-    window.location.href = "mailto:support@virtual-carhire.co.uk?subject=Fleet%20Platform%20Support";
-  };
-
   return (
     <div className="relative min-h-screen w-full overflow-hidden font-sans bg-[#07090D] text-white flex flex-col justify-between select-none">
-      {/* CSS Animations & Reduced Motion */}
+      {/* CSS Animations, Responsive Background Image & Micro-interactions */}
       <style>{`
         @keyframes shake {
           0%, 100% { transform: translateX(0); }
@@ -297,6 +293,30 @@ function LoginPage() {
         .animate-card-spring {
           animation: cardSpring 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
+
+        /* Responsive Full-Page Background Car Positioning */
+        .vch-login-bg-car {
+          background-image: url('/login-bg-car.jpg');
+          background-position: left bottom;
+          background-repeat: no-repeat;
+          background-size: auto 100%;
+          -webkit-mask-image: linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 35%, rgba(0,0,0,0.85) 55%, rgba(0,0,0,0) 88%);
+          mask-image: linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 35%, rgba(0,0,0,0.85) 55%, rgba(0,0,0,0) 88%);
+        }
+        @media (max-aspect-ratio: 3/2) {
+          .vch-login-bg-car {
+            background-size: cover;
+          }
+        }
+        @media (max-width: 768px) {
+          .vch-login-bg-car {
+            background-image: url('/login-bg-car-mobile.jpg');
+            background-size: cover;
+            -webkit-mask-image: none;
+            mask-image: none;
+          }
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .animate-shake, .animate-logo-draw, .animate-light-sweep, .animate-card-spring {
             animation: none !important;
@@ -349,18 +369,14 @@ function LoginPage() {
         </div>
       )}
 
-      {/* Bottom Car Background Image - Constrained to bottom 40-45% height */}
-      <div className="fixed inset-x-0 bottom-0 z-0 h-[42vh] max-h-[45vh] overflow-hidden pointer-events-none">
-        <div
-          className="w-full h-full bg-contain bg-no-repeat bg-left-bottom hidden md:block"
-          style={{ backgroundImage: "url('/login-bg-car.jpg')" }}
-        />
-        <div
-          className="w-full h-full bg-cover bg-no-repeat bg-left-bottom md:hidden"
-          style={{ backgroundImage: "url('/login-bg-car-mobile.jpg')" }}
-        />
-        {/* Subtle dark overlay + top gradient fade into #07090D */}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#07090D]/40 via-[#07090D]/80 to-[#07090D]" />
+      {/* Full-Viewport Background Car Image (fixed inset-0 behind everything) */}
+      <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
+        <div className="vch-login-bg-car w-full h-full" />
+
+        {/* Subtle dark overlay (35% opacity) to keep text readable + right/top dark gradients */}
+        <div className="absolute inset-0 bg-[#07090D]/35" />
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent 35% to-[#07090D] 85%" />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#07090D]/80 via-transparent 25% to-transparent" />
       </div>
 
       {/* Top Header Bar */}
@@ -379,35 +395,35 @@ function LoginPage() {
         </div>
       </header>
 
-      {/* Main Grid Content */}
-      <main className="relative z-10 my-auto grid w-full max-w-7xl mx-auto px-6 py-4 lg:px-12 grid-cols-1 lg:grid-cols-12 gap-8 items-center min-h-[calc(100vh-140px)]">
-        {/* Left Column (Desktop) */}
-        <div className="hidden lg:flex lg:col-span-4 flex-col justify-between h-full py-6 pr-4">
-          {/* Top text block placed ~14-18% down viewport */}
-          <div className="pt-[6vh] space-y-4">
-            <span className="text-xs font-bold tracking-[0.2em] text-[#ff6a00] uppercase">
+      {/* Main Responsive Grid Layout */}
+      <main className="relative z-10 my-auto grid w-full px-6 py-4 lg:px-12 grid-cols-1 lg:grid-cols-[1fr_minmax(460px,32vw)_1fr] gap-8 lg:gap-12 items-stretch min-h-[calc(100vh-140px)]">
+        {/* Left Column (Desktop) - Aligned with Header Logo, Eyebrow ~16-19% down viewport */}
+        <div className="hidden lg:flex flex-col justify-between h-full py-2">
+          {/* Top text block positioned under header with eyebrow starting at ~16-19% viewport height */}
+          <div className="pt-[6.5vh] space-y-4">
+            <span className="text-xs font-bold tracking-[0.2em] text-[#ff6a00] uppercase block">
               DRIVE ▪ MANAGE ▪ GROW
             </span>
-            <h1 className="text-4xl lg:text-5xl font-extrabold tracking-tight leading-[1.15] text-white">
+            <h1 className="text-[clamp(38px,3.8vw,56px)] font-extrabold tracking-tight leading-[1.12] text-white">
               Smarter fleet <br />
               <span className="text-[#ff6a00]">management.</span>
             </h1>
-            <p className="text-slate-300 text-base leading-relaxed max-w-sm pt-1">
+            <p className="text-slate-300 text-sm lg:text-base leading-relaxed max-w-sm pt-0.5">
               Everything you need to keep your fleet moving, in one place.
             </p>
           </div>
 
-          {/* Bottom-left trust rule */}
+          {/* Bottom-left trust rule over road area */}
           <div className="border-l-2 border-[#ff6a00] pl-4 py-1 space-y-1 mb-2">
             <p className="text-sm font-semibold text-white">Trusted by operators nationwide</p>
             <p className="text-xs text-slate-400">More vehicles. Less admin. Greater control.</p>
           </div>
         </div>
 
-        {/* Center Main Card Column */}
-        <div className="lg:col-span-4 flex justify-center w-full">
+        {/* Center Main Card Column - 32% viewport width target, min 460px, max 640px */}
+        <div className="flex justify-center items-center w-full">
           <div
-            className={`w-full max-w-[540px] rounded-[20px] border-[1.5px] border-white/16 bg-[#0E131B]/90 p-8 md:p-10 shadow-2xl space-y-6 animate-card-spring transition-all duration-300 ${
+            className={`w-full max-w-[640px] sm:min-w-[460px] rounded-[20px] border-[1.5px] border-white/16 bg-[#0E131B]/90 p-8 md:p-10 shadow-2xl space-y-6 animate-card-spring transition-all duration-300 ${
               isRouting ? "opacity-0 scale-95" : "opacity-100"
             }`}
           >
@@ -536,7 +552,7 @@ function LoginPage() {
                   )}
                 </button>
 
-                {/* Support Section */}
+                {/* Support Section with WhatsApp Link */}
                 <div className="space-y-4 pt-2">
                   <div className="relative flex items-center justify-center">
                     <div className="w-full border-t border-white/10" />
@@ -545,14 +561,15 @@ function LoginPage() {
                     </span>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={handleContactSupport}
-                    className="flex items-center justify-center gap-2.5 w-full h-12 rounded-xl border border-white/10 bg-[#141A24]/60 hover:bg-[#141A24] text-sm font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer"
+                  <a
+                    href="https://wa.me/447721502779?text=Hi%2C%20I%20need%20help%20with%20the%20Virtual%20Car%20Hire%20CRM"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2.5 w-full h-12 rounded-xl border border-white/10 bg-[#141A24]/60 hover:bg-[#141A24] text-sm font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer text-center"
                   >
                     <Headphones className="h-4 w-4 text-[#ff6a00]" />
                     <span>Contact support</span>
-                  </button>
+                  </a>
                 </div>
               </form>
             ) : (
@@ -631,7 +648,7 @@ function LoginPage() {
         </div>
 
         {/* Right Column (Desktop) */}
-        <div className="hidden lg:flex lg:col-span-4 flex-col justify-center space-y-6 pl-4">
+        <div className="hidden lg:flex flex-col justify-center space-y-6 pl-4">
           {/* Feature 1 */}
           <div className="flex items-start gap-4">
             <div className="h-11 w-11 shrink-0 rounded-xl bg-[#141A24] border border-white/10 flex items-center justify-center text-[#ff6a00]">
