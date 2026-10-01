@@ -14,6 +14,8 @@ import {
   Zap,
   ArrowRight,
   Check,
+  X,
+  Loader2,
 } from "lucide-react";
 
 export const Route = createFileRoute("/login")({
@@ -43,6 +45,8 @@ function LoginPageWithBoundary() {
 
 function LoginPage() {
   const navigate = useNavigate();
+  const [showSplash, setShowSplash] = useState(false);
+  const [splashPhase, setSplashPhase] = useState<"logo" | "text" | "fade" | "done">("done");
   const [stage, setStage] = useState<"creds" | "otp">("creds");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -54,8 +58,43 @@ function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState<"none" | "success" | "error">("none");
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotSubmitted, setForgotSubmitted] = useState(false);
+  const [isShaking, setIsShaking] = useState(false);
+  const [lightSweep, setLightSweep] = useState(false);
+  const [isRouting, setIsRouting] = useState(false);
+
   const boxRefs = useRef<(HTMLInputElement | null)[]>([]);
   const submittedRef = useRef(false);
+
+  // Email validation check
+  const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+
+  // Splash screen once per session
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const splashSeen = sessionStorage.getItem("vch_splash_shown");
+      if (!splashSeen) {
+        setShowSplash(true);
+        setSplashPhase("logo");
+        sessionStorage.setItem("vch_splash_shown", "true");
+
+        const timer1 = setTimeout(() => setSplashPhase("text"), 400);
+        const timer2 = setTimeout(() => setSplashPhase("fade"), 1100);
+        const timer3 = setTimeout(() => {
+          setSplashPhase("done");
+          setShowSplash(false);
+        }, 1400);
+
+        return () => {
+          clearTimeout(timer1);
+          clearTimeout(timer2);
+          clearTimeout(timer3);
+        };
+      }
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -92,12 +131,18 @@ function LoginPage() {
     return () => clearInterval(timer);
   }, [resendCooldown]);
 
+  const triggerErrorShake = (msg: string) => {
+    setError(msg);
+    setIsShaking(true);
+    setTimeout(() => setIsShaking(false), 450);
+  };
+
   const submitCreds = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setError(null);
     setInfo(null);
     if (!email.trim() || !password) {
-      setError("Email and password are required.");
+      triggerErrorShake("Email and password are required.");
       return;
     }
     setLoading(true);
@@ -110,9 +155,9 @@ function LoginPage() {
       setResendCooldown(30);
     } catch (err: any) {
       console.error("[Login] requestLoginCode failed:", err);
-      setError(
+      triggerErrorShake(
         err?.message?.includes("Invalid credentials")
-          ? "Invalid credentials."
+          ? "Invalid credentials. Please check your email and password."
           : (err?.message ?? "Sign-in failed."),
       );
     } finally {
@@ -143,13 +188,17 @@ function LoginPage() {
         type: "magiclink",
       });
       if (vErr) throw new Error(vErr.message);
-      console.info("[Login] Session established successfully, showing checkmark animation...");
+      console.info("[Login] Session established successfully, playing transition...");
       setFeedback("success");
-      setTimeout(() => navigate({ to: "/" }), 1000);
+
+      // Light sweep and navigation transition
+      setTimeout(() => setLightSweep(true), 300);
+      setTimeout(() => setIsRouting(true), 550);
+      setTimeout(() => navigate({ to: "/" }), 800);
     } catch (err: any) {
       console.error("[Login] Verification failed:", err);
       setFeedback("error");
-      setError(err?.message ?? "Verification failed. Check your code or request a new one.");
+      triggerErrorShake(err?.message ?? "Verification failed. Check your code or request a new one.");
       setTimeout(() => {
         setFeedback("none");
         setDigits(["", "", "", "", "", ""]);
@@ -196,9 +245,16 @@ function LoginPage() {
     if (e.key === "ArrowRight" && i < 5) boxRefs.current[i + 1]?.focus();
   };
 
-  const handleForgotPassword = () => {
-    setInfo("Password reset link sent to your registered email address.");
-    setError(null);
+  const handleSendResetLink = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotEmail.trim()) return;
+    setForgotSubmitted(true);
+    setTimeout(() => {
+      setForgotSubmitted(false);
+      setIsForgotModalOpen(false);
+      setForgotEmail("");
+      setInfo("Password reset link sent to your email address.");
+    }, 1200);
   };
 
   const handleContactSupport = () => {
@@ -206,22 +262,111 @@ function LoginPage() {
   };
 
   return (
-    <div className="relative min-h-screen w-full overflow-x-hidden font-sans bg-[#0E131B] text-white flex flex-col justify-between select-none">
-      {/* Background Image with Dark Overlay */}
-      <div
-        className="fixed inset-0 z-0 bg-cover bg-no-repeat bg-left-bottom hidden md:block"
-        style={{ backgroundImage: "url('/login-bg-car.jpg')" }}
-      />
-      <div
-        className="fixed inset-0 z-0 bg-cover bg-no-repeat bg-left-bottom md:hidden"
-        style={{ backgroundImage: "url('/login-bg-car-mobile.jpg')" }}
-      />
-      <div className="fixed inset-0 z-0 bg-black/35" />
+    <div className="relative min-h-screen w-full overflow-hidden font-sans bg-[#07090D] text-white flex flex-col justify-between select-none">
+      {/* CSS Animations & Reduced Motion */}
+      <style>{`
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          20%, 60% { transform: translateX(-4px); }
+          40%, 80% { transform: translateX(4px); }
+        }
+        .animate-shake {
+          animation: shake 0.4s ease-in-out;
+        }
+        @keyframes logoOutline {
+          0% { stroke-dashoffset: 280; opacity: 0.2; }
+          50% { stroke-dashoffset: 0; opacity: 1; }
+          100% { stroke-dashoffset: -280; opacity: 0.8; }
+        }
+        .animate-logo-draw {
+          stroke-dasharray: 280;
+          animation: logoOutline 1.2s ease-in-out infinite;
+        }
+        @keyframes lightSweep {
+          0% { transform: translateX(-100%); opacity: 0; }
+          50% { opacity: 0.8; }
+          100% { transform: translateX(200%); opacity: 0; }
+        }
+        .animate-light-sweep {
+          animation: lightSweep 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+        @keyframes cardSpring {
+          0% { opacity: 0; transform: scale(0.97) translateY(15px); }
+          100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        .animate-card-spring {
+          animation: cardSpring 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .animate-shake, .animate-logo-draw, .animate-light-sweep, .animate-card-spring {
+            animation: none !important;
+            transform: none !important;
+            opacity: 1 !important;
+          }
+        }
+      `}</style>
 
-      {/* Top Bar Navigation */}
+      {/* Splash Screen */}
+      {showSplash && (
+        <div
+          className={`fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#07090D] transition-opacity duration-300 ${
+            splashPhase === "fade" ? "opacity-0" : "opacity-100"
+          }`}
+        >
+          <div className="relative flex flex-col items-center gap-4">
+            <div className="relative h-20 w-20 rounded-2xl border-2 border-[#ff6a00]/30 p-2.5 flex items-center justify-center bg-[#07090D] overflow-hidden">
+              <svg className="absolute inset-0 h-full w-full p-1" viewBox="0 0 100 100">
+                <rect
+                  x="5"
+                  y="5"
+                  width="90"
+                  height="90"
+                  rx="16"
+                  fill="none"
+                  stroke="#ff6a00"
+                  strokeWidth="3"
+                  className="animate-logo-draw"
+                />
+              </svg>
+              <img src="/vch-logo.png" alt="VCH" className="h-full w-full object-contain relative z-10" />
+            </div>
+            <div
+              className={`flex flex-col items-center text-center transition-all duration-500 ${
+                splashPhase === "logo" ? "opacity-0 translate-y-2" : "opacity-100 translate-y-0"
+              }`}
+            >
+              <h1 className="text-xl font-bold tracking-tight text-white">Virtual Car Hire</h1>
+              <p className="text-xs text-slate-400 font-medium">Fleet Operations Platform</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Light sweep overlay during sign-in completion */}
+      {lightSweep && (
+        <div className="fixed inset-0 z-40 pointer-events-none overflow-hidden">
+          <div className="h-full w-1/2 bg-gradient-to-r from-transparent via-[#ff6a00]/25 to-transparent skew-x-12 animate-light-sweep" />
+        </div>
+      )}
+
+      {/* Bottom Car Background Image - Constrained to bottom 40-45% height */}
+      <div className="fixed inset-x-0 bottom-0 z-0 h-[42vh] max-h-[45vh] overflow-hidden pointer-events-none">
+        <div
+          className="w-full h-full bg-contain bg-no-repeat bg-left-bottom hidden md:block"
+          style={{ backgroundImage: "url('/login-bg-car.jpg')" }}
+        />
+        <div
+          className="w-full h-full bg-cover bg-no-repeat bg-left-bottom md:hidden"
+          style={{ backgroundImage: "url('/login-bg-car-mobile.jpg')" }}
+        />
+        {/* Subtle dark overlay + top gradient fade into #07090D */}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#07090D]/40 via-[#07090D]/80 to-[#07090D]" />
+      </div>
+
+      {/* Top Header Bar */}
       <header className="relative z-10 flex items-center justify-between px-6 py-6 lg:px-12">
         <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg border border-[#ff6a00] p-1 flex items-center justify-center bg-[#0E131B]">
+          <div className="h-8 w-8 rounded-lg border border-[#ff6a00] p-1 flex items-center justify-center bg-[#07090D]">
             <img src="/vch-logo.png" alt="VCH" className="h-full w-full object-contain" />
           </div>
           <span className="text-sm font-semibold tracking-[0.2em] text-white uppercase">
@@ -234,31 +379,38 @@ function LoginPage() {
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="relative z-10 my-auto grid w-full max-w-7xl mx-auto px-6 py-8 lg:px-12 grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+      {/* Main Grid Content */}
+      <main className="relative z-10 my-auto grid w-full max-w-7xl mx-auto px-6 py-4 lg:px-12 grid-cols-1 lg:grid-cols-12 gap-8 items-center min-h-[calc(100vh-140px)]">
         {/* Left Column (Desktop) */}
-        <div className="hidden lg:flex lg:col-span-4 flex-col justify-between space-y-8 pr-4">
-          <div className="space-y-4">
+        <div className="hidden lg:flex lg:col-span-4 flex-col justify-between h-full py-6 pr-4">
+          {/* Top text block placed ~14-18% down viewport */}
+          <div className="pt-[6vh] space-y-4">
             <span className="text-xs font-bold tracking-[0.2em] text-[#ff6a00] uppercase">
               DRIVE ▪ MANAGE ▪ GROW
             </span>
-            <h1 className="text-4xl lg:text-5xl font-extrabold tracking-tight leading-tight text-white">
-              Smarter fleet <span className="text-[#ff6a00]">management.</span>
+            <h1 className="text-4xl lg:text-5xl font-extrabold tracking-tight leading-[1.15] text-white">
+              Smarter fleet <br />
+              <span className="text-[#ff6a00]">management.</span>
             </h1>
-            <p className="text-slate-300 text-base leading-relaxed max-w-sm">
+            <p className="text-slate-300 text-base leading-relaxed max-w-sm pt-1">
               Everything you need to keep your fleet moving, in one place.
             </p>
           </div>
 
-          <div className="border-l-2 border-[#ff6a00] pl-4 py-1 space-y-1">
+          {/* Bottom-left trust rule */}
+          <div className="border-l-2 border-[#ff6a00] pl-4 py-1 space-y-1 mb-2">
             <p className="text-sm font-semibold text-white">Trusted by operators nationwide</p>
             <p className="text-xs text-slate-400">More vehicles. Less admin. Greater control.</p>
           </div>
         </div>
 
-        {/* Center Card Column */}
+        {/* Center Main Card Column */}
         <div className="lg:col-span-4 flex justify-center w-full">
-          <div className="w-full max-w-[420px] rounded-[20px] border border-white/12 bg-[#0E131B]/90 p-8 shadow-2xl space-y-6">
+          <div
+            className={`w-full max-w-[540px] rounded-[20px] border-[1.5px] border-white/16 bg-[#0E131B]/90 p-8 md:p-10 shadow-2xl space-y-6 animate-card-spring transition-all duration-300 ${
+              isRouting ? "opacity-0 scale-95" : "opacity-100"
+            }`}
+          >
             {/* Logo Mark and Title inside Card */}
             <div className="flex flex-col items-center text-center space-y-2">
               <div className="h-[78px] w-[78px] rounded-2xl border-2 border-[#ff6a00] p-2 flex items-center justify-center bg-[#0E131B] shadow-lg shadow-[#ff6a00]/10">
@@ -271,74 +423,96 @@ function LoginPage() {
             </div>
 
             {info && (
-              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200">
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-xs font-medium text-emerald-200">
                 {info}
               </div>
             )}
 
             {stage === "creds" ? (
-              <form onSubmit={submitCreds} className="space-y-5">
+              <form onSubmit={submitCreds} className={`space-y-5 ${isShaking ? "animate-shake" : ""}`}>
                 {/* Email Field */}
-                <div className="space-y-1.5">
-                  <label className="block text-sm font-medium text-white">Email address</label>
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-white">Email address</label>
                   <div className="relative">
-                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                     <input
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="areeb@fa-ibi.co.uk"
-                      className="w-full rounded-xl border border-white/15 bg-[#141A24] pl-10 pr-4 py-3 text-sm text-white placeholder-slate-500 focus:border-[#ff6a00] focus:outline-none focus:ring-1 focus:ring-[#ff6a00] transition-colors"
+                      className="w-full h-[56px] rounded-xl border border-white/15 bg-[#141A24] pl-12 pr-11 text-sm font-medium text-white placeholder-slate-500 focus:border-[#ff6a00] focus:outline-none focus:ring-1 focus:ring-[#ff6a00] transition-colors"
                       autoComplete="email"
                     />
+                    {isValidEmail && (
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 text-emerald-400 animate-in fade-in zoom-in duration-200">
+                        <Check className="h-5 w-5" />
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 {/* Password Field */}
-                <div className="space-y-1.5">
-                  <label className="block text-sm font-medium text-white">Password</label>
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-white">Password</label>
                   <div className="relative">
-                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                     <input
                       type={showPassword ? "text" : "password"}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="w-full rounded-xl border border-white/15 bg-[#141A24] pl-10 pr-10 py-3 text-sm text-white placeholder-slate-500 focus:border-[#ff6a00] focus:outline-none focus:ring-1 focus:ring-[#ff6a00] transition-colors"
+                      className="w-full h-[56px] rounded-xl border border-white/15 bg-[#141A24] pl-12 pr-12 text-sm font-medium text-white placeholder-slate-500 focus:border-[#ff6a00] focus:outline-none focus:ring-1 focus:ring-[#ff6a00] transition-colors"
                       autoComplete="current-password"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors p-1"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
                     >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                     </button>
                   </div>
                 </div>
 
                 {/* Remember Me & Forgot Password */}
-                <div className="flex items-center justify-between text-sm pt-0.5">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(e) => setRememberMe(e.target.checked)}
-                      className="h-4 w-4 rounded border-white/20 bg-[#141A24] text-[#ff6a00] focus:ring-[#ff6a00] accent-[#ff6a00]"
-                    />
-                    <span className="text-slate-300">Remember me</span>
+                <div className="flex items-center justify-between text-sm pt-1">
+                  <label className="flex items-center gap-2.5 cursor-pointer group">
+                    <div className="relative flex items-center justify-center">
+                      <input
+                        type="checkbox"
+                        checked={rememberMe}
+                        onChange={(e) => setRememberMe(e.target.checked)}
+                        className="sr-only"
+                      />
+                      <div
+                        className={`h-5 w-5 rounded border transition-colors flex items-center justify-center ${
+                          rememberMe
+                            ? "bg-[#ff6a00] border-[#ff6a00]"
+                            : "bg-[#141A24] border-white/20 group-hover:border-white/40"
+                        }`}
+                      >
+                        {rememberMe && <Check className="h-3.5 w-3.5 text-white stroke-[3]" />}
+                      </div>
+                    </div>
+                    <span className="text-slate-300 font-medium text-sm">Remember me</span>
                   </label>
+
                   <button
                     type="button"
-                    onClick={handleForgotPassword}
-                    className="text-[#ff6a00] underline hover:text-[#ff8a3d] font-medium transition-colors"
+                    onClick={() => {
+                      setForgotEmail(email);
+                      setIsForgotModalOpen(true);
+                    }}
+                    className="text-[#ff6a00] underline hover:text-[#ff8a3d] font-semibold text-sm transition-colors cursor-pointer"
                   >
                     Forgot password?
                   </button>
                 </div>
 
+                {/* Inline Error Message */}
                 {error && (
-                  <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200">
+                  <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3.5 text-xs font-medium text-red-200">
                     {error}
                   </div>
                 )}
@@ -347,17 +521,26 @@ function LoginPage() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full rounded-xl bg-gradient-to-r from-[#ff6a00] to-[#ff8a3d] py-3.5 text-base font-semibold text-white shadow-lg shadow-[#ff6a00]/20 hover:from-[#f05f00] hover:to-[#ff7a1a] transition-all disabled:opacity-60 flex items-center justify-center gap-2 cursor-pointer"
+                  className="group relative w-full h-[56px] rounded-xl bg-gradient-to-r from-[#ff6a00] to-[#ff8a3d] text-base font-bold text-white shadow-lg shadow-[#ff6a00]/20 hover:from-[#f05f00] hover:to-[#ff7a1a] active:scale-[0.98] transition-all disabled:opacity-60 flex items-center justify-center gap-2 cursor-pointer overflow-hidden"
                 >
-                  <span>{loading ? "Sending code…" : "Continue"}</span>
-                  {!loading && <ArrowRight className="h-4 w-4" />}
+                  {loading ? (
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      <span>Signing in...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <span>Continue</span>
+                      <ArrowRight className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-1" />
+                    </>
+                  )}
                 </button>
 
                 {/* Support Section */}
                 <div className="space-y-4 pt-2">
                   <div className="relative flex items-center justify-center">
                     <div className="w-full border-t border-white/10" />
-                    <span className="absolute bg-[#0E131B] px-3 text-xs text-slate-400">
+                    <span className="absolute bg-[#0E131B] px-3 text-xs text-slate-400 font-medium">
                       Need help?
                     </span>
                   </div>
@@ -365,7 +548,7 @@ function LoginPage() {
                   <button
                     type="button"
                     onClick={handleContactSupport}
-                    className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl border border-white/10 bg-[#141A24]/60 hover:bg-[#141A24] text-sm text-slate-300 hover:text-white transition-colors cursor-pointer"
+                    className="flex items-center justify-center gap-2.5 w-full h-12 rounded-xl border border-white/10 bg-[#141A24]/60 hover:bg-[#141A24] text-sm font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer"
                   >
                     <Headphones className="h-4 w-4 text-[#ff6a00]" />
                     <span>Contact support</span>
@@ -373,26 +556,26 @@ function LoginPage() {
                 </div>
               </form>
             ) : (
-              /* OTP Stage */
+              /* OTP Verification Stage */
               <div className="space-y-6">
                 {feedback === "success" ? (
-                  <div className="py-6 flex flex-col items-center justify-center space-y-3">
+                  <div className="py-8 flex flex-col items-center justify-center space-y-3">
                     <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
                       <Check className="h-8 w-8" />
                     </div>
-                    <h3 className="text-lg font-bold text-white">Verification Successful!</h3>
-                    <p className="text-xs text-emerald-300">Logging you in...</p>
+                    <h3 className="text-xl font-bold text-white">Welcome back!</h3>
+                    <p className="text-sm text-emerald-300 font-medium">Authentication successful.</p>
                   </div>
                 ) : (
                   <>
-                    <div className="text-center space-y-1">
-                      <h3 className="text-base font-semibold text-white">Enter 6-Digit Code</h3>
+                    <div className="text-center space-y-1.5">
+                      <h3 className="text-lg font-bold text-white">Enter 6-Digit Code</h3>
                       <p className="text-xs text-slate-400">
                         {info ?? "We emailed a verification code to your email."}
                       </p>
                     </div>
 
-                    <div className="flex justify-center gap-2">
+                    <div className={`flex justify-center gap-2 md:gap-3 ${isShaking ? "animate-shake" : ""}`}>
                       {digits.map((d, i) => (
                         <input
                           key={i}
@@ -404,13 +587,13 @@ function LoginPage() {
                           onKeyDown={(e) => onKeyDown(i, e)}
                           inputMode="numeric"
                           maxLength={6}
-                          className="h-12 w-10 rounded-lg border border-white/15 bg-[#141A24] text-center text-lg font-bold text-white focus:border-[#ff6a00] focus:outline-none focus:ring-1 focus:ring-[#ff6a00]"
+                          className="h-14 w-11 md:w-12 rounded-xl border border-white/15 bg-[#141A24] text-center text-xl font-bold text-white focus:border-[#ff6a00] focus:outline-none focus:ring-1 focus:ring-[#ff6a00] transition-colors"
                         />
                       ))}
                     </div>
 
                     {error && (
-                      <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-center text-xs text-red-200">
+                      <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3.5 text-center text-xs font-medium text-red-200">
                         {error}
                       </div>
                     )}
@@ -426,7 +609,7 @@ function LoginPage() {
                           setFeedback("none");
                           submittedRef.current = false;
                         }}
-                        className="text-slate-400 hover:text-white transition-colors"
+                        className="text-slate-400 hover:text-white font-medium transition-colors cursor-pointer"
                       >
                         ← Different email
                       </button>
@@ -435,7 +618,7 @@ function LoginPage() {
                         type="button"
                         disabled={resendCooldown > 0 || loading}
                         onClick={handleResendCode}
-                        className="text-[#ff6a00] hover:text-[#ff8a3d] disabled:text-slate-500 font-semibold transition-colors"
+                        className="text-[#ff6a00] hover:text-[#ff8a3d] disabled:text-slate-500 font-bold transition-colors cursor-pointer"
                       >
                         {resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : "Resend code"}
                       </button>
@@ -451,7 +634,7 @@ function LoginPage() {
         <div className="hidden lg:flex lg:col-span-4 flex-col justify-center space-y-6 pl-4">
           {/* Feature 1 */}
           <div className="flex items-start gap-4">
-            <div className="h-10 w-10 shrink-0 rounded-xl bg-[#141A24] border border-white/10 flex items-center justify-center text-[#ff6a00]">
+            <div className="h-11 w-11 shrink-0 rounded-xl bg-[#141A24] border border-white/10 flex items-center justify-center text-[#ff6a00]">
               <Activity className="h-5 w-5" />
             </div>
             <div className="space-y-1">
@@ -464,7 +647,7 @@ function LoginPage() {
 
           {/* Feature 2 */}
           <div className="flex items-start gap-4">
-            <div className="h-10 w-10 shrink-0 rounded-xl bg-[#141A24] border border-white/10 flex items-center justify-center text-[#ff6a00]">
+            <div className="h-11 w-11 shrink-0 rounded-xl bg-[#141A24] border border-white/10 flex items-center justify-center text-[#ff6a00]">
               <ShieldCheck className="h-5 w-5" />
             </div>
             <div className="space-y-1">
@@ -477,7 +660,7 @@ function LoginPage() {
 
           {/* Feature 3 */}
           <div className="flex items-start gap-4">
-            <div className="h-10 w-10 shrink-0 rounded-xl bg-[#141A24] border border-white/10 flex items-center justify-center text-[#ff6a00]">
+            <div className="h-11 w-11 shrink-0 rounded-xl bg-[#141A24] border border-white/10 flex items-center justify-center text-[#ff6a00]">
               <Zap className="h-5 w-5" />
             </div>
             <div className="space-y-1">
@@ -496,6 +679,61 @@ function LoginPage() {
           © 2026 Virtual Car Hire · Fleet Operations Platform
         </p>
       </footer>
+
+      {/* Forgot Password Modal (Desktop Dialog / Mobile Bottom Sheet) */}
+      {isForgotModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div
+            className="w-full sm:max-w-md rounded-t-[20px] sm:rounded-[20px] border border-white/16 bg-[#0E131B] p-6 md:p-8 shadow-2xl space-y-6 animate-in slide-in-from-bottom sm:zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-xl font-bold text-white">Reset Password</h3>
+              <button
+                type="button"
+                onClick={() => setIsForgotModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/5 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Enter your registered email address below. We will send you a password reset link to create a new password.
+            </p>
+
+            <form onSubmit={handleSendResetLink} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-white">Email address</label>
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input
+                    type="email"
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    placeholder="areeb@fa-ibi.co.uk"
+                    required
+                    className="w-full h-12 rounded-xl border border-white/15 bg-[#141A24] pl-10 pr-4 text-sm text-white placeholder-slate-500 focus:border-[#ff6a00] focus:outline-none focus:ring-1 focus:ring-[#ff6a00]"
+                  />
+                </div>
+              </div>
+
+              {forgotSubmitted ? (
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-center text-xs text-emerald-200 font-medium">
+                  Reset link sent! Check your inbox.
+                </div>
+              ) : (
+                <button
+                  type="submit"
+                  className="w-full h-12 rounded-xl bg-gradient-to-r from-[#ff6a00] to-[#ff8a3d] font-semibold text-sm text-white shadow-lg shadow-[#ff6a00]/20 hover:from-[#f05f00] hover:to-[#ff7a1a] transition-all cursor-pointer"
+                >
+                  Send reset link
+                </button>
+              )}
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
