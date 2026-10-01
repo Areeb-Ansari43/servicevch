@@ -30,27 +30,13 @@ function LoginPageWithBoundary() {
   );
 }
 
-function PoweredBy() {
-  return (
-    <p className="mt-6 text-center text-xs text-slate-400/80">
-      Powered by{" "}
-      <a
-        href={WEBSITE_BASE_URL}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="font-semibold text-[#ff8a3d] hover:text-[#ffab74]"
-      >
-        Virtual Car Hire
-      </a>
-    </p>
-  );
-}
-
 function LoginPage() {
   const navigate = useNavigate();
   const [stage, setStage] = useState<"creds" | "otp">("creds");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const [digits, setDigits] = useState<string[]>(["", "", "", "", "", ""]);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -199,211 +185,331 @@ function LoginPage() {
     if (e.key === "ArrowRight" && i < 5) boxRefs.current[i + 1]?.focus();
   };
 
-  const inputCls =
-    "w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-[15px] text-white placeholder:text-slate-500 shadow-[inset_0_1px_0_rgba(255,255,255,0.14)] backdrop-blur-2xl transition-all focus:border-[#ff8a3d]/60 focus:bg-white/[0.09] focus:outline-none focus:ring-4 focus:ring-[#ff6a00]/15";
-
-  const glassCard =
-    "relative overflow-hidden rounded-[28px] border border-white/12 bg-white/[0.055] p-7 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.16)] backdrop-blur-3xl md:p-9";
-
   return (
-    <div
-      className="relative flex min-h-screen items-center justify-center overflow-hidden px-4"
-      style={{
-        background: "radial-gradient(120% 90% at 50% -10%, #17161d 0%, #0a0b10 55%, #06070a 100%)",
-      }}
-    >
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(46rem 32rem at 8% -8%, rgba(255,106,0,0.22), transparent 62%), radial-gradient(40rem 30rem at 100% 4%, rgba(56,189,248,0.16), transparent 62%), radial-gradient(38rem 28rem at 50% 110%, rgba(168,85,247,0.14), transparent 60%)",
-        }}
-        aria-hidden
-      />
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.035]"
-        style={{
-          backgroundImage:
-            "linear-gradient(rgba(255,255,255,.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.6) 1px, transparent 1px)",
-          backgroundSize: "56px 56px",
-        }}
-        aria-hidden
-      />
-
-      <main className="relative w-full max-w-md">
-        <div className="mb-7 flex flex-col items-center text-center">
-          <div className="mb-4 flex h-16 w-16 items-center justify-center overflow-hidden rounded-[22px] border border-white/20 bg-gradient-to-br from-[#ff7a1a] to-[#ff9d52] text-white shadow-[0_18px_40px_-12px_rgba(255,106,0,0.7),inset_0_1px_0_rgba(255,255,255,0.5)]">
-            <img
-              src="/vch-logo.png"
-              alt="Virtual Car Hire Logo"
-              className="h-full w-full object-contain p-0.5"
-            />
-          </div>
-          <h1 className="bg-gradient-to-b from-white to-white/65 bg-clip-text text-[28px] font-bold tracking-tight text-transparent">
-            Virtual Car Hire
-          </h1>
-          <p className="mt-1 text-sm text-slate-400">Fleet Tracker — Authorised access only</p>
+    <div className="min-h-screen bg-[#0A0D14] text-white flex flex-col justify-between p-4 sm:p-6 lg:p-8 font-sans selection:bg-[#F97316] selection:text-white">
+      {/* Top Header Bar */}
+      <header className="w-full max-w-7xl mx-auto flex items-center justify-between pb-6">
+        <div className="flex items-center gap-3">
+          <img
+            src="/vch-logo.png"
+            alt="Virtual Car Hire Logo"
+            className="h-9 w-auto object-contain"
+          />
+          <span className="font-bold text-white text-lg tracking-tight">Virtual Car Hire</span>
         </div>
+        <div className="hidden md:block text-xs text-white/70 font-medium">
+          Authorised Fleet Staff Access
+        </div>
+      </header>
 
-        {stage === "creds" ? (
-          <form onSubmit={submitCreds} className={`${glassCard} space-y-5`}>
-            <div
-              className="pointer-events-none absolute inset-x-8 -top-px h-px bg-gradient-to-r from-transparent via-white/50 to-transparent"
-              aria-hidden
+      {/* Main Container Layout */}
+      <main className="w-full max-w-7xl mx-auto flex-1 flex items-center my-4">
+        <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+
+          {/* LEFT: Car Photo with Simple Dark Overlay (Desktop only) */}
+          <div className="hidden lg:block lg:col-span-5 h-[560px] relative rounded-2xl overflow-hidden border border-white/10 shadow-lg group">
+            <img
+              src="/whatsapp/virtual-car-hire-welcome.jpg"
+              alt="Virtual Car Hire Fleet Vehicle"
+              className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
             />
-            <div>
-              <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                Email
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className={inputCls}
-                autoComplete="email"
-              />
-            </div>
-            <div>
-              <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                Password
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className={inputCls}
-                autoComplete="current-password"
-              />
-            </div>
+            {/* Simple dark overlay for text legibility, not heavy gradient */}
+            <div className="absolute inset-0 bg-black/45" />
 
-            {error && (
-              <div className="rounded-2xl border border-red-400/25 bg-red-500/10 px-4 py-2.5 text-xs text-red-200 backdrop-blur-xl">
-                {error}
+            <div className="absolute bottom-6 left-6 right-6 p-6 bg-black/60 backdrop-blur-md rounded-xl border border-white/10 text-white">
+              <div className="text-xs font-bold uppercase tracking-wider text-[#F97316] mb-1">
+                Virtual Car Hire Fleet
               </div>
-            )}
+              <div className="text-base font-bold text-white">
+                PCO & EV Rental Specialists
+              </div>
+              <p className="text-xs text-white/80 mt-1 leading-relaxed">
+                London's premier vehicle hire platform. Track rentals, MOT compliance, and driver balances in real time.
+              </p>
+            </div>
+          </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="group relative w-full overflow-hidden rounded-full bg-gradient-to-b from-[#ff8226] to-[#f05f00] px-5 py-3 text-sm font-semibold text-white shadow-[0_16px_36px_-14px_rgba(255,106,0,0.85),inset_0_1px_0_rgba(255,255,255,0.4)] transition-all hover:brightness-110 active:scale-[0.985] disabled:opacity-60"
-            >
-              {loading ? "Sending code…" : "Continue"}
-            </button>
+          {/* CENTER: Login Card (Off-White #F7F5F2) */}
+          <div className="lg:col-span-4 w-full max-w-md mx-auto">
+            {/* Mobile Logo Header */}
+            <div className="flex flex-col items-center mb-6 lg:hidden">
+              <img src="/vch-logo.png" alt="Virtual Car Hire Logo" className="h-12 w-auto mb-2" />
+              <h1 className="text-xl font-bold text-white">Virtual Car Hire</h1>
+              <p className="text-xs text-white/70">Fleet Tracker</p>
+            </div>
 
-            <p className="text-center text-[11px] text-slate-500">
-              Protected by two-step verification
-            </p>
-          </form>
-        ) : (
-          <div className={`${glassCard} space-y-6`}>
-            <div
-              className="pointer-events-none absolute inset-x-8 -top-px h-px bg-gradient-to-r from-transparent via-white/50 to-transparent"
-              aria-hidden
-            />
+            <div className="bg-[#F7F5F2] text-[#14161B] rounded-2xl border border-[#E5E2DC] p-6 sm:p-8 shadow-xl relative overflow-hidden">
+              {/* Dark Header Area for Logo inside Card */}
+              <div className="bg-[#0B0E17] text-white -mx-6 -mt-6 sm:-mx-8 sm:-mt-8 p-6 mb-6 flex items-center justify-between border-b border-white/10">
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-lg bg-[#F97316]/20 border border-[#F97316]/40 flex items-center justify-center text-[#F97316]">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="h-4 w-4">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-white leading-none">Sign In to Dashboard</h2>
+                    <p className="text-[11px] text-white/60 mt-1">Enter your credentials below</p>
+                  </div>
+                </div>
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-[#F97316]/20 text-[#F97316] px-2 py-0.5 rounded border border-[#F97316]/30">
+                  Staff
+                </span>
+              </div>
 
-            {feedback === "success" ? (
-              <div className="py-6 flex flex-col items-center justify-center space-y-3 animate-in fade-in zoom-in duration-300">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-lg shadow-emerald-500/20">
-                  <svg
-                    className="h-9 w-9 stroke-current animate-in zoom-in duration-300"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+              {stage === "creds" ? (
+                <form onSubmit={submitCreds} className="space-y-4">
+                  <div>
+                    <label htmlFor="email" className="block text-xs font-bold uppercase tracking-wider text-[#4A4D55] mb-1.5">
+                      Email Address
+                    </label>
+                    <input
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="admin@virtual-carhire.co.uk"
+                      required
+                      autoComplete="email"
+                      className="w-full rounded-lg border border-[#D9D6D0] bg-white px-3.5 py-2.5 text-sm text-[#14161B] placeholder-[#9CA3AF] transition-colors focus:outline-none focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="password" className="block text-xs font-bold uppercase tracking-wider text-[#4A4D55] mb-1.5">
+                      Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="••••••••"
+                        required
+                        autoComplete="current-password"
+                        className="w-full rounded-lg border border-[#D9D6D0] bg-white px-3.5 py-2.5 text-sm text-[#14161B] placeholder-[#9CA3AF] transition-colors focus:outline-none focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316] pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[#6B7280] hover:text-[#14161B] transition-colors"
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                      >
+                        {showPassword ? "Hide" : "Show"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs pt-1">
+                    <label className="flex items-center gap-2 cursor-pointer select-none text-[#4A4D55]">
+                      <input
+                        type="checkbox"
+                        checked={rememberMe}
+                        onChange={(e) => setRememberMe(e.target.checked)}
+                        className="rounded border-[#D9D6D0] text-[#F97316] focus:ring-[#F97316] h-4 w-4"
+                      />
+                      <span>Remember me</span>
+                    </label>
+
+                    <a
+                      href="mailto:support@virtual-carhire.co.uk?subject=Password%20Reset%20Request"
+                      className="font-medium text-[#F97316] hover:underline"
+                    >
+                      Forgot password?
+                    </a>
+                  </div>
+
+                  {error && (
+                    <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-xs font-semibold text-red-800">
+                      {error}
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full rounded-lg bg-[#F97316] hover:bg-[#EA580C] text-white font-bold py-2.5 px-4 text-sm transition-colors shadow-sm disabled:opacity-60 flex items-center justify-center gap-2"
                   >
-                    <polyline points="20 6 9 17 4 12" />
+                    {loading ? (
+                      <>
+                        <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        <span>Sending verification code…</span>
+                      </>
+                    ) : (
+                      <span>Continue to Verification →</span>
+                    )}
+                  </button>
+
+                  <div className="pt-2 text-center border-t border-[#E5E2DC]">
+                    <a
+                      href="mailto:support@virtual-carhire.co.uk"
+                      className="text-xs font-semibold text-[#6B7280] hover:text-[#14161B] transition-colors inline-flex items-center gap-1"
+                    >
+                      Need help? Contact support
+                    </a>
+                  </div>
+                </form>
+              ) : (
+                <div className="space-y-5">
+                  {feedback === "success" ? (
+                    <div className="py-6 flex flex-col items-center justify-center text-center space-y-2">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 border border-emerald-300">
+                        <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      </div>
+                      <h3 className="text-base font-bold text-[#14161B]">Verification Successful</h3>
+                      <p className="text-xs text-[#6B7280]">Logging you in to Virtual Car Hire…</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="text-center">
+                        <h3 className="text-base font-bold text-[#14161B]">Enter 6-Digit Code</h3>
+                        <p className="mt-1 text-xs text-[#6B7280]">
+                          {info ?? "We sent a 6-digit code to your email address."}
+                        </p>
+                      </div>
+
+                      <div className="flex justify-center gap-2">
+                        {digits.map((d, i) => (
+                          <input
+                            key={i}
+                            ref={(el) => {
+                              boxRefs.current[i] = el;
+                            }}
+                            value={d}
+                            onChange={(e) => setDigit(i, e.target.value)}
+                            onKeyDown={(e) => onKeyDown(i, e)}
+                            inputMode="numeric"
+                            autoComplete="one-time-code"
+                            maxLength={6}
+                            aria-label={`Digit ${i + 1}`}
+                            className={`h-12 w-10 text-center text-lg font-bold rounded-lg border bg-white transition-all focus:outline-none focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316] ${
+                              feedback === "error" ? "border-red-500 text-red-600 bg-red-50" : "border-[#D9D6D0] text-[#14161B]"
+                            }`}
+                          />
+                        ))}
+                      </div>
+
+                      {error && (
+                        <div className="rounded-lg border border-red-300 bg-red-50 p-2.5 text-center text-xs font-semibold text-red-800">
+                          {error}
+                        </div>
+                      )}
+
+                      {loading && <div className="text-center text-xs text-[#6B7280]">Verifying code…</div>}
+
+                      <div className="flex items-center justify-between text-xs pt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStage("creds");
+                            setDigits(["", "", "", "", "", ""]);
+                            setError(null);
+                            setInfo(null);
+                            setFeedback("none");
+                            submittedRef.current = false;
+                          }}
+                          className="font-medium text-[#6B7280] hover:text-[#14161B] transition-colors"
+                        >
+                          ← Different email
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={resendCooldown > 0 || loading}
+                          onClick={handleResendCode}
+                          className="font-bold text-[#F97316] hover:underline disabled:text-[#9CA3AF] transition-colors"
+                        >
+                          {resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : "Resend code"}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* RIGHT: Three Feature Points (Pure white headlines, plain line icons with thin orange accents) */}
+          <div className="hidden lg:block lg:col-span-3 space-y-6 text-white pl-2">
+            <div>
+              <h2 className="text-2xl font-extrabold text-white tracking-tight leading-snug">
+                Smarter fleet <span className="text-[#F97316]">management.</span>
+              </h2>
+              <div className="h-0.5 w-12 bg-[#F97316] mt-3" />
+            </div>
+
+            <div className="space-y-5 pt-2">
+              {/* Feature 1 */}
+              <div className="flex items-start gap-3.5">
+                <div className="mt-1 text-[#F97316] shrink-0">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                   </svg>
                 </div>
-                <h2 className="text-lg font-bold text-white">Verification Successful!</h2>
-                <p className="text-xs text-emerald-300">Logging you in...</p>
-              </div>
-            ) : (
-              <>
-                <div className="text-center">
-                  <h2 className="text-lg font-semibold text-white">Enter your verification code</h2>
-                  <p className="mt-1.5 text-xs text-slate-400">
-                    {info ?? "Enter the 6-digit code we emailed you."}
+                <div>
+                  <h3 className="text-sm font-bold text-white">Live MOT & PCO Alerts</h3>
+                  <p className="text-xs text-white/70 mt-0.5 leading-relaxed">
+                    Automated expiry tracking and reminders across all fleet vehicles.
                   </p>
                 </div>
+              </div>
 
-                <div
-                  className={`flex justify-center gap-2.5 ${feedback === "error" ? "vch-otp-error" : ""}`}
-                >
-                  {digits.map((d, i) => (
-                    <input
-                      key={i}
-                      ref={(el) => {
-                        boxRefs.current[i] = el;
-                      }}
-                      value={d}
-                      onChange={(e) => setDigit(i, e.target.value)}
-                      onKeyDown={(e) => onKeyDown(i, e)}
-                      inputMode="numeric"
-                      autoComplete="one-time-code"
-                      maxLength={6}
-                      aria-label={`Digit ${i + 1}`}
-                      className={`vch-otp-box h-15 w-11 rounded-2xl border bg-white/[0.07] py-3.5 text-center text-xl font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] backdrop-blur-2xl focus:border-[#ff8a3d]/70 focus:outline-none focus:ring-4 focus:ring-[#ff6a00]/15 ${
-                        !d && feedback === "none" ? "vch-otp-empty" : ""
-                      } ${feedback === "success" ? "vch-otp-success" : ""} ${
-                        feedback === "error" ? "border-red-500/70 text-red-200" : "border-white/15"
-                      }`}
-                      style={{
-                        animationDelay:
-                          feedback === "success"
-                            ? `${i * 55}ms`
-                            : feedback === "none"
-                              ? `${i * 40}ms`
-                              : "0ms",
-                      }}
-                    />
-                  ))}
+              {/* Feature 2 */}
+              <div className="flex items-start gap-3.5">
+                <div className="mt-1 text-[#F97316] shrink-0">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+                    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                    <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+                  </svg>
                 </div>
-
-                {error && (
-                  <div className="rounded-2xl border border-red-400/25 bg-red-500/10 px-4 py-2.5 text-center text-xs text-red-200">
-                    {error}
-                  </div>
-                )}
-                {loading && <div className="text-center text-xs text-slate-400">Verifying…</div>}
-
-                <div className="flex items-center justify-between text-xs pt-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStage("creds");
-                      setDigits(["", "", "", "", "", ""]);
-                      setError(null);
-                      setInfo(null);
-                      setFeedback("none");
-                      submittedRef.current = false;
-                    }}
-                    className="font-medium text-slate-400 transition-colors hover:text-white"
-                  >
-                    ← Different email
-                  </button>
-
-                  <button
-                    type="button"
-                    disabled={resendCooldown > 0 || loading}
-                    onClick={handleResendCode}
-                    className="font-semibold text-[#ff8a3d] hover:text-[#ffab74] disabled:text-slate-500 transition-colors"
-                  >
-                    {resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : "Resend code"}
-                  </button>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Rent & Statement Generation</h3>
+                  <p className="text-xs text-white/70 mt-0.5 leading-relaxed">
+                    Itemised driver balances, weekly rent schedules, and PDF export.
+                  </p>
                 </div>
-              </>
-            )}
+              </div>
+
+              {/* Feature 3 (ONCE - No duplicate) */}
+              <div className="flex items-start gap-3.5">
+                <div className="mt-1 text-[#F97316] shrink-0">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+                    <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Secure Environment</h3>
+                  <p className="text-xs text-white/70 mt-0.5 leading-relaxed">
+                    Two-step authentication and encrypted Supabase session tokens.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
-        )}
 
-        <PoweredBy />
-        <p className="mt-2 text-center text-[11px] text-slate-600">
-          © 2026 Virtual Car Hire · Fleet Tracker
-        </p>
+        </div>
       </main>
+
+      {/* Footer (Pure white text) */}
+      <footer className="w-full max-w-7xl mx-auto pt-6 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between text-xs text-white gap-2">
+        <div>© {new Date().getFullYear()} Virtual Car Hire Ltd. All rights reserved.</div>
+        <div>
+          Powered by{" "}
+          <a
+            href={WEBSITE_BASE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-bold text-[#F97316] hover:underline"
+          >
+            Virtual Car Hire
+          </a>
+        </div>
+      </footer>
     </div>
   );
 }
