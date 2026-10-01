@@ -1,6 +1,25 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
+import { motion } from "framer-motion";
+import {
+  LayoutDashboard,
+  Car,
+  Wrench,
+  Calendar,
+  Plus,
+  Users,
+  Gauge,
+  MessageSquare,
+  AlertTriangle,
+  Settings,
+  ShieldCheck,
+  Sparkles,
+  LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
+  X,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   useFleetData,
@@ -1570,21 +1589,20 @@ function UserSettingsView({
                   template_type: "rent_due_tomorrow",
                   template_data: {
                     recipientName: name,
-                    headline: "Rent Due Tomorrow",
-                    introLine: `Hi ${name}, your rent is due tomorrow.`,
-                    cards: [
+                    headline: "Rent due tomorrow",
+                    subtext: "The following active drivers have weekly rent due tomorrow:",
+                    drivers: [
                       {
-                        iconType: "rent",
-                        title: "Weekly Rent Payment (£260.00)",
-                        dateStr: "Tomorrow",
-                        vehicleReg: "KN73XLB",
-                        daysRemaining: 1,
+                        driverName: name,
+                        reg: "KN73XLB",
+                        vehicleModel: "Mercedes-Benz EQE",
+                        weeklyRent: 260.00,
+                        dueDate: "Tomorrow",
+                        rentStatus: "unpaid",
                       },
                     ],
-                    warningNote:
-                      "Prompt rent payments help maintain your vehicle account in good standing. Please contact support if you have any questions.",
                     actionUrl: "https://virtual-carhire.co.uk/portal/dashboard",
-                    actionText: "View Balance in Driver Portal",
+                    actionText: "View Drivers",
                   },
                 },
                 toast
@@ -2145,6 +2163,24 @@ export function FleetShell({ view }: { view: View }) {
     typeof navigator !== "undefined" ? !navigator.onLine : false,
   );
 
+  const [isPinned, setIsPinned] = useState(() => {
+    if (typeof localStorage !== "undefined") {
+      const saved = localStorage.getItem("vch_sidebar_pinned");
+      return saved !== null ? saved === "true" : true;
+    }
+    return true;
+  });
+
+  const handleTogglePin = useCallback(() => {
+    setIsPinned((prev) => {
+      const next = !prev;
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem("vch_sidebar_pinned", String(next));
+      }
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     const handleOnline = () => setIsOffline(false);
     const handleOffline = () => setIsOffline(true);
@@ -2272,8 +2308,10 @@ export function FleetShell({ view }: { view: View }) {
         mobileOpen={mobileNavOpen}
         onClose={() => setMobileNavOpen(false)}
         onOpenApex={() => setApexOpen((prev) => !prev)}
+        isPinned={isPinned}
+        onTogglePin={handleTogglePin}
       />
-      <div className="relative z-10 ml-0 lg:ml-64 pb-24 lg:pb-6">
+      <div className={`relative z-10 ml-0 transition-all duration-300 ${isPinned ? "lg:ml-[260px]" : "lg:ml-[72px]"} pb-24 lg:pb-6`}>
         <Topbar vehicles={data.vehicles} goto={go} onMenu={() => setMobileNavOpen(true)} />
         <main className="mx-auto w-full max-w-[1400px] p-3 sm:p-5 xl:p-6">
           {data.loading ? (
@@ -2455,6 +2493,8 @@ function Sidebar({
   mobileOpen,
   onClose,
   onOpenApex,
+  isPinned,
+  onTogglePin,
 }: {
   view: View;
   setView: (v: View) => void;
@@ -2463,32 +2503,63 @@ function Sidebar({
   mobileOpen: boolean;
   onClose: () => void;
   onOpenApex: () => void;
+  isPinned: boolean;
+  onTogglePin: () => void;
 }) {
   type NavItem = {
     id: View;
     label: string;
-    Icon: (p: { className?: string }) => React.ReactElement;
+    Icon: React.ComponentType<{ className?: string }>;
   };
 
   const fleetItems: NavItem[] = [
-    { id: "dashboard", label: "Dashboard", Icon: Icon.Dashboard },
-    { id: "vehicles", label: "Vehicles", Icon: Icon.Car },
-    { id: "services", label: "Service History", Icon: Icon.Wrench },
-    { id: "generations", label: "Reservations / Contracts", Icon: Icon.Calendar },
-    { id: "add", label: "Add Vehicle", Icon: Icon.Plus },
+    { id: "dashboard", label: "Dashboard", Icon: LayoutDashboard },
+    { id: "vehicles", label: "Vehicles", Icon: Car },
+    { id: "services", label: "Service History", Icon: Wrench },
+    { id: "generations", label: "Reservations / Contracts", Icon: Calendar },
+    { id: "add", label: "Add Vehicle", Icon: Plus },
   ];
 
   const driverItems: NavItem[] = [
-    { id: "drivers", label: "Drivers", Icon: Icon.User },
-    { id: "mileage", label: "Driver Mileage", Icon: Icon.Gauge },
-    { id: "leads", label: "WhatsApp Leads", Icon: Icon.Chat },
-    { id: "accidents", label: "Accident Cases", Icon: Icon.Crash },
+    { id: "drivers", label: "Drivers", Icon: Users },
+    { id: "mileage", label: "Driver Mileage", Icon: Gauge },
+    { id: "leads", label: "WhatsApp Leads", Icon: MessageSquare },
+    { id: "accidents", label: "Accident Cases", Icon: AlertTriangle },
   ];
 
   const email = account?.email ?? "";
   const initial = (email.trim()[0] ?? "V").toUpperCase();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
+
+  const [isHovered, setIsHovered] = useState(false);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleMouseEnter = () => {
+    if (isPinned) return;
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = setTimeout(() => {
+      setIsHovered(true);
+    }, 120);
+  };
+
+  const handleMouseLeave = () => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    setIsHovered(false);
+  };
+
+  const expanded = isPinned || isHovered;
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        onTogglePin();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onTogglePin]);
 
   useEffect(() => {
     if (!accountMenuOpen) return;
@@ -2501,32 +2572,54 @@ function Sidebar({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [accountMenuOpen]);
 
+  const prefersReducedMotion =
+    typeof window !== "undefined"
+      ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      : false;
+
   const renderNavItem = (it: NavItem) => {
     const active = view === it.id;
+    const ItemIcon = it.Icon;
+
+    if (!expanded) {
+      return (
+        <div key={it.id} className="relative group flex justify-center py-1">
+          <motion.button
+            whileHover={{ y: prefersReducedMotion ? 0 : -3 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
+            onClick={() => setView(it.id)}
+            className={`flex h-11 w-11 items-center justify-center rounded-2xl transition-all ${
+              active
+                ? "bg-[#FF6A00]/20 text-[#FF8A3D] border border-[#FF6A00]/40 shadow-sm"
+                : "text-[#9AA5B8] hover:bg-white/10 hover:text-white"
+            }`}
+            aria-label={it.label}
+          >
+            <ItemIcon className="h-5 w-5" />
+          </motion.button>
+
+          <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center z-50 pointer-events-none">
+            <div className="rounded-lg bg-[#141B2D] border border-white/15 px-3 py-1.5 text-xs font-semibold text-white shadow-xl whitespace-nowrap flex items-center gap-2">
+              <span>{it.label}</span>
+              {active && <span className="text-[10px] font-bold text-[#FF8A3D] uppercase">Active</span>}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <button
         key={it.id}
         onClick={() => setView(it.id)}
-        className="flex w-full items-center gap-3 rounded-full px-4 py-2.5 text-left text-sm transition-colors min-h-[44px]"
-        style={
+        className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-xs font-semibold transition-all min-h-[42px] ${
           active
-            ? {
-                background: T.orangeSoft,
-                color: T.orange,
-                fontWeight: 600,
-                boxShadow: "inset 0 0 0 1px rgba(255,106,0,0.28)",
-              }
-            : { color: "#c5cbd6" }
-        }
-        onMouseEnter={(e) => {
-          if (!active) e.currentTarget.style.background = T.panel2;
-        }}
-        onMouseLeave={(e) => {
-          if (!active) e.currentTarget.style.background = "transparent";
-        }}
+            ? "bg-[#FF6A00]/15 text-[#FF8A3D] border border-[#FF6A00]/30 shadow-sm font-bold"
+            : "text-[#C5CBD6] hover:bg-white/10 hover:text-white"
+        }`}
       >
-        <it.Icon className="h-4 w-4 shrink-0" />
-        <span>{it.label}</span>
+        <ItemIcon className={`h-4 w-4 shrink-0 ${active ? "text-[#FF6A00]" : "text-[#9AA5B8]"}`} />
+        <span className="truncate">{it.label}</span>
       </button>
     );
   };
@@ -2537,172 +2630,210 @@ function Sidebar({
         <button
           aria-label="Close navigation"
           onClick={onClose}
-          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm lg:hidden"
         />
       )}
+
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-[min(19rem,88vw)] max-w-[88vw] flex-col border-r pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] transition-transform duration-200 lg:z-30 lg:w-64 lg:translate-x-0 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
-        style={{
-          borderColor: T.border,
-          background: "rgba(12,16,27,0.96)",
-          backdropFilter: "blur(24px)",
-        }}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        className={`fixed inset-y-0 left-0 z-50 flex flex-col border-r border-white/10 bg-[#0C101B]/95 backdrop-blur-2xl transition-all duration-300
+          ${mobileOpen ? "translate-x-0 w-[min(19rem,88vw)] lg:w-[260px]" : "-translate-x-full lg:translate-x-0"}
+          ${!isPinned && isHovered ? "lg:w-[260px] lg:shadow-2xl" : isPinned ? "lg:w-[260px]" : "lg:w-[72px]"}
+        `}
       >
-        <div className="flex items-center gap-3 px-5 py-4">
-          <div
-            className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-[#ff6a00]/30 shadow-md"
-            style={{ background: "linear-gradient(135deg,#0b0d12,#1e222b)" }}
-          >
-            <img
-              src="/vch-logo.png"
-              alt="Virtual Car Hire Logo"
-              className="h-full w-full object-contain p-0.5"
-            />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-bold leading-tight text-white">
-              Virtual Car Hire
+        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3.5">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#FF6A00]/30 bg-[#0B0D12]">
+              <img
+                src="/vch-logo.png"
+                alt="Virtual Car Hire Logo"
+                className="h-full w-full object-contain p-0.5"
+              />
             </div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8b95a8]">
-              Fleet Tracker
-            </div>
+            {expanded && (
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-xs font-bold leading-tight text-white">
+                  Virtual Car Hire
+                </div>
+                <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-[#8B95A8]">
+                  Fleet Tracker
+                </div>
+              </div>
+            )}
           </div>
-          <button
-            onClick={onClose}
-            aria-label="Close navigation"
-            className="rounded-xl p-2 text-[#8b95a8] transition hover:bg-white/[0.08] hover:text-white lg:hidden"
-          >
-            <Icon.X className="h-4 w-4" />
-          </button>
+
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={onTogglePin}
+              aria-label={isPinned ? "Collapse sidebar (Cmd+B)" : "Pin sidebar open (Cmd+B)"}
+              aria-expanded={expanded}
+              title={isPinned ? "Collapse sidebar (Cmd+B)" : "Pin sidebar open (Cmd+B)"}
+              className="hidden lg:flex items-center justify-center h-8 w-8 rounded-lg border border-white/10 text-[#8B95A8] hover:bg-white/10 hover:text-white transition-colors"
+            >
+              {isPinned ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4 text-[#FF6A00]" />}
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close navigation"
+              className="rounded-lg p-1.5 text-[#8B95A8] hover:bg-white/10 hover:text-white lg:hidden"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
-        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2">
-          {/* FLEET SECTION */}
-          <div className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[#7d8799]">
-            Fleet
+        <nav className="flex-1 space-y-4 overflow-y-auto px-2.5 py-3">
+          <div>
+            {expanded ? (
+              <div className="px-3 pb-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-[#7D8799]">
+                Fleet
+              </div>
+            ) : (
+              <div className="my-1 border-t border-white/10" />
+            )}
+            <div className="space-y-1">{fleetItems.map(renderNavItem)}</div>
           </div>
-          <div className="space-y-1">{fleetItems.map(renderNavItem)}</div>
 
-          {/* DIVIDER */}
-          <div className="my-3 border-t border-white/[0.08]" />
+          <div className="border-t border-white/10 my-2" />
 
-          {/* DRIVERS SECTION */}
-          <div className="px-3 pt-1 pb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[#7d8799]">
-            Drivers
+          <div>
+            {expanded ? (
+              <div className="px-3 pb-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-[#7D8799]">
+                Drivers
+              </div>
+            ) : null}
+            <div className="space-y-1">{driverItems.map(renderNavItem)}</div>
           </div>
-          <div className="space-y-1">{driverItems.map(renderNavItem)}</div>
         </nav>
 
-        <div className="border-t p-3" style={{ borderColor: T.border }}>
-          {/* Apex AI button directly above admin email box */}
-          <button
-            onClick={onOpenApex}
-            className="mb-2.5 flex w-full items-center gap-2.5 rounded-2xl border border-[#ff6a00]/30 bg-[#ff6a00]/10 px-3 py-2.5 text-xs font-semibold text-white shadow-md transition hover:bg-[#ff6a00]/20"
-          >
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-[#ff6a00] to-[#ff9d4d] text-white shadow-sm">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="h-3.5 w-3.5"
+        <div className="border-t border-white/10 p-3 space-y-2">
+          {expanded ? (
+            <button
+              type="button"
+              onClick={onOpenApex}
+              className="flex w-full items-center gap-2.5 rounded-xl border border-[#FF6A00]/30 bg-[#FF6A00]/10 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-[#FF6A00]/20"
+            >
+              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#FF6A00] text-white shadow-sm shrink-0">
+                <Sparkles className="h-3.5 w-3.5" />
+              </span>
+              <span className="truncate">Apex AI Assistant</span>
+            </button>
+          ) : (
+            <div className="relative group flex justify-center">
+              <button
+                type="button"
+                onClick={onOpenApex}
+                aria-label="Apex AI Assistant"
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#FF6A00]/30 bg-[#FF6A00]/10 text-[#FF8A3D] hover:bg-[#FF6A00]/20 transition-colors"
               >
-                <path d="M12 3l1.8 4.9L19 9.7l-4.4 3 .5 5.3-3.1-2.5-3.1 2.5.5-5.3-4.4-3 5.2-1.8z" />
-              </svg>
-            </span>
-            <span>Apex AI Assistant</span>
-          </button>
+                <Sparkles className="h-4 w-4" />
+              </button>
+              <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center z-50 pointer-events-none">
+                <div className="rounded-lg bg-[#141B2D] border border-white/15 px-3 py-1.5 text-xs font-semibold text-white shadow-xl whitespace-nowrap">
+                  Apex AI Assistant
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="relative" ref={accountMenuRef}>
             {accountMenuOpen && (
               <div
-                className="absolute bottom-full left-0 mb-2 w-full overflow-hidden rounded-2xl border bg-[#0d121f] p-1.5 shadow-2xl backdrop-blur-xl z-50"
-                style={{ borderColor: T.border }}
+                className={`absolute bottom-full mb-2 z-50 overflow-hidden rounded-2xl border border-white/15 bg-[#0D121F] p-1.5 shadow-2xl backdrop-blur-xl ${
+                  expanded ? "left-0 w-full" : "left-full ml-2 w-56"
+                }`}
               >
                 <div className="px-3 py-2 border-b border-white/10 mb-1">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-[#8b95a8]">Account Options</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-[#8B95A8]">Account Options</p>
                   <p className="truncate text-xs font-semibold text-white">{email || "Fleet Admin"}</p>
                 </div>
 
                 <button
+                  type="button"
                   onClick={() => {
                     setAccountMenuOpen(false);
                     setView("settings");
                   }}
                   className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-zinc-200 transition hover:bg-white/10 hover:text-white"
                 >
-                  <Icon.Cog className="h-4 w-4 text-[#ff6a00]" />
+                  <Settings className="h-4 w-4 text-[#FF6A00]" />
                   <span>User Settings</span>
                 </button>
 
                 <button
+                  type="button"
                   onClick={() => {
                     setAccountMenuOpen(false);
                     setView("audit-logs");
                   }}
                   className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-zinc-200 transition hover:bg-white/10 hover:text-white"
                 >
-                  <Icon.Shield className="h-4 w-4 text-emerald-400" />
+                  <ShieldCheck className="h-4 w-4 text-emerald-400" />
                   <span>Audit Logs</span>
                 </button>
 
                 <div className="my-1 border-t border-white/10" />
 
                 <button
+                  type="button"
                   onClick={() => {
                     setAccountMenuOpen(false);
                     onSignOut();
                   }}
                   className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-red-400 transition hover:bg-red-500/10 hover:text-red-300"
                 >
-                  <Icon.SignOut className="h-4 w-4" />
+                  <LogOut className="h-4 w-4" />
                   <span>Log out</span>
                 </button>
               </div>
             )}
 
-            <div
-              onClick={() => setAccountMenuOpen(!accountMenuOpen)}
-              className="flex cursor-pointer items-center gap-3 rounded-2xl border px-3 py-2.5 transition hover:border-[#ff6a00]/50 hover:bg-white/[0.08]"
-              style={{ borderColor: accountMenuOpen ? T.orange : T.borderSoft, background: T.panel2 }}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  setAccountMenuOpen(!accountMenuOpen);
-                }
-              }}
-            >
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#ff6a00] to-[#ff9d4d] text-sm font-bold text-white shadow-sm">
-                {initial}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-xs font-semibold text-[#e7eaf0]">
-                  {email || "Signed in"}
+            {expanded ? (
+              <div
+                onClick={() => setAccountMenuOpen(!accountMenuOpen)}
+                className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.04] px-2.5 py-2 transition hover:border-[#FF6A00]/50 hover:bg-white/[0.08]"
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setAccountMenuOpen(!accountMenuOpen);
+                  }
+                }}
+              >
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#FF6A00] text-xs font-bold text-white shadow-sm">
+                  {initial}
                 </div>
-                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8b95a8]">
-                  Fleet Admin
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-xs font-semibold text-white">
+                    {email || "Signed in"}
+                  </div>
+                  <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-[#8B95A8]">
+                    Fleet Admin
+                  </div>
                 </div>
               </div>
-              <div className="shrink-0 text-[#8b95a8]">
-                <Icon.ChevronUp className={`h-4 w-4 transition-transform ${accountMenuOpen ? "rotate-180 text-[#ff6a00]" : ""}`} />
+            ) : (
+              <div className="relative group flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => setAccountMenuOpen(!accountMenuOpen)}
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-[#FF6A00] text-sm font-bold text-white shadow-sm hover:ring-2 hover:ring-[#FF6A00]/50 transition-all"
+                >
+                  {initial}
+                </button>
+                <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center z-50 pointer-events-none">
+                  <div className="rounded-lg bg-[#141B2D] border border-white/15 px-3 py-1.5 text-xs font-semibold text-white shadow-xl whitespace-nowrap">
+                    {email || "Fleet Admin"}
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
           </div>
-          <p className="mt-3 text-center text-[11px] text-[#8b95a8]">
-            Powered by{" "}
-            <a
-              href={WEBSITE_BASE_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-semibold text-[#ff6a00] hover:text-[#ff8a3d]"
-            >
-              Virtual Car Hire
-            </a>
-          </p>
         </div>
       </aside>
     </>

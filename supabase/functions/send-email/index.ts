@@ -1,14 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 
-const VCH_LOGO_URL = "https://virtual-carhire.co.uk/assets/logo.png";
-const BRAND_HEADER_BG = "#0B132B";
-const BRAND_DARK_BG = "#070C18";
-const BRAND_CARD_BG = "#101828";
-const BRAND_ORANGE = "#FF6A00";
-const BRAND_ORANGE_LIGHT = "#FF8A2B";
-const BRAND_TEXT_WHITE = "#FFFFFF";
-const BRAND_TEXT_MUTED = "#94A3B8";
+const VCH_LOGO_URL = "https://virtual-carhire.co.uk/vch-logo.png";
+const HERO_IMAGE_URL = "https://virtual-carhire.co.uk/whatsapp/virtual-car-hire-welcome.jpg";
 
 // --- Email Address Routing ---
 function formatFromAddress(rawAddress: string): string {
@@ -43,106 +37,102 @@ function getFromAddress(type: string): string {
   return formatFromAddress(address);
 }
 
-// --- Template Renderers ---
+// --- Shared Unified Layout Renderer ---
 
-function renderHeader(label: string, headline: string, subtext?: string): string {
-  return `
-    <div style="background-color: ${BRAND_HEADER_BG}; padding: 16px 20px; border-top-left-radius: 12px; border-top-right-radius: 12px; border-bottom: 1px solid #1E293B;">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-        <tr>
-          <td align="left" style="vertical-align: middle;">
-            <img src="${VCH_LOGO_URL}" alt="Virtual Car Hire" style="max-height: 26px; width: auto; display: block;" />
-          </td>
-          <td align="right" style="vertical-align: middle;">
-            <div style="display: inline-block; background: rgba(255, 106, 0, 0.15); border: 1px solid rgba(255, 106, 0, 0.35); border-radius: 14px; padding: 3px 10px;">
-              <span style="color: ${BRAND_ORANGE_LIGHT}; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;">${label}</span>
-            </div>
-          </td>
-        </tr>
-      </table>
-      <h1 style="color: ${BRAND_TEXT_WHITE}; font-size: 18px; font-weight: 700; margin: 12px 0 2px 0; line-height: 1.25;">${headline}</h1>
-      ${subtext ? `<p style="color: ${BRAND_TEXT_MUTED}; font-size: 13px; margin: 0; line-height: 1.4;">${subtext}</p>` : ""}
-    </div>
-  `;
-}
-
-function renderFooter(badges?: string[], tagline?: string): string {
-  const badgeList = badges || ["Secure", "Track", "Smarter Fleet Management"];
-  return `
-    <div style="background-color: ${BRAND_DARK_BG}; padding: 14px 20px; text-align: center; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px; border-top: 1px solid #1E293B;">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 6px;">
-        <tr>
-          <td align="left" style="vertical-align: middle;">
-            <img src="${VCH_LOGO_URL}" alt="Virtual Car Hire" style="max-height: 18px; width: auto; opacity: 0.75; display: inline-block;" />
-          </td>
-          <td align="right" style="vertical-align: middle; color: ${BRAND_TEXT_MUTED}; font-size: 11px;">
-            ${badgeList.map((b) => `<span style="margin-left: 8px;"><span style="color: ${BRAND_ORANGE}; font-weight: bold;">✔</span> ${b}</span>`).join("")}
-          </td>
-        </tr>
-      </table>
-      ${tagline ? `<p style="color: ${BRAND_TEXT_MUTED}; font-size: 11px; margin: 0 0 4px 0; font-style: italic;">${tagline}</p>` : ""}
-      <p style="color: #64748B; font-size: 10px; margin: 0;">
-        © ${new Date().getFullYear()} Virtual Car Hire Ltd. All rights reserved.
-      </p>
-    </div>
-  `;
-}
-
-function render2FATemplate(options: Record<string, any>): string {
-  const code = options.code || "000000";
-  const expiresIn = options.expiresInMinutes || 10;
-  const name = options.recipientName || "there";
-
+function renderUnifiedEmailLayout({
+  title,
+  eyebrow,
+  headline,
+  bodyText,
+  cardContent,
+  ctaUrl,
+  ctaText,
+}: {
+  title: string;
+  eyebrow: string;
+  headline: string;
+  bodyText?: string;
+  cardContent: string;
+  ctaUrl?: string;
+  ctaText?: string;
+}): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Your Verification Code</title>
+  <title>${title}</title>
 </head>
-<body style="margin: 0; padding: 16px 0; background-color: #030712; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+<body style="margin: 0; padding: 20px 0; background-color: #F4F5F7; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #F4F5F7; width: 100%;">
     <tr>
-      <td align="center">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 520px; background-color: ${BRAND_CARD_BG}; border-radius: 12px; border: 1px solid #1E293B; overflow: hidden;">
+      <td align="center" style="padding: 10px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; width: 100%; background-color: #0B0E17; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.12);">
+
+          <!-- Hero Image & Logo Header -->
           <tr>
-            <td>
-              ${renderHeader(
-                "FLEET TRACKER",
-                "Here's your verification code.",
-                "Use the code below to complete your verification and get started with Virtual Car Hire Fleet Tracker.",
-              )}
+            <td style="background-color: #0B0E17; padding: 0; text-align: center; position: relative;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="background-color: #0B0E17; padding: 18px 24px; border-bottom: 1px solid #1E293B;" align="left">
+                    <img src="${VCH_LOGO_URL}" alt="Virtual Car Hire" width="180" style="width: 180px; max-width: 180px; height: auto; display: block; border: 0;" />
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 0; background-color: #1E293B;">
+                    <img src="${HERO_IMAGE_URL}" alt="Virtual Car Hire Fleet" width="600" height="200" style="width: 100%; max-width: 600px; height: auto; max-height: 200px; object-fit: cover; display: block; border: 0;" />
+                  </td>
+                </tr>
+              </table>
             </td>
           </tr>
+
+          <!-- Main Content Area -->
           <tr>
-            <td style="padding: 18px 20px; color: ${BRAND_TEXT_WHITE};">
-              <p style="font-size: 14px; margin: 0 0 10px 0; color: #E2E8F0;">Hi ${name},</p>
-              <p style="font-size: 13px; margin: 0 0 16px 0; color: ${BRAND_TEXT_MUTED}; line-height: 1.4;">
-                To keep your account secure, please enter the following verification code in the Virtual Car Hire app or website.
-              </p>
-              <div style="background-color: ${BRAND_HEADER_BG}; border: 1.5px solid ${BRAND_ORANGE}; border-radius: 8px; padding: 14px; text-align: center; margin-bottom: 14px;">
-                <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: ${BRAND_TEXT_MUTED}; margin-bottom: 4px;">
-                  YOUR VERIFICATION CODE
-                </div>
-                <div style="font-family: 'Courier New', Courier, monospace; font-size: 32px; font-weight: 800; letter-spacing: 0.2em; color: ${BRAND_ORANGE_LIGHT};">
-                  ${code}
-                </div>
+            <td style="padding: 28px 24px; background-color: #0B0E17; color: #FFFFFF;">
+              <div style="color: #FF6A00; font-size: 11px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 8px;">
+                ${eyebrow}
               </div>
-              <div style="text-align: center; margin-bottom: 12px;">
-                <span style="font-size: 12px; color: ${BRAND_TEXT_MUTED};">
-                  ⏱️ This code expires in <strong>${expiresIn} minutes</strong>.
-                </span>
+
+              <h1 style="color: #FFFFFF; font-size: 22px; font-weight: 800; margin: 0 0 10px 0; line-height: 1.3;">
+                ${headline}
+              </h1>
+
+              ${bodyText ? `<p style="color: #94A3B8; font-size: 14px; margin: 0 0 20px 0; line-height: 1.5;">${bodyText}</p>` : ""}
+
+              <div style="background-color: #FFFFFF; border-radius: 10px; padding: 20px; color: #14161B; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                ${cardContent}
               </div>
-              <p style="font-size: 11px; color: #64748B; margin: 0; line-height: 1.3; text-align: center;">
-                If you didn't request this, you can safely ignore this email.
+
+              ${ctaUrl ? `
+                <div style="text-align: center; margin-top: 20px; margin-bottom: 8px;">
+                  <a href="${ctaUrl}" target="_blank" style="display: inline-block; background-color: #FF6A00; color: #FFFFFF; font-size: 14px; font-weight: 700; text-decoration: none; padding: 12px 28px; border-radius: 8px; text-align: center; box-shadow: 0 2px 6px rgba(255,106,0,0.3);">
+                    ${ctaText || "View Details"}
+                  </a>
+                </div>
+              ` : ""}
+            </td>
+          </tr>
+
+          <!-- Dark Footer -->
+          <tr>
+            <td style="background-color: #070910; padding: 20px 24px; text-align: center; border-top: 1px solid #1E293B;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="left" style="vertical-align: middle;">
+                    <img src="${VCH_LOGO_URL}" alt="Virtual Car Hire" width="130" style="width: 130px; max-width: 130px; height: auto; opacity: 0.85; display: block; border: 0;" />
+                  </td>
+                  <td align="right" style="vertical-align: middle; color: #94A3B8; font-size: 11px;">
+                    <span style="color: #FF6A00; font-weight: bold;">✔</span> Smarter Fleet Management
+                  </td>
+                </tr>
+              </table>
+              <p style="color: #64748B; font-size: 11px; margin: 12px 0 0 0;">
+                © ${new Date().getFullYear()} Virtual Car Hire Ltd. All rights reserved.
               </p>
             </td>
           </tr>
-          <tr>
-            <td>
-              ${renderFooter(["Secure", "Track", "Smarter Fleet Management"])}
-            </td>
-          </tr>
+
         </table>
       </td>
     </tr>
@@ -151,46 +141,140 @@ function render2FATemplate(options: Record<string, any>): string {
 </html>`;
 }
 
-function renderDriverAlertTemplate(options: Record<string, any>): string {
-  const headerLabel = options.headerLabel || "IMPORTANT REMINDER";
-  const headline = options.headline || "Vehicle Expiry Notice";
-  const subtext = options.subtext || "Please review the details below and take appropriate action.";
+function render2FATemplate(options: Record<string, any>): string {
+  const code = options.code || "000000";
+  const expiresIn = options.expiresInMinutes || 10;
   const name = options.recipientName || "there";
-  const introLine = options.introLine || "Here is an important update regarding your vehicle or account:";
+
+  const cardContent = `
+    <div style="text-align: center; padding: 10px 0;">
+      <div style="font-size: 12px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px;">
+        Your Security Code
+      </div>
+      <div style="font-family: 'Courier New', Courier, monospace; font-size: 36px; font-weight: 800; letter-spacing: 0.25em; color: #FF6A00; background-color: #F8FAFC; border: 2px dashed #E2E8F0; border-radius: 8px; padding: 16px; margin-bottom: 14px;">
+        ${code}
+      </div>
+      <div style="font-size: 13px; color: #64748B;">
+        ⏱️ Expires in <strong>${expiresIn} minutes</strong>
+      </div>
+    </div>
+  `;
+
+  return renderUnifiedEmailLayout({
+    title: "Your Verification Code — Virtual Car Hire",
+    eyebrow: "SECURITY VERIFICATION",
+    headline: "Here's your login code",
+    bodyText: `Hi ${name}, enter this 6-digit verification code to log in securely to Virtual Car Hire Fleet Tracker.`,
+    cardContent,
+  });
+}
+
+function renderRentDueTomorrowTemplate(options: Record<string, any>): string {
+  const name = options.recipientName || "Operations Team";
+  const headline = options.headline || "Rent due tomorrow";
+  const subtext = options.subtext || options.introLine || "The following active drivers have weekly rent due tomorrow:";
+
+  let driversList: any[] = options.drivers || [];
+  if (driversList.length === 0 && options.cards && options.cards.length > 0) {
+    driversList = options.cards.map((c: any) => ({
+      driverName: c.title ? c.title.split("—")[0].trim() : name,
+      reg: c.vehicleReg || "N/A",
+      vehicleModel: c.vehicleModel || "",
+      weeklyRent: c.weeklyRent || 0,
+      dueDate: c.dateStr || "Tomorrow",
+      rentStatus: "unpaid",
+    }));
+  }
+
+  const driverRows = driversList.map((d: any) => {
+    const isPaid = (d.rentStatus || "").toLowerCase() === "paid";
+    const statusBg = isPaid ? "#DEF7EC" : "#FFEDD5";
+    const statusColor = isPaid ? "#03543F" : "#C2410C";
+    const statusText = isPaid ? "PAID" : "UNPAID";
+
+    return `
+      <tr style="border-bottom: 1px solid #E2E8F0;">
+        <td style="padding: 12px 8px; vertical-align: middle;">
+          <div style="font-size: 14px; font-weight: 700; color: #14161B;">${d.driverName}</div>
+        </td>
+        <td style="padding: 12px 8px; vertical-align: middle;">
+          <div style="font-size: 13px; font-weight: 600; color: #334155;">${d.reg}</div>
+          ${d.vehicleModel ? `<div style="font-size: 11px; color: #64748B;">${d.vehicleModel}</div>` : ""}
+        </td>
+        <td align="right" style="padding: 12px 8px; vertical-align: middle; font-size: 14px; font-weight: 700; color: #14161B;">
+          £${Number(d.weeklyRent || 0).toFixed(2)}
+        </td>
+        <td align="center" style="padding: 12px 8px; vertical-align: middle; font-size: 13px; color: #475569; font-weight: 600;">
+          ${d.dueDate || "Tomorrow"}
+        </td>
+        <td align="right" style="padding: 12px 8px; vertical-align: middle;">
+          <span style="display: inline-block; background-color: ${statusBg}; color: ${statusColor}; font-size: 10px; font-weight: 800; padding: 4px 8px; border-radius: 6px; letter-spacing: 0.05em;">
+            ${statusText}
+          </span>
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  const cardContent = `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse: collapse;">
+      <thead>
+        <tr style="border-bottom: 2px solid #CBD5E1;">
+          <th align="left" style="padding: 8px 8px; font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase;">Driver</th>
+          <th align="left" style="padding: 8px 8px; font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase;">Vehicle</th>
+          <th align="right" style="padding: 8px 8px; font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase;">Weekly</th>
+          <th align="center" style="padding: 8px 8px; font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase;">Due Date</th>
+          <th align="right" style="padding: 8px 8px; font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase;">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${driverRows}
+      </tbody>
+    </table>
+  `;
+
+  return renderUnifiedEmailLayout({
+    title: "Rent Due Tomorrow — Virtual Car Hire",
+    eyebrow: "RENT REMINDER",
+    headline,
+    bodyText: subtext,
+    cardContent,
+    ctaUrl: options.actionUrl || "https://virtual-carhire.co.uk/portal/dashboard",
+    ctaText: options.actionText || "View Drivers",
+  });
+}
+
+function renderDriverAlertTemplate(options: Record<string, any>): string {
+  const headerLabel = options.headerLabel || "IMPORTANT NOTICE";
+  const headline = options.headline || "Vehicle Expiry Notice";
+  const subtext = options.subtext || options.introLine || "Please review the details below regarding your vehicle account:";
+  const name = options.recipientName || "there";
 
   const cardsHtml = (options.cards || [])
     .map((card: any) => {
       const daysText = card.daysRemaining !== undefined
         ? (card.daysRemaining <= 0 ? "Expired" : `Expiring in ${card.daysRemaining} days`)
         : null;
-      const daysBg = card.daysRemaining !== undefined && card.daysRemaining <= 7 ? "#7F1D1D" : "rgba(255, 106, 0, 0.2)";
-      const daysColor = card.daysRemaining !== undefined && card.daysRemaining <= 7 ? "#FCA5A5" : BRAND_ORANGE_LIGHT;
-
-      let iconSymbol = "🚨";
-      if (card.iconType === "mot") iconSymbol = "⚠️";
-      if (card.iconType === "pco") iconSymbol = "🪪";
-      if (card.iconType === "service") iconSymbol = "🔧";
-      if (card.iconType === "rent") iconSymbol = "💳";
 
       return `
-        <div style="background: ${BRAND_HEADER_BG}; border: 1px solid rgba(255, 106, 0, 0.25); border-radius: 8px; padding: 12px 14px; margin-bottom: 12px;">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 14px; margin-bottom: 12px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
             <tr>
               ${card.photoUrl ? `
                 <td width="72" style="vertical-align: middle; padding-right: 12px;">
-                  <img src="${card.photoUrl}" alt="${card.vehicleReg || "Vehicle"}" style="width: 72px; height: 52px; object-fit: contain; background-color: #070C18; border-radius: 6px; border: 1px solid #1E293B; display: block;" />
+                  <img src="${card.photoUrl}" alt="${card.vehicleReg || "Vehicle"}" style="width: 72px; height: 52px; object-fit: contain; background-color: #FFFFFF; border-radius: 6px; border: 1px solid #E2E8F0; display: block;" />
                 </td>
               ` : ""}
               <td style="vertical-align: middle;">
-                <div style="font-size: 14px; font-weight: 700; color: ${BRAND_TEXT_WHITE}; margin-bottom: 2px;">
-                  <span style="margin-right: 4px;">${iconSymbol}</span> ${card.title}
+                <div style="font-size: 15px; font-weight: 700; color: #14161B; margin-bottom: 2px;">
+                  ${card.title}
                 </div>
-                ${card.dateStr ? `<div style="font-size: 13px; font-weight: 600; color: ${BRAND_ORANGE_LIGHT};">Due / Expiry: ${card.dateStr}</div>` : ""}
-                ${card.vehicleReg || card.vehicleModel ? `<div style="font-size: 12px; color: ${BRAND_TEXT_MUTED};">Vehicle: ${card.vehicleReg || ""} ${card.vehicleModel ? `(${card.vehicleModel})` : ""}</div>` : ""}
+                ${card.dateStr ? `<div style="font-size: 13px; font-weight: 600; color: #FF6A00;">Due / Expiry: ${card.dateStr}</div>` : ""}
+                ${card.vehicleReg || card.vehicleModel ? `<div style="font-size: 12px; color: #64748B;">Vehicle: ${card.vehicleReg || ""} ${card.vehicleModel ? `(${card.vehicleModel})` : ""}</div>` : ""}
               </td>
               ${daysText ? `
                 <td align="right" style="vertical-align: middle; padding-left: 10px;">
-                  <span style="display: inline-block; background-color: ${daysBg}; color: ${daysColor}; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 12px; white-space: nowrap;">
+                  <span style="display: inline-block; background-color: #FFEDD5; color: #C2410C; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 12px; white-space: nowrap;">
                     ${daysText}
                   </span>
                 </td>
@@ -202,268 +286,153 @@ function renderDriverAlertTemplate(options: Record<string, any>): string {
     })
     .join("");
 
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${headline}</title>
-</head>
-<body style="margin: 0; padding: 16px 0; background-color: #030712; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-    <tr>
-      <td align="center">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 540px; background-color: ${BRAND_CARD_BG}; border-radius: 12px; border: 1px solid #1E293B; overflow: hidden;">
-          <tr>
-            <td>
-              ${renderHeader(headerLabel, headline, subtext)}
-            </td>
-          </tr>
-          <tr>
-            <td style="padding: 18px 20px; color: ${BRAND_TEXT_WHITE};">
-              <p style="font-size: 14px; margin: 0 0 8px 0; color: #E2E8F0;">Hi ${name},</p>
-              <p style="font-size: 13px; margin: 0 0 14px 0; color: ${BRAND_TEXT_MUTED}; line-height: 1.4;">${introLine}</p>
-              ${options.cards && options.cards.length > 0 ? cardsHtml : ""}
-              ${options.singleMessageBody ? `
-                <div style="background-color: ${BRAND_HEADER_BG}; border: 1px solid #334155; border-radius: 8px; padding: 14px; margin-bottom: 14px; font-size: 13px; color: #E2E8F0; line-height: 1.5;">
-                  ${options.singleMessageBody}
-                </div>
-              ` : ""}
-              <div style="background-color: #0F172A; border-left: 3px solid ${BRAND_ORANGE}; border-radius: 4px; padding: 10px 12px; margin-top: 12px; margin-bottom: 14px;">
-                <div style="font-size: 12px; font-weight: 700; color: ${BRAND_ORANGE_LIGHT}; margin-bottom: 2px;">⚠️ Important Notice</div>
-                <div style="font-size: 12px; color: #CBD5E1; line-height: 1.4;">
-                  ${options.warningNote || "Driving an unroadworthy or unlicenced vehicle is against the law and your hire terms. Please contact our support team immediately if you need assistance."}
-                </div>
-              </div>
-              ${options.actionUrl ? `
-                <div style="text-align: center; margin-top: 16px;">
-                  <a href="${options.actionUrl}" target="_blank" style="display: inline-block; background-color: ${BRAND_ORANGE}; color: #FFFFFF; font-size: 13px; font-weight: 700; text-decoration: none; padding: 10px 22px; border-radius: 6px;">
-                    ${options.actionText || "View Details in Portal"}
-                  </a>
-                </div>
-              ` : ""}
-            </td>
-          </tr>
-          <tr>
-            <td>
-              ${renderFooter(["Secure", "Track", "Smarter Fleet Management"])}
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`;
+  const cardContent = `
+    <div style="font-size: 14px; color: #14161B; line-height: 1.5;">
+      <p style="margin: 0 0 12px 0; font-weight: 600;">Hi ${name},</p>
+      ${options.cards && options.cards.length > 0 ? cardsHtml : ""}
+      ${options.singleMessageBody ? `
+        <div style="background-color: #F8FAFC; border-left: 4px solid #FF6A00; border-radius: 4px; padding: 12px 14px; margin-bottom: 12px; font-size: 13px; color: #334155;">
+          ${options.singleMessageBody}
+        </div>
+      ` : ""}
+      <div style="background-color: #FEF2F2; border-left: 3px solid #EF4444; border-radius: 4px; padding: 10px 12px; margin-top: 12px;">
+        <div style="font-size: 12px; font-weight: 700; color: #991B1B; margin-bottom: 2px;">⚠️ Important Requirement</div>
+        <div style="font-size: 12px; color: #7F1D1D; line-height: 1.4;">
+          ${options.warningNote || "Driving an unroadworthy or unlicenced vehicle is against the law and your hire terms. Please contact our support team immediately if you need assistance."}
+        </div>
+      </div>
+    </div>
+  `;
+
+  return renderUnifiedEmailLayout({
+    title: `${headline} — Virtual Car Hire`,
+    eyebrow: headerLabel,
+    headline,
+    bodyText: subtext,
+    cardContent,
+    ctaUrl: options.actionUrl || "https://virtual-carhire.co.uk/portal/dashboard",
+    ctaText: options.actionText || "View Details in Portal",
+  });
 }
 
 function renderFleetSummaryTemplate(options: Record<string, any>): string {
-  const headerLabel = options.headerLabel || "IMPORTANT REMINDER";
+  const headerLabel = options.headerLabel || "FLEET COMPLIANCE";
   const headline = options.headline || "Multiple vehicles have upcoming MOT & PCO expiries";
   const subtext = options.subtext || "Ensure your fleet remains road-legal, compliant, and ready for work.";
   const vehicles = options.vehicles || [];
-  const motCount = options.motCount ?? vehicles.filter((v: any) => v.motExpiry).length;
-  const pcoCount = options.pcoCount ?? vehicles.filter((v: any) => v.pcoExpiry).length;
 
-  const vehicleRows = vehicles
-    .map((v: any) => {
-      const motText = v.motDaysRemaining !== undefined ? `${v.motExpiry || "Soon"} (${v.motDaysRemaining}d)` : v.motExpiry || "N/A";
-      const pcoText = v.pcoDaysRemaining !== undefined ? `${v.pcoExpiry || "Soon"} (${v.pcoDaysRemaining}d)` : v.pcoExpiry || "N/A";
+  const vehicleRows = vehicles.map((v: any) => {
+    const motText = v.motDaysRemaining !== undefined ? `${v.motExpiry || "Soon"} (${v.motDaysRemaining}d)` : v.motExpiry || "N/A";
+    const pcoText = v.pcoDaysRemaining !== undefined ? `${v.pcoExpiry || "Soon"} (${v.pcoDaysRemaining}d)` : v.pcoExpiry || "N/A";
 
-      return `
-        <tr style="border-bottom: 1px solid #1E293B;">
-          <td width="64" style="padding: 8px 6px; vertical-align: middle;">
-            ${v.photoUrl ? `<img src="${v.photoUrl}" alt="${v.registration}" style="width: 60px; height: 42px; object-fit: contain; background-color: #070C18; border-radius: 4px; border: 1px solid #1E293B; display: block;" />` : `<div style="width: 60px; height: 42px; background: #172136; border-radius: 4px; text-align: center; line-height: 42px; font-size: 16px; color: #94A3B8;">🚘</div>`}
-          </td>
-          <td style="padding: 8px 6px; vertical-align: middle;">
-            <div style="font-size: 13px; font-weight: 700; color: ${BRAND_TEXT_WHITE};">${v.registration}</div>
-            <div style="font-size: 11px; color: ${BRAND_TEXT_MUTED};">${v.model}</div>
-          </td>
-          <td style="padding: 8px 6px; vertical-align: middle; font-size: 11px;">
-            ${v.motExpiry ? `<span style="background: rgba(245, 158, 11, 0.15); color: #FBBF24; padding: 2px 6px; border-radius: 4px; display: inline-block; white-space: nowrap;">MOT: ${motText}</span>` : `<span style="color: #64748B;">MOT: OK</span>`}
-            <div style="margin-top: 3px;">
-              ${v.pcoExpiry ? `<span style="background: rgba(255, 106, 0, 0.15); color: ${BRAND_ORANGE_LIGHT}; padding: 2px 6px; border-radius: 4px; display: inline-block; white-space: nowrap;">PCO: ${pcoText}</span>` : `<span style="color: #64748B;">PCO: OK</span>`}
-            </div>
-          </td>
-          <td align="right" style="padding: 8px 6px; vertical-align: middle;">
-            <a href="${v.detailsUrl || options.manageUrl || "#"}" style="font-size: 11px; color: ${BRAND_ORANGE_LIGHT}; text-decoration: none; font-weight: 600; white-space: nowrap;">View Details →</a>
-          </td>
+    return `
+      <tr style="border-bottom: 1px solid #E2E8F0;">
+        <td width="60" style="padding: 10px 6px; vertical-align: middle;">
+          ${v.photoUrl ? `<img src="${v.photoUrl}" alt="${v.registration}" style="width: 56px; height: 40px; object-fit: contain; background-color: #F8FAFC; border-radius: 4px; border: 1px solid #E2E8F0; display: block;" />` : `<div style="width: 56px; height: 40px; background: #F1F5F9; border-radius: 4px; text-align: center; line-height: 40px; font-size: 16px; color: #64748B;">🚘</div>`}
+        </td>
+        <td style="padding: 10px 6px; vertical-align: middle;">
+          <div style="font-size: 13px; font-weight: 700; color: #14161B;">${v.registration}</div>
+          <div style="font-size: 11px; color: #64748B;">${v.model}</div>
+        </td>
+        <td style="padding: 10px 6px; vertical-align: middle; font-size: 11px;">
+          ${v.motExpiry ? `<span style="background: #FEF3C7; color: #92400E; padding: 2px 6px; border-radius: 4px; font-weight: 600; display: inline-block;">MOT: ${motText}</span>` : `<span style="color: #94A3B8;">MOT: OK</span>`}
+          <div style="margin-top: 3px;">
+            ${v.pcoExpiry ? `<span style="background: #FFEDD5; color: #C2410C; padding: 2px 6px; border-radius: 4px; font-weight: 600; display: inline-block;">PCO: ${pcoText}</span>` : `<span style="color: #94A3B8;">PCO: OK</span>`}
+          </div>
+        </td>
+        <td align="right" style="padding: 10px 6px; vertical-align: middle;">
+          <a href="${v.detailsUrl || options.manageUrl || "#"}" style="font-size: 11px; color: #FF6A00; text-decoration: none; font-weight: 700; white-space: nowrap;">View →</a>
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  const cardContent = `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse: collapse;">
+      <thead>
+        <tr style="border-bottom: 2px solid #CBD5E1;">
+          <th align="left" style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase;" colspan="2">Vehicle</th>
+          <th align="left" style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase;">Expiries</th>
+          <th align="right" style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase;">Action</th>
         </tr>
-      `;
-    })
-    .join("");
+      </thead>
+      <tbody>
+        ${vehicleRows}
+      </tbody>
+    </table>
+  `;
 
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${headline}</title>
-</head>
-<body style="margin: 0; padding: 16px 0; background-color: #030712; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-    <tr>
-      <td align="center">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 580px; background-color: ${BRAND_CARD_BG}; border-radius: 12px; border: 1px solid #1E293B; overflow: hidden;">
-          <tr>
-            <td>
-              ${renderHeader(headerLabel, headline, subtext)}
-            </td>
-          </tr>
-          <tr>
-            <td style="padding: 18px 20px; color: ${BRAND_TEXT_WHITE};">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 12px;">
-                <tr>
-                  <td>
-                    <div style="font-size: 14px; font-weight: 700; color: ${BRAND_TEXT_WHITE};">Vehicles with Upcoming Expiries</div>
-                    <div style="font-size: 12px; color: ${BRAND_TEXT_MUTED}; margin-top: 1px;">
-                      We found <strong>${vehicles.length}</strong> vehicle${vehicles.length === 1 ? "" : "s"} with MOT or PCO licence expiring soon.
-                    </div>
-                  </td>
-                  ${options.manageUrl ? `
-                    <td align="right" style="vertical-align: top;">
-                      <a href="${options.manageUrl}" target="_blank" style="font-size: 12px; color: ${BRAND_ORANGE_LIGHT}; text-decoration: none; font-weight: 600;">View All →</a>
-                    </td>
-                  ` : ""}
-                </tr>
-              </table>
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 16px;">
-                <tr>
-                  <td width="48%" style="background-color: ${BRAND_HEADER_BG}; border: 1px solid #334155; border-radius: 6px; padding: 8px 12px;">
-                    <div style="font-size: 10px; color: ${BRAND_TEXT_MUTED}; text-transform: uppercase; font-weight: 600;">MOT Expiries</div>
-                    <div style="font-size: 15px; font-weight: 800; color: #FBBF24; margin-top: 2px;">⚠️ ${motCount} vehicles</div>
-                  </td>
-                  <td width="4%"></td>
-                  <td width="48%" style="background-color: ${BRAND_HEADER_BG}; border: 1px solid #334155; border-radius: 6px; padding: 8px 12px;">
-                    <div style="font-size: 10px; color: ${BRAND_TEXT_MUTED}; text-transform: uppercase; font-weight: 600;">PCO Expiries</div>
-                    <div style="font-size: 15px; font-weight: 800; color: ${BRAND_ORANGE_LIGHT}; margin-top: 2px;">🪪 ${pcoCount} vehicles</div>
-                  </td>
-                </tr>
-              </table>
-              <div style="margin-bottom: 16px;">
-                <div style="font-size: 11px; font-weight: 700; color: ${BRAND_TEXT_MUTED}; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">
-                  Due Soon (Sort by: Soonest expiry)
-                </div>
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse;">
-                  ${vehicleRows}
-                </table>
-              </div>
-              <div style="background-color: #0F172A; border-left: 3px solid ${BRAND_ORANGE}; border-radius: 4px; padding: 10px 12px; margin-bottom: 16px;">
-                <div style="font-size: 12px; font-weight: 700; color: ${BRAND_ORANGE_LIGHT}; margin-bottom: 2px;">⚠️ Compliance Warning</div>
-                <div style="font-size: 12px; color: #CBD5E1; line-height: 1.4; margin-bottom: 8px;">
-                  Don't risk fines or vehicle downtime. Booking inspections early ensures continuous fleet utilization and compliance.
-                </div>
-                ${options.manageUrl ? `
-                  <a href="${options.manageUrl}" target="_blank" style="display: inline-block; background-color: ${BRAND_ORANGE}; color: #FFFFFF; font-size: 12px; font-weight: 700; text-decoration: none; padding: 6px 14px; border-radius: 4px;">
-                    Manage Expiries
-                  </a>
-                ` : ""}
-              </div>
-            </td>
-          </tr>
-          <tr>
-            <td>
-              ${renderFooter(["Secure", "Track", "Smarter Fleet Management"], "Keeping you on the road.")}
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`;
+  return renderUnifiedEmailLayout({
+    title: "Fleet Compliance Expiry Digest — Virtual Car Hire",
+    eyebrow: headerLabel,
+    headline,
+    bodyText: subtext,
+    cardContent,
+    ctaUrl: options.manageUrl || "https://hq.virtual-carhire.co.uk/vehicles",
+    ctaText: "Manage Fleet Expiries",
+  });
 }
 
 function renderDriverLicenceSummaryTemplate(options: Record<string, any>): string {
-  const headerLabel = options.headerLabel || "IMPORTANT REMINDER";
-  const headline = options.headline || "Your Driver Licence is expiring soon.";
-  const subtext = options.subtext || "Review driver licence expiry dates across your team and take required action.";
-  const introLine = options.introLine || "Hi there,\nHere are the upcoming driver licence expiry dates for your team:";
+  const headerLabel = options.headerLabel || "LICENCE COMPLIANCE";
+  const headline = options.headline || "Driver Licences Expiring Soon";
+  const subtext = options.subtext || options.introLine || "Review driver licence expiry dates across your team and take required action:";
   const drivers = options.drivers || [];
 
-  const driverRows = drivers
-    .map((d: any) => {
-      const initials = d.initials || (d.name ? d.name.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase() : "DR");
-      const daysText = d.daysRemaining <= 0 ? "Expired" : `in ${d.daysRemaining} days`;
-      const daysBg = d.daysRemaining <= 14 ? "#7F1D1D" : "rgba(255, 106, 0, 0.2)";
-      const daysColor = d.daysRemaining <= 14 ? "#FCA5A5" : BRAND_ORANGE_LIGHT;
+  const driverRows = drivers.map((d: any) => {
+    const initials = d.initials || (d.name ? d.name.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase() : "DR");
+    const daysText = d.daysRemaining <= 0 ? "Expired" : `in ${d.daysRemaining}d`;
 
-      return `
-        <tr style="border-bottom: 1px solid #1E293B;">
-          <td style="padding: 8px 6px; vertical-align: middle;" width="36">
-            <div style="width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, ${BRAND_ORANGE}, ${BRAND_HEADER_BG}); color: #FFF; font-size: 12px; font-weight: 700; text-align: center; line-height: 32px;">
-              ${initials}
-            </div>
-          </td>
-          <td style="padding: 8px 6px; vertical-align: middle;">
-            <div style="font-size: 13px; font-weight: 700; color: ${BRAND_TEXT_WHITE};">${d.name}</div>
-            <div style="font-size: 11px; color: ${BRAND_TEXT_MUTED};">ID: ${d.driverId} • ${d.licenceType || "Full Licence"}</div>
-          </td>
-          <td style="padding: 8px 6px; vertical-align: middle;">
-            <div style="font-size: 12px; color: ${BRAND_TEXT_WHITE}; font-weight: 600;">${d.expiryDate}</div>
-            <span style="display: inline-block; background-color: ${daysBg}; color: ${daysColor}; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 10px; margin-top: 1px;">
-              ${daysText}
-            </span>
-          </td>
-          <td align="right" style="padding: 8px 6px; vertical-align: middle;">
-            <a href="${d.reviewUrl || options.helpUrl || "#"}" style="font-size: 11px; background-color: #334155; color: ${BRAND_TEXT_WHITE}; text-decoration: none; font-weight: 600; padding: 5px 10px; border-radius: 4px; display: inline-block;">
-              Review Licence
-            </a>
-          </td>
+    return `
+      <tr style="border-bottom: 1px solid #E2E8F0;">
+        <td width="36" style="padding: 10px 6px; vertical-align: middle;">
+          <div style="width: 32px; height: 32px; border-radius: 50%; background-color: #FF6A00; color: #FFFFFF; font-size: 12px; font-weight: 700; text-align: center; line-height: 32px;">
+            ${initials}
+          </div>
+        </td>
+        <td style="padding: 10px 6px; vertical-align: middle;">
+          <div style="font-size: 13px; font-weight: 700; color: #14161B;">${d.name}</div>
+          <div style="font-size: 11px; color: #64748B;">ID: ${d.driverId} • ${d.licenceType || "Full Licence"}</div>
+        </td>
+        <td style="padding: 10px 6px; vertical-align: middle;">
+          <div style="font-size: 12px; color: #14161B; font-weight: 600;">${d.expiryDate}</div>
+          <span style="display: inline-block; background-color: #FFEDD5; color: #C2410C; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 8px; margin-top: 2px;">
+            ${daysText}
+          </span>
+        </td>
+        <td align="right" style="padding: 10px 6px; vertical-align: middle;">
+          <a href="${d.reviewUrl || options.helpUrl || "#"}" style="font-size: 11px; background-color: #F1F5F9; color: #14161B; text-decoration: none; font-weight: 700; padding: 5px 10px; border-radius: 4px; display: inline-block;">
+            Review
+          </a>
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  const cardContent = `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse: collapse;">
+      <thead>
+        <tr style="border-bottom: 2px solid #CBD5E1;">
+          <th align="left" style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase;" colspan="2">Driver</th>
+          <th align="left" style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase;">Expiry Date</th>
+          <th align="right" style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase;">Action</th>
         </tr>
-      `;
-    })
-    .join("");
+      </thead>
+      <tbody>
+        ${driverRows}
+      </tbody>
+    </table>
+  `;
 
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${headline}</title>
-</head>
-<body style="margin: 0; padding: 16px 0; background-color: #030712; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-    <tr>
-      <td align="center">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 560px; background-color: ${BRAND_CARD_BG}; border-radius: 12px; border: 1px solid #1E293B; overflow: hidden;">
-          <tr>
-            <td>
-              ${renderHeader(headerLabel, headline, subtext)}
-            </td>
-          </tr>
-          <tr>
-            <td style="padding: 18px 20px; color: ${BRAND_TEXT_WHITE};">
-              <p style="font-size: 13px; margin: 0 0 14px 0; color: ${BRAND_TEXT_MUTED}; line-height: 1.4; whitespace: pre-line;">
-                ${introLine}
-              </p>
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; margin-bottom: 16px;">
-                ${driverRows}
-              </table>
-              <div style="background-color: #0F172A; border-left: 3px solid ${BRAND_ORANGE}; border-radius: 4px; padding: 10px 12px; margin-bottom: 16px;">
-                <div style="font-size: 12px; font-weight: 700; color: ${BRAND_ORANGE_LIGHT}; margin-bottom: 2px;">⚠️ Regulatory Requirement</div>
-                <div style="font-size: 12px; color: #CBD5E1; line-height: 1.4; margin-bottom: 8px;">
-                  Don't risk fines or being off the road. Ensure all active drivers maintain a valid, unexpired UK driving licence.
-                </div>
-                ${options.helpUrl ? `
-                  <a href="${options.helpUrl}" target="_blank" style="display: inline-block; background-color: ${BRAND_ORANGE}; color: #FFFFFF; font-size: 12px; font-weight: 700; text-decoration: none; padding: 6px 14px; border-radius: 4px;">
-                    Get Help
-                  </a>
-                ` : ""}
-              </div>
-            </td>
-          </tr>
-          <tr>
-            <td>
-              ${renderFooter(["Secure & Compliant", "Track Your Drivers", "Smarter Fleet Management"])}
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`;
+  return renderUnifiedEmailLayout({
+    title: "Driver Licence Expiry Digest — Virtual Car Hire",
+    eyebrow: headerLabel,
+    headline,
+    bodyText: subtext,
+    cardContent,
+    ctaUrl: options.helpUrl || "https://hq.virtual-carhire.co.uk/drivers",
+    ctaText: "Review All Licences",
+  });
 }
 
 // --- Handler ---
@@ -478,7 +447,6 @@ serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  // Basic authorization header presence check for non-preflight requests
   const authHeader = req.headers.get("Authorization");
   const apiKeyHeader = req.headers.get("apikey");
   if (!authHeader && !apiKeyHeader) {
@@ -509,7 +477,6 @@ serve(async (req) => {
   const templateData = payload.template_data || payload.data || {};
   const metadata = payload.metadata || {};
 
-  // Recipient Rule: If driver has no email on file (or explicitly skipped), skip gracefully and log to email_log
   if (!recipient || payload.skip) {
     const skipReason = payload.skip_reason || "Driver has no email address on file (signup pending)";
 
@@ -534,12 +501,10 @@ serve(async (req) => {
     );
   }
 
-  // Determine sender email address using 3-address routing rules
   const rawFrom = payload.from || getFromAddress(templateType);
   const emailFromAddress = formatFromAddress(rawFrom);
   const resendApiKey = Deno.env.get("RESEND_API_KEY");
 
-  // Render HTML based on template_type
   let html = payload.html || "";
   if (!html) {
     switch (templateType) {
@@ -547,21 +512,21 @@ serve(async (req) => {
       case "2fa_code":
         html = render2FATemplate(templateData);
         break;
+      case "rent_due":
+      case "rent_due_tomorrow":
+        html = renderRentDueTomorrowTemplate(templateData);
+        break;
+      case "fleet_summary":
+        html = renderFleetSummaryTemplate(templateData);
+        break;
+      case "driver_licence_summary":
+        html = renderDriverLicenceSummaryTemplate(templateData);
+        break;
       case "driver_alert":
       case "driver_notice":
       case "custom_message":
-      case "rent_due":
-      case "rent_due_tomorrow":
-        html = renderDriverAlertTemplate({ ...templateData, headline: templateData.headline || subject });
-        break;
-      case "fleet_summary":
-        html = renderFleetSummaryTemplate({ ...templateData, headline: templateData.headline || subject });
-        break;
-      case "driver_licence_summary":
-        html = renderDriverLicenceSummaryTemplate({ ...templateData, headline: templateData.headline || subject });
-        break;
       default:
-        html = renderDriverAlertTemplate({ ...templateData, headline: subject });
+        html = renderDriverAlertTemplate({ ...templateData, headline: templateData.headline || subject });
         break;
     }
   }
@@ -586,7 +551,6 @@ serve(async (req) => {
     );
   }
 
-  // Attempt live send via Resend API
   try {
     const resendRes = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -627,7 +591,6 @@ serve(async (req) => {
       );
     }
 
-    // Success log
     await supabase.from("email_log").insert({
       recipient,
       subject,
