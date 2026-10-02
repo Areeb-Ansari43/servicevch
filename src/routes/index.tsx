@@ -51,6 +51,7 @@ import {
   restoreDriverAccount,
   type PortalAuthUser,
 } from "@/lib/portal.functions";
+import { AppearanceSettingsCard } from "@/components/appearance-settings-card";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -192,16 +193,16 @@ const SERVICE_TYPES = [
 
 /* ---------------- Theme (Apple liquid glass) ---------------- */
 export const T = {
-  bg: "linear-gradient(160deg,#05070c 0%,#0a0e18 45%,#080b13 100%)",
-  panel: "rgba(255,255,255,0.055)",
-  panel2: "rgba(255,255,255,0.10)",
-  border: "rgba(255,255,255,0.12)",
-  borderSoft: "rgba(255,255,255,0.07)",
-  text: "#eef2f8",
-  muted: "#9aa5b8",
-  mutedSoft: "#6b7488",
-  orange: "#ff8a3d",
-  orangeSoft: "rgba(255,138,61,0.14)",
+  bg: "var(--vch-bg)",
+  panel: "var(--vch-surface)",
+  panel2: "var(--vch-surface-2)",
+  border: "var(--vch-border)",
+  borderSoft: "var(--vch-border-soft)",
+  text: "var(--vch-text)",
+  muted: "var(--vch-text-muted)",
+  mutedSoft: "var(--vch-text-muted)",
+  orange: "var(--vch-accent)",
+  orangeSoft: "var(--vch-accent-soft)",
 };
 
 /* ---------------- Icons ---------------- */
@@ -1428,6 +1429,9 @@ function UserSettingsView({
           </button>
         </div>
       </div>
+
+      {/* APPEARANCE CUSTOMISATION CARD */}
+      <AppearanceSettingsCard toast={toast} />
 
       {/* PORTAL ACCOUNTS & STRAY CREDENTIALS AUDIT */}
       <PortalAccountsAdminCard toast={toast} />
@@ -5286,7 +5290,14 @@ function portalStatusBadge(driver: DriverTrack) {
 
   if (status === "active") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-0.5 text-[10px] font-bold text-emerald-300">
+      <span
+        className="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-bold"
+        style={{
+          borderColor: "var(--vch-success-border)",
+          background: "var(--vch-success-bg)",
+          color: "var(--vch-success-text)",
+        }}
+      >
         <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
         Active
       </span>
@@ -5294,14 +5305,28 @@ function portalStatusBadge(driver: DriverTrack) {
   }
   if (status === "pending") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-sky-400/30 bg-sky-400/10 px-2.5 py-0.5 text-[10px] font-bold text-sky-300">
+      <span
+        className="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-bold"
+        style={{
+          borderColor: "var(--vch-info-border)",
+          background: "var(--vch-info-bg)",
+          color: "var(--vch-info-text)",
+        }}
+      >
         <span className="h-1.5 w-1.5 rounded-full bg-sky-400 animate-pulse" />
         Pending
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-rose-500/30 bg-rose-500/10 px-2.5 py-0.5 text-[10px] font-bold text-rose-300">
+    <span
+      className="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-bold"
+      style={{
+        borderColor: "var(--vch-danger-border)",
+        background: "var(--vch-danger-bg)",
+        color: "var(--vch-danger-text)",
+      }}
+    >
       <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />
       Inactive
     </span>
