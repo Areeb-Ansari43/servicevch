@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { requestLoginCode, verifyLoginCode } from "@/lib/auth-otp.functions";
 import { RouteErrorBoundary } from "@/components/error-boundary";
+import { BrandLogo } from "@/components/brand-logo";
 import {
   Mail,
   Lock,
@@ -258,7 +259,7 @@ function LoginPage() {
   };
 
   return (
-    <div className="relative min-h-screen w-full overflow-hidden font-sans bg-[#07090D] text-white flex flex-col justify-between select-none">
+    <div className="relative h-dvh min-h-dvh w-full overflow-hidden font-sans bg-[#07090D] text-white flex flex-col justify-between select-none">
       {/* CSS Animations, Responsive Background Image & Micro-interactions */}
       <style>{`
         @keyframes shake {
@@ -268,15 +269,6 @@ function LoginPage() {
         }
         .animate-shake {
           animation: shake 0.4s ease-in-out;
-        }
-        @keyframes logoOutline {
-          0% { stroke-dashoffset: 280; opacity: 0.2; }
-          50% { stroke-dashoffset: 0; opacity: 1; }
-          100% { stroke-dashoffset: -280; opacity: 0.8; }
-        }
-        .animate-logo-draw {
-          stroke-dasharray: 280;
-          animation: logoOutline 1.2s ease-in-out infinite;
         }
         @keyframes lightSweep {
           0% { transform: translateX(-100%); opacity: 0; }
@@ -318,7 +310,7 @@ function LoginPage() {
         }
 
         @media (prefers-reduced-motion: reduce) {
-          .animate-shake, .animate-logo-draw, .animate-light-sweep, .animate-card-spring {
+          .animate-shake, .animate-light-sweep, .animate-card-spring {
             animation: none !important;
             transform: none !important;
             opacity: 1 !important;
@@ -334,22 +326,7 @@ function LoginPage() {
           }`}
         >
           <div className="relative flex flex-col items-center gap-4">
-            <div className="relative h-20 w-20 rounded-2xl border-2 border-[#ff6a00]/30 p-2.5 flex items-center justify-center bg-[#07090D] overflow-hidden">
-              <svg className="absolute inset-0 h-full w-full p-1" viewBox="0 0 100 100">
-                <rect
-                  x="5"
-                  y="5"
-                  width="90"
-                  height="90"
-                  rx="16"
-                  fill="none"
-                  stroke="#ff6a00"
-                  strokeWidth="3"
-                  className="animate-logo-draw"
-                />
-              </svg>
-              <img src="/vch-logo.png" alt="VCH" className="h-full w-full object-contain relative z-10" />
-            </div>
+            <BrandLogo className="h-16 w-auto animate-pulse" />
             <div
               className={`flex flex-col items-center text-center transition-all duration-500 ${
                 splashPhase === "logo" ? "opacity-0 translate-y-2" : "opacity-100 translate-y-0"
@@ -380,104 +357,95 @@ function LoginPage() {
       </div>
 
       {/* Top Header Bar */}
-      <header className="relative z-10 flex items-center justify-between px-6 py-6 lg:px-12">
+      <header className="relative z-10 shrink-0 flex items-center justify-between px-6 py-[1.5vh] lg:px-12">
         <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg border border-[#ff6a00] p-1 flex items-center justify-center bg-[#07090D]">
-            <img src="/vch-logo.png" alt="VCH" className="h-full w-full object-contain" />
-          </div>
-          <span className="text-sm font-semibold tracking-[0.2em] text-white uppercase">
-            Virtual Car Hire
-          </span>
+          <BrandLogo className="h-[clamp(28px,3.5vh,36px)] w-auto" />
         </div>
         <div className="flex items-center gap-2">
           <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-xs font-medium text-slate-300">Secure environment</span>
+          <span className="text-[clamp(11px,1.3vh,13px)] font-medium text-slate-300">Secure environment</span>
         </div>
       </header>
 
       {/* Main Responsive Grid Layout */}
-      <main className="relative z-10 my-auto grid w-full px-6 py-4 lg:px-12 grid-cols-1 lg:grid-cols-[1fr_minmax(460px,32vw)_1fr] gap-8 lg:gap-12 items-stretch min-h-[calc(100vh-140px)]">
-        {/* Left Column (Desktop) - Aligned with Header Logo, Eyebrow ~16-19% down viewport */}
-        <div className="hidden lg:flex flex-col justify-between h-full py-2">
-          {/* Top text block positioned under header with eyebrow starting at ~16-19% viewport height */}
-          <div className="pt-[6.5vh] space-y-4">
-            <span className="text-xs font-bold tracking-[0.2em] text-[#ff6a00] uppercase block">
+      <main className="relative z-10 flex-1 min-h-0 my-auto grid w-full px-6 lg:px-12 grid-cols-1 lg:grid-cols-[1fr_minmax(460px,32vw)_1fr] gap-4 lg:gap-8 items-center">
+        {/* Left Column (Desktop) - Aligned with Header Logo */}
+        <div className="hidden lg:flex flex-col justify-between h-full py-2 min-h-0">
+          <div className="space-y-[1.5vh] my-auto">
+            <span className="text-[clamp(10px,1.2vh,12px)] font-bold tracking-[0.2em] text-[#ff6a00] uppercase block">
               DRIVE ▪ MANAGE ▪ GROW
             </span>
-            <h1 className="text-[clamp(38px,3.8vw,56px)] font-extrabold tracking-tight leading-[1.12] text-white">
+            <h1 className="text-[clamp(32px,3.8vh,50px)] font-extrabold tracking-tight leading-[1.12] text-white">
               Smarter fleet <br />
               <span className="text-[#ff6a00]">management.</span>
             </h1>
-            <p className="text-slate-300 text-sm lg:text-base leading-relaxed max-w-sm pt-0.5">
+            <p className="text-slate-300 text-[clamp(12px,1.5vh,15px)] leading-relaxed max-w-sm">
               Everything you need to keep your fleet moving, in one place.
             </p>
           </div>
 
-          {/* Bottom-left trust rule over road area */}
-          <div className="border-l-2 border-[#ff6a00] pl-4 py-1 space-y-1 mb-2">
-            <p className="text-sm font-semibold text-white">Trusted by operators nationwide</p>
-            <p className="text-xs text-slate-400">More vehicles. Less admin. Greater control.</p>
+          <div className="border-l-2 border-[#ff6a00] pl-4 py-1 space-y-0.5 mb-2">
+            <p className="text-[clamp(12px,1.4vh,14px)] font-semibold text-white">Trusted by operators nationwide</p>
+            <p className="text-[clamp(10px,1.2vh,12px)] text-slate-400">More vehicles. Less admin. Greater control.</p>
           </div>
         </div>
 
-        {/* Center Main Card Column - 32% viewport width target, min 460px, max 640px */}
-        <div className="flex justify-center items-center w-full">
+        {/* Center Main Card Column */}
+        <div className="flex justify-center items-center w-full min-h-0 max-h-full py-1">
           <div
-            className={`w-full max-w-[640px] sm:min-w-[460px] rounded-[20px] border-[1.5px] border-white/16 bg-[#0E131B]/90 p-8 md:p-10 shadow-2xl space-y-6 animate-card-spring transition-all duration-300 ${
+            className={`w-full max-w-[640px] sm:min-w-[460px] rounded-[20px] border-[1.5px] border-white/16 bg-[#0E131B]/90 p-[clamp(16px,2.5vh,36px)] shadow-2xl space-y-[clamp(10px,1.8vh,22px)] max-h-full overflow-y-auto sm:overflow-visible animate-card-spring transition-all duration-300 ${
               isRouting ? "opacity-0 scale-95" : "opacity-100"
             }`}
           >
             {/* Logo Mark and Title inside Card */}
-            <div className="flex flex-col items-center text-center space-y-2">
-              <div className="h-[78px] w-[78px] rounded-2xl border-2 border-[#ff6a00] p-2 flex items-center justify-center bg-[#0E131B] shadow-lg shadow-[#ff6a00]/10">
-                <img src="/vch-logo.png" alt="Virtual Car Hire Logo" className="h-full w-full object-contain" />
-              </div>
-              <h2 className="text-[32px] font-bold text-white tracking-tight leading-tight pt-1">
+            <div className="flex flex-col items-center text-center space-y-[0.5vh]">
+              <BrandLogo className="h-[clamp(44px,6vh,72px)] w-auto mx-auto" />
+              <h2 className="text-[clamp(22px,3vh,30px)] font-bold text-white tracking-tight leading-tight pt-1">
                 Virtual Car Hire
               </h2>
-              <p className="text-sm text-slate-400 font-medium">Fleet Operations Platform</p>
+              <p className="text-[clamp(11px,1.4vh,13px)] text-slate-400 font-medium">Fleet Operations Platform</p>
             </div>
 
             {info && (
-              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-xs font-medium text-emerald-200">
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-[clamp(10px,1.3vh,12px)] font-medium text-emerald-200">
                 {info}
               </div>
             )}
 
             {stage === "creds" ? (
-              <form onSubmit={submitCreds} className={`space-y-5 ${isShaking ? "animate-shake" : ""}`}>
+              <form onSubmit={submitCreds} className={`space-y-[clamp(10px,1.6vh,20px)] ${isShaking ? "animate-shake" : ""}`}>
                 {/* Email Field */}
-                <div className="space-y-2">
-                  <label className="block text-sm font-semibold text-white">Email address</label>
+                <div className="space-y-[0.5vh]">
+                  <label className="block text-[clamp(11px,1.4vh,13px)] font-semibold text-white">Email address</label>
                   <div className="relative">
-                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <input
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="areeb@fa-ibi.co.uk"
-                      className="w-full h-[56px] rounded-xl border border-white/15 bg-[#141A24] pl-12 pr-11 text-sm font-medium text-white placeholder-slate-500 focus:border-[#ff6a00] focus:outline-none focus:ring-1 focus:ring-[#ff6a00] transition-colors"
+                      className="w-full h-[clamp(40px,5vh,52px)] rounded-xl border border-white/15 bg-[#141A24] pl-11 pr-10 text-xs sm:text-sm font-medium text-white placeholder-slate-500 focus:border-[#ff6a00] focus:outline-none focus:ring-1 focus:ring-[#ff6a00] transition-colors"
                       autoComplete="email"
                     />
                     {isValidEmail && (
                       <div className="absolute right-4 top-1/2 -translate-y-1/2 text-emerald-400 animate-in fade-in zoom-in duration-200">
-                        <Check className="h-5 w-5" />
+                        <Check className="h-4 w-4" />
                       </div>
                     )}
                   </div>
                 </div>
 
                 {/* Password Field */}
-                <div className="space-y-2">
-                  <label className="block text-sm font-semibold text-white">Password</label>
+                <div className="space-y-[0.5vh]">
+                  <label className="block text-[clamp(11px,1.4vh,13px)] font-semibold text-white">Password</label>
                   <div className="relative">
-                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <input
                       type={showPassword ? "text" : "password"}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="w-full h-[56px] rounded-xl border border-white/15 bg-[#141A24] pl-12 pr-12 text-sm font-medium text-white placeholder-slate-500 focus:border-[#ff6a00] focus:outline-none focus:ring-1 focus:ring-[#ff6a00] transition-colors"
+                      className="w-full h-[clamp(40px,5vh,52px)] rounded-xl border border-white/15 bg-[#141A24] pl-11 pr-11 text-xs sm:text-sm font-medium text-white placeholder-slate-500 focus:border-[#ff6a00] focus:outline-none focus:ring-1 focus:ring-[#ff6a00] transition-colors"
                       autoComplete="current-password"
                     />
                     <button
@@ -486,14 +454,14 @@ function LoginPage() {
                       className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors p-1"
                       aria-label={showPassword ? "Hide password" : "Show password"}
                     >
-                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
                 </div>
 
                 {/* Remember Me & Forgot Password */}
-                <div className="flex items-center justify-between text-sm pt-1">
-                  <label className="flex items-center gap-2.5 cursor-pointer group">
+                <div className="flex items-center justify-between text-[clamp(11px,1.4vh,13px)] pt-0.5">
+                  <label className="flex items-center gap-2 cursor-pointer group">
                     <div className="relative flex items-center justify-center">
                       <input
                         type="checkbox"
@@ -502,16 +470,16 @@ function LoginPage() {
                         className="sr-only"
                       />
                       <div
-                        className={`h-5 w-5 rounded border transition-colors flex items-center justify-center ${
+                        className={`h-4 w-4 rounded border transition-colors flex items-center justify-center ${
                           rememberMe
                             ? "bg-[#ff6a00] border-[#ff6a00]"
                             : "bg-[#141A24] border-white/20 group-hover:border-white/40"
                         }`}
                       >
-                        {rememberMe && <Check className="h-3.5 w-3.5 text-white stroke-[3]" />}
+                        {rememberMe && <Check className="h-3 w-3 text-white stroke-[3]" />}
                       </div>
                     </div>
-                    <span className="text-slate-300 font-medium text-sm">Remember me</span>
+                    <span className="text-slate-300 font-medium">Remember me</span>
                   </label>
 
                   <button
@@ -520,7 +488,7 @@ function LoginPage() {
                       setForgotEmail(email);
                       setIsForgotModalOpen(true);
                     }}
-                    className="text-[#ff6a00] underline hover:text-[#ff8a3d] font-semibold text-sm transition-colors cursor-pointer"
+                    className="text-[#ff6a00] underline hover:text-[#ff8a3d] font-semibold transition-colors cursor-pointer"
                   >
                     Forgot password?
                   </button>
@@ -528,7 +496,7 @@ function LoginPage() {
 
                 {/* Inline Error Message */}
                 {error && (
-                  <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3.5 text-xs font-medium text-red-200">
+                  <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-2.5 text-xs font-medium text-red-200">
                     {error}
                   </div>
                 )}
@@ -537,26 +505,26 @@ function LoginPage() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="group relative w-full h-[56px] rounded-xl bg-gradient-to-r from-[#ff6a00] to-[#ff8a3d] text-base font-bold text-white shadow-lg shadow-[#ff6a00]/20 hover:from-[#f05f00] hover:to-[#ff7a1a] active:scale-[0.98] transition-all disabled:opacity-60 flex items-center justify-center gap-2 cursor-pointer overflow-hidden"
+                  className="group relative w-full h-[clamp(40px,5vh,52px)] rounded-xl bg-gradient-to-r from-[#ff6a00] to-[#ff8a3d] text-[clamp(13px,1.6vh,16px)] font-bold text-white shadow-lg shadow-[#ff6a00]/20 hover:from-[#f05f00] hover:to-[#ff7a1a] active:scale-[0.98] transition-all disabled:opacity-60 flex items-center justify-center gap-2 cursor-pointer overflow-hidden"
                 >
                   {loading ? (
                     <div className="flex items-center gap-2">
-                      <Loader2 className="h-5 w-5 animate-spin" />
+                      <Loader2 className="h-4 w-4 animate-spin" />
                       <span>Signing in...</span>
                     </div>
                   ) : (
                     <>
                       <span>Continue</span>
-                      <ArrowRight className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-1" />
+                      <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
                     </>
                   )}
                 </button>
 
                 {/* Support Section with WhatsApp Link */}
-                <div className="space-y-4 pt-2">
+                <div className="space-y-[1vh] pt-1">
                   <div className="relative flex items-center justify-center">
                     <div className="w-full border-t border-white/10" />
-                    <span className="absolute bg-[#0E131B] px-3 text-xs text-slate-400 font-medium">
+                    <span className="absolute bg-[#0E131B] px-3 text-[clamp(10px,1.2vh,12px)] text-slate-400 font-medium">
                       Need help?
                     </span>
                   </div>
@@ -565,34 +533,34 @@ function LoginPage() {
                     href="https://wa.me/447721502779?text=Hi%2C%20I%20need%20help%20with%20the%20Virtual%20Car%20Hire%20CRM"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2.5 w-full h-12 rounded-xl border border-white/10 bg-[#141A24]/60 hover:bg-[#141A24] text-sm font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer text-center"
+                    className="flex items-center justify-center gap-2 w-full h-[clamp(36px,4.5vh,44px)] rounded-xl border border-white/10 bg-[#141A24]/60 hover:bg-[#141A24] text-[clamp(11px,1.4vh,13px)] font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer text-center"
                   >
-                    <Headphones className="h-4 w-4 text-[#ff6a00]" />
+                    <Headphones className="h-3.5 w-3.5 text-[#ff6a00]" />
                     <span>Contact support</span>
                   </a>
                 </div>
               </form>
             ) : (
               /* OTP Verification Stage */
-              <div className="space-y-6">
+              <div className="space-y-4">
                 {feedback === "success" ? (
-                  <div className="py-8 flex flex-col items-center justify-center space-y-3">
-                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
-                      <Check className="h-8 w-8" />
+                  <div className="py-6 flex flex-col items-center justify-center space-y-2">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                      <Check className="h-6 w-6" />
                     </div>
-                    <h3 className="text-xl font-bold text-white">Welcome back!</h3>
-                    <p className="text-sm text-emerald-300 font-medium">Authentication successful.</p>
+                    <h3 className="text-lg font-bold text-white">Welcome back!</h3>
+                    <p className="text-xs text-emerald-300 font-medium">Authentication successful.</p>
                   </div>
                 ) : (
                   <>
-                    <div className="text-center space-y-1.5">
-                      <h3 className="text-lg font-bold text-white">Enter 6-Digit Code</h3>
+                    <div className="text-center space-y-1">
+                      <h3 className="text-base font-bold text-white">Enter 6-Digit Code</h3>
                       <p className="text-xs text-slate-400">
                         {info ?? "We emailed a verification code to your email."}
                       </p>
                     </div>
 
-                    <div className={`flex justify-center gap-2 md:gap-3 ${isShaking ? "animate-shake" : ""}`}>
+                    <div className={`flex justify-center gap-2 ${isShaking ? "animate-shake" : ""}`}>
                       {digits.map((d, i) => (
                         <input
                           key={i}
@@ -604,18 +572,18 @@ function LoginPage() {
                           onKeyDown={(e) => onKeyDown(i, e)}
                           inputMode="numeric"
                           maxLength={6}
-                          className="h-14 w-11 md:w-12 rounded-xl border border-white/15 bg-[#141A24] text-center text-xl font-bold text-white focus:border-[#ff6a00] focus:outline-none focus:ring-1 focus:ring-[#ff6a00] transition-colors"
+                          className="h-12 w-10 sm:w-11 rounded-xl border border-white/15 bg-[#141A24] text-center text-lg font-bold text-white focus:border-[#ff6a00] focus:outline-none focus:ring-1 focus:ring-[#ff6a00] transition-colors"
                         />
                       ))}
                     </div>
 
                     {error && (
-                      <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3.5 text-center text-xs font-medium text-red-200">
+                      <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-2.5 text-center text-xs font-medium text-red-200">
                         {error}
                       </div>
                     )}
 
-                    <div className="flex items-center justify-between text-xs pt-2">
+                    <div className="flex items-center justify-between text-xs pt-1">
                       <button
                         type="button"
                         onClick={() => {
@@ -648,41 +616,41 @@ function LoginPage() {
         </div>
 
         {/* Right Column (Desktop) */}
-        <div className="hidden lg:flex flex-col justify-center space-y-6 pl-4">
+        <div className="hidden lg:flex flex-col justify-center space-y-[2.5vh] pl-4 min-h-0">
           {/* Feature 1 */}
-          <div className="flex items-start gap-4">
-            <div className="h-11 w-11 shrink-0 rounded-xl bg-[#141A24] border border-white/10 flex items-center justify-center text-[#ff6a00]">
-              <Activity className="h-5 w-5" />
+          <div className="flex items-start gap-3">
+            <div className="h-9 w-9 shrink-0 rounded-xl bg-[#141A24] border border-white/10 flex items-center justify-center text-[#ff6a00]">
+              <Activity className="h-4 w-4" />
             </div>
-            <div className="space-y-1">
-              <h3 className="font-semibold text-white text-base">Track Your Fleet</h3>
-              <p className="text-slate-400 text-xs leading-relaxed">
+            <div className="space-y-0.5">
+              <h3 className="font-semibold text-white text-[clamp(13px,1.6vh,16px)]">Track Your Fleet</h3>
+              <p className="text-slate-400 text-[clamp(10px,1.3vh,12px)] leading-relaxed">
                 Real-time visibility over all vehicles, allocations, and driver activity.
               </p>
             </div>
           </div>
 
           {/* Feature 2 */}
-          <div className="flex items-start gap-4">
-            <div className="h-11 w-11 shrink-0 rounded-xl bg-[#141A24] border border-white/10 flex items-center justify-center text-[#ff6a00]">
-              <ShieldCheck className="h-5 w-5" />
+          <div className="flex items-start gap-3">
+            <div className="h-9 w-9 shrink-0 rounded-xl bg-[#141A24] border border-white/10 flex items-center justify-center text-[#ff6a00]">
+              <ShieldCheck className="h-4 w-4" />
             </div>
-            <div className="space-y-1">
-              <h3 className="font-semibold text-white text-base">Stay Compliant</h3>
-              <p className="text-slate-400 text-xs leading-relaxed">
+            <div className="space-y-0.5">
+              <h3 className="font-semibold text-white text-[clamp(13px,1.6vh,16px)]">Stay Compliant</h3>
+              <p className="text-slate-400 text-[clamp(10px,1.3vh,12px)] leading-relaxed">
                 Automated MOT, PCO, and driver licence expiration alerts.
               </p>
             </div>
           </div>
 
           {/* Feature 3 */}
-          <div className="flex items-start gap-4">
-            <div className="h-11 w-11 shrink-0 rounded-xl bg-[#141A24] border border-white/10 flex items-center justify-center text-[#ff6a00]">
-              <Zap className="h-5 w-5" />
+          <div className="flex items-start gap-3">
+            <div className="h-9 w-9 shrink-0 rounded-xl bg-[#141A24] border border-white/10 flex items-center justify-center text-[#ff6a00]">
+              <Zap className="h-4 w-4" />
             </div>
-            <div className="space-y-1">
-              <h3 className="font-semibold text-white text-base">Save Time</h3>
-              <p className="text-slate-400 text-xs leading-relaxed">
+            <div className="space-y-0.5">
+              <h3 className="font-semibold text-white text-[clamp(13px,1.6vh,16px)]">Save Time</h3>
+              <p className="text-slate-400 text-[clamp(10px,1.3vh,12px)] leading-relaxed">
                 Streamlined rent tracking, automated messaging, and quick billing.
               </p>
             </div>
@@ -691,13 +659,13 @@ function LoginPage() {
       </main>
 
       {/* Footer */}
-      <footer className="relative z-10 px-6 py-6 lg:px-12 flex justify-end">
-        <p className="text-xs font-medium text-slate-400">
+      <footer className="relative z-10 shrink-0 px-6 py-[1.2vh] lg:px-12 flex justify-end">
+        <p className="text-[clamp(10px,1.2vh,12px)] font-medium text-slate-400">
           © 2026 Virtual Car Hire · Fleet Operations Platform
         </p>
       </footer>
 
-      {/* Forgot Password Modal (Desktop Dialog / Mobile Bottom Sheet) */}
+      {/* Forgot Password Modal */}
       {isForgotModalOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
           <div

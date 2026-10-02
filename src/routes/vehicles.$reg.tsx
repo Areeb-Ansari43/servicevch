@@ -14,6 +14,7 @@ import {
 } from "@/routes/index";
 import { NotFoundPanel } from "@/components/not-found-panel";
 import { RouteErrorBoundary } from "@/components/error-boundary";
+import { BrandLogo } from "@/components/brand-logo";
 
 export const Route = createFileRoute("/vehicles/$reg")({
   head: ({ params }) => ({
@@ -118,11 +119,7 @@ function VehicleDetailPage() {
       >
         <div className="flex flex-col items-center text-center">
           <div className="mb-4 flex h-14 w-14 animate-pulse items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-gradient-to-br from-[#ff7a1a] to-[#ff9d52] text-white shadow-[0_18px_40px_-12px_rgba(255,106,0,0.7)]">
-            <img
-              src="/vch-logo.png"
-              alt="Virtual Car Hire"
-              className="h-full w-full object-contain p-0.5"
-            />
+            <BrandLogo className="h-full w-full object-contain p-0.5" />
           </div>
           <div className="flex items-center gap-2 text-sm font-semibold text-[#ff8a3d]">
             <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#ff8a3d] border-t-transparent" />
