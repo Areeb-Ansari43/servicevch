@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { requestLoginCode, verifyLoginCode } from "@/lib/auth-otp.functions";
 import { WEBSITE_BASE_URL } from "@/lib/domain-config";
 import { RouteErrorBoundary } from "@/components/error-boundary";
+import { BrandLogo } from "@/components/brand-logo";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -27,22 +28,6 @@ function LoginPageWithBoundary() {
     >
       <LoginPage />
     </RouteErrorBoundary>
-  );
-}
-
-function PoweredBy() {
-  return (
-    <p className="mt-6 text-center text-xs text-slate-400/80">
-      Powered by{" "}
-      <a
-        href={WEBSITE_BASE_URL}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="font-semibold text-[#ff8a3d] hover:text-[#ffab74]"
-      >
-        Virtual Car Hire
-      </a>
-    </p>
   );
 }
 
@@ -200,210 +185,221 @@ function LoginPage() {
   };
 
   const inputCls =
-    "w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-[15px] text-white placeholder:text-slate-500 shadow-[inset_0_1px_0_rgba(255,255,255,0.14)] backdrop-blur-2xl transition-all focus:border-[#ff8a3d]/60 focus:bg-white/[0.09] focus:outline-none focus:ring-4 focus:ring-[#ff6a00]/15";
+    "w-full rounded-2xl border border-white/10 bg-[#141A24] px-4 py-2.5 text-sm text-white placeholder:text-slate-500 transition-all focus:border-[#ff8a3d]/60 focus:bg-[#1A2230] focus:outline-none focus:ring-2 focus:ring-[#ff6a00]/20";
 
   const glassCard =
-    "relative overflow-hidden rounded-[28px] border border-white/12 bg-white/[0.055] p-7 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.16)] backdrop-blur-3xl md:p-9";
+    "relative overflow-hidden rounded-3xl border border-white/10 bg-[#0E131B]/90 p-6 md:p-8 shadow-2xl backdrop-blur-2xl";
 
   return (
-    <div
-      className="relative flex min-h-screen items-center justify-center overflow-hidden px-4"
-      style={{
-        background: "radial-gradient(120% 90% at 50% -10%, #17161d 0%, #0a0b10 55%, #06070a 100%)",
-      }}
-    >
+    <div className="relative h-dvh w-screen overflow-hidden bg-[#0A0B10] text-white flex flex-col justify-between p-4 sm:p-6 lg:p-8 select-none dark">
+      {/* Background Gradients & Glow */}
       <div
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            "radial-gradient(46rem 32rem at 8% -8%, rgba(255,106,0,0.22), transparent 62%), radial-gradient(40rem 30rem at 100% 4%, rgba(56,189,248,0.16), transparent 62%), radial-gradient(38rem 28rem at 50% 110%, rgba(168,85,247,0.14), transparent 60%)",
-        }}
-        aria-hidden
-      />
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.035]"
-        style={{
-          backgroundImage:
-            "linear-gradient(rgba(255,255,255,.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.6) 1px, transparent 1px)",
-          backgroundSize: "56px 56px",
+            "radial-gradient(46rem 32rem at 8% -8%, rgba(255,106,0,0.18), transparent 62%), radial-gradient(40rem 30rem at 100% 4%, rgba(56,189,248,0.12), transparent 62%)",
         }}
         aria-hidden
       />
 
-      <main className="relative w-full max-w-md">
-        <div className="mb-7 flex flex-col items-center text-center">
-          <div className="mb-4 flex h-16 w-16 items-center justify-center overflow-hidden rounded-[22px] border border-white/20 bg-gradient-to-br from-[#ff7a1a] to-[#ff9d52] text-white shadow-[0_18px_40px_-12px_rgba(255,106,0,0.7),inset_0_1px_0_rgba(255,255,255,0.5)]">
+      {/* Main Content Layout */}
+      <div className="relative z-10 grid h-full w-full grid-cols-1 lg:grid-cols-[1fr_minmax(380px,32vw)_1fr] gap-6 items-center">
+        {/* Left Column: Text Block & Car Image */}
+        <div className="flex h-full flex-col justify-between pt-2 pb-4 pointer-events-none">
+          {/* Top-left Branding Text Block */}
+          <div className="pointer-events-auto space-y-2">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/15 bg-gradient-to-br from-[#ff7a1a] to-[#ff9d52] p-1 shadow-lg">
+                <BrandLogo className="h-full w-full" />
+              </div>
+              <div>
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
+                  Virtual Car Hire
+                </h1>
+                <p className="text-xs text-slate-400">Fleet Management & Operations</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Car Image at Bottom Left: Roofline at ~44% down viewport, bleeding off left edge */}
+          <div className="relative hidden sm:block w-[130%] -ml-[15%] pointer-events-none">
             <img
-              src="/vch-logo.png"
-              alt="Virtual Car Hire Logo"
-              className="h-full w-full object-contain p-0.5"
+              src="/login-bg-car.jpg"
+              alt="Fleet Vehicle"
+              className="w-full object-cover opacity-85 mix-blend-lighten"
+              style={{
+                maskImage: "linear-gradient(to top, rgba(0,0,0,1) 60%, rgba(0,0,0,0) 100%)",
+                WebkitMaskImage: "linear-gradient(to top, rgba(0,0,0,1) 60%, rgba(0,0,0,0) 100%)",
+              }}
             />
           </div>
-          <h1 className="bg-gradient-to-b from-white to-white/65 bg-clip-text text-[28px] font-bold tracking-tight text-transparent">
-            Virtual Car Hire
-          </h1>
-          <p className="mt-1 text-sm text-slate-400">Fleet Tracker — Authorised access only</p>
         </div>
 
-        {stage === "creds" ? (
-          <form onSubmit={submitCreds} className={`${glassCard} space-y-5`}>
-            <div
-              className="pointer-events-none absolute inset-x-8 -top-px h-px bg-gradient-to-r from-transparent via-white/50 to-transparent"
-              aria-hidden
-            />
-            <div>
-              <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                Email
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className={inputCls}
-                autoComplete="email"
-              />
-            </div>
-            <div>
-              <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                Password
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className={inputCls}
-                autoComplete="current-password"
-              />
-            </div>
-
-            {error && (
-              <div className="rounded-2xl border border-red-400/25 bg-red-500/10 px-4 py-2.5 text-xs text-red-200 backdrop-blur-xl">
-                {error}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="group relative w-full overflow-hidden rounded-full bg-gradient-to-b from-[#ff8226] to-[#f05f00] px-5 py-3 text-sm font-semibold text-white shadow-[0_16px_36px_-14px_rgba(255,106,0,0.85),inset_0_1px_0_rgba(255,255,255,0.4)] transition-all hover:brightness-110 active:scale-[0.985] disabled:opacity-60"
-            >
-              {loading ? "Sending code…" : "Continue"}
-            </button>
-
-            <p className="text-center text-[11px] text-slate-500">
-              Protected by two-step verification
-            </p>
-          </form>
-        ) : (
-          <div className={`${glassCard} space-y-6`}>
-            <div
-              className="pointer-events-none absolute inset-x-8 -top-px h-px bg-gradient-to-r from-transparent via-white/50 to-transparent"
-              aria-hidden
-            />
-
-            {feedback === "success" ? (
-              <div className="py-6 flex flex-col items-center justify-center space-y-3 animate-in fade-in zoom-in duration-300">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-lg shadow-emerald-500/20">
-                  <svg
-                    className="h-9 w-9 stroke-current animate-in zoom-in duration-300"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                </div>
-                <h2 className="text-lg font-bold text-white">Verification Successful!</h2>
-                <p className="text-xs text-emerald-300">Logging you in...</p>
-              </div>
-            ) : (
-              <>
-                <div className="text-center">
-                  <h2 className="text-lg font-semibold text-white">Enter your verification code</h2>
-                  <p className="mt-1.5 text-xs text-slate-400">
-                    {info ?? "Enter the 6-digit code we emailed you."}
-                  </p>
+        {/* Center/Right Column: Login Card (w-full lg:w-[32vw]) */}
+        <div className="flex flex-col justify-center items-center w-full">
+          <div className="w-full max-w-sm lg:max-w-none">
+            {stage === "creds" ? (
+              <form onSubmit={submitCreds} className={`${glassCard} space-y-4`}>
+                <div className="space-y-1">
+                  <h2 className="text-lg font-bold text-white">Sign In</h2>
+                  <p className="text-xs text-slate-400">Authorised portal access only</p>
                 </div>
 
-                <div
-                  className={`flex justify-center gap-2.5 ${feedback === "error" ? "vch-otp-error" : ""}`}
-                >
-                  {digits.map((d, i) => (
+                <div className="space-y-3 pt-1">
+                  <div>
+                    <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                      Email
+                    </label>
                     <input
-                      key={i}
-                      ref={(el) => {
-                        boxRefs.current[i] = el;
-                      }}
-                      value={d}
-                      onChange={(e) => setDigit(i, e.target.value)}
-                      onKeyDown={(e) => onKeyDown(i, e)}
-                      inputMode="numeric"
-                      autoComplete="one-time-code"
-                      maxLength={6}
-                      aria-label={`Digit ${i + 1}`}
-                      className={`vch-otp-box h-15 w-11 rounded-2xl border bg-white/[0.07] py-3.5 text-center text-xl font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] backdrop-blur-2xl focus:border-[#ff8a3d]/70 focus:outline-none focus:ring-4 focus:ring-[#ff6a00]/15 ${
-                        !d && feedback === "none" ? "vch-otp-empty" : ""
-                      } ${feedback === "success" ? "vch-otp-success" : ""} ${
-                        feedback === "error" ? "border-red-500/70 text-red-200" : "border-white/15"
-                      }`}
-                      style={{
-                        animationDelay:
-                          feedback === "success"
-                            ? `${i * 55}ms`
-                            : feedback === "none"
-                              ? `${i * 40}ms`
-                              : "0ms",
-                      }}
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="areeb@fa-ibi.co.uk"
+                      className={inputCls}
+                      autoComplete="email"
                     />
-                  ))}
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                      Password
+                    </label>
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className={inputCls}
+                      autoComplete="current-password"
+                    />
+                  </div>
                 </div>
 
                 {error && (
-                  <div className="rounded-2xl border border-red-400/25 bg-red-500/10 px-4 py-2.5 text-center text-xs text-red-200">
+                  <div className="rounded-xl border border-red-500/25 bg-red-500/10 p-2.5 text-xs text-red-200">
                     {error}
                   </div>
                 )}
-                {loading && <div className="text-center text-xs text-slate-400">Verifying…</div>}
 
-                <div className="flex items-center justify-between text-xs pt-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStage("creds");
-                      setDigits(["", "", "", "", "", ""]);
-                      setError(null);
-                      setInfo(null);
-                      setFeedback("none");
-                      submittedRef.current = false;
-                    }}
-                    className="font-medium text-slate-400 transition-colors hover:text-white"
-                  >
-                    ← Different email
-                  </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full rounded-xl bg-gradient-to-r from-[#ff7a1a] to-[#ff9d52] py-2.5 text-sm font-semibold text-white shadow-lg transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-60"
+                >
+                  {loading ? "Sending code…" : "Sign In"}
+                </button>
 
-                  <button
-                    type="button"
-                    disabled={resendCooldown > 0 || loading}
-                    onClick={handleResendCode}
-                    className="font-semibold text-[#ff8a3d] hover:text-[#ffab74] disabled:text-slate-500 transition-colors"
+                <div className="flex items-center justify-between pt-2 text-xs text-slate-400">
+                  <a
+                    href="https://wa.me/447721502779"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#ff8a3d] hover:underline"
                   >
-                    {resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : "Resend code"}
-                  </button>
+                    Contact support
+                  </a>
+                  <a
+                    href={WEBSITE_BASE_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-slate-300"
+                  >
+                    Main Website →
+                  </a>
                 </div>
-              </>
+              </form>
+            ) : (
+              <div className={`${glassCard} space-y-5`}>
+                {feedback === "success" ? (
+                  <div className="py-6 flex flex-col items-center justify-center space-y-3">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                      <svg
+                        className="h-8 w-8 stroke-current"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    </div>
+                    <h2 className="text-base font-bold text-white">Verification Successful!</h2>
+                    <p className="text-xs text-emerald-300">Logging you in...</p>
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <h2 className="text-lg font-bold text-white">Verification Code</h2>
+                      <p className="mt-1 text-xs text-slate-400">
+                        {info ?? "Enter the 6-digit code sent to your email."}
+                      </p>
+                    </div>
+
+                    <div className="flex justify-center gap-2">
+                      {digits.map((d, i) => (
+                        <input
+                          key={i}
+                          ref={(el) => {
+                            boxRefs.current[i] = el;
+                          }}
+                          value={d}
+                          onChange={(e) => setDigit(i, e.target.value)}
+                          onKeyDown={(e) => onKeyDown(i, e)}
+                          inputMode="numeric"
+                          autoComplete="one-time-code"
+                          maxLength={6}
+                          aria-label={`Digit ${i + 1}`}
+                          className="h-12 w-10 rounded-xl border border-white/15 bg-[#141A24] text-center text-lg font-semibold text-white focus:border-[#ff8a3d] focus:outline-none"
+                        />
+                      ))}
+                    </div>
+
+                    {error && (
+                      <div className="rounded-xl border border-red-500/25 bg-red-500/10 p-2 text-center text-xs text-red-200">
+                        {error}
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between text-xs">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStage("creds");
+                          setDigits(["", "", "", "", "", ""]);
+                          setError(null);
+                          setInfo(null);
+                          setFeedback("none");
+                          submittedRef.current = false;
+                        }}
+                        className="text-slate-400 hover:text-white"
+                      >
+                        ← Back
+                      </button>
+                      <button
+                        type="button"
+                        disabled={resendCooldown > 0 || loading}
+                        onClick={handleResendCode}
+                        className="text-[#ff8a3d] hover:underline disabled:text-slate-500"
+                      >
+                        {resendCooldown > 0 ? `Resend (${resendCooldown}s)` : "Resend code"}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             )}
           </div>
-        )}
+        </div>
 
-        <PoweredBy />
-        <p className="mt-2 text-center text-[11px] text-slate-600">
-          © 2026 Virtual Car Hire · Fleet Tracker
-        </p>
-      </main>
+        {/* Right Column: Spacing placeholder */}
+        <div className="hidden lg:block" />
+      </div>
+
+      {/* Footer */}
+      <footer className="relative z-10 flex items-center justify-between text-[11px] text-slate-500 pt-2 border-t border-white/5">
+        <p>© 2026 Virtual Car Hire</p>
+        <p>Fleet Management Portal</p>
+      </footer>
     </div>
   );
 }
