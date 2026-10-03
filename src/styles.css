@@ -118,6 +118,22 @@ html.light .vch-glow {
     radial-gradient(46rem 34rem at 60% 110%, rgba(139, 92, 246, 0.10), transparent 60%);
 }
 
+/* Branded VCH Logo pulse animation */
+@keyframes vchLogoPulse {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(0.98);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.vch-logo-pulse {
+  animation: vchLogoPulse 1.4s ease-in-out infinite;
+}
+
 /* Idle float for the 404 illustration */
 @keyframes vch-float {
   0%,
@@ -203,6 +219,7 @@ html.light .vch-glow {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .vch-logo-pulse,
   .vch-float,
   .vch-otp-box,
   .vch-otp-empty,

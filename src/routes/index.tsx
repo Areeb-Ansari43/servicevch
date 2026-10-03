@@ -1,3 +1,4 @@
+import { LogoLoader } from "@/components/logo-loader";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
@@ -1947,7 +1948,7 @@ function AuditLogsView({
         style={{ borderColor: T.border, background: T.panel }}
       >
         {loading ? (
-          <div className="p-12 text-center text-xs text-[#9aa5b8]">Loading audit log records…</div>
+          <LogoLoader variant="inline" />
         ) : fetchError ? (
           <div className="p-8 text-center text-xs text-[#9aa5b8]">
             <div className="text-amber-400 font-semibold mb-1">Audit Logs Currently Unavailable</div>
@@ -2256,34 +2257,7 @@ export function FleetShell({ view }: { view: View }) {
   };
 
   if (!authed) {
-    return (
-      <div
-        className="relative flex min-h-screen items-center justify-center px-4 text-[#eef2f8]"
-        style={{ background: T.bg }}
-      >
-        <div className="flex flex-col items-center text-center">
-          <div className="mb-4 flex h-14 w-14 animate-pulse items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-gradient-to-br from-[#ff7a1a] to-[#ff9d52] text-white shadow-[0_18px_40px_-12px_rgba(255,106,0,0.7)]">
-            <img
-              src="/vch-logo.png"
-              alt="Virtual Car Hire"
-              className="h-full w-full object-contain p-0.5"
-            />
-          </div>
-          <div className="flex items-center gap-2 text-sm font-semibold text-[#ff8a3d]">
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#ff8a3d] border-t-transparent" />
-            <span>Authenticating session…</span>
-          </div>
-          {authError && (
-            <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs text-red-200">
-              {authError}.{" "}
-              <a href="/login" className="font-semibold underline">
-                Return to login
-              </a>
-            </div>
-          )}
-        </div>
-      </div>
-    );
+    return <LogoLoader variant="fullscreen" />;
   }
 
   return (
@@ -2319,12 +2293,7 @@ export function FleetShell({ view }: { view: View }) {
         <Topbar vehicles={data.vehicles} goto={go} onMenu={() => setMobileNavOpen(true)} />
         <main className="mx-auto w-full max-w-[1400px] p-3 sm:p-5 xl:p-6">
           {data.loading ? (
-            <div
-              className="rounded-xl border p-12 text-center text-sm"
-              style={{ borderColor: T.border, background: T.panel, color: T.muted }}
-            >
-              Loading fleet data…
-            </div>
+            <LogoLoader variant="inline" />
           ) : view === "dashboard" ? (
             <Dashboard
               vehicles={data.vehicles}
@@ -7709,7 +7678,7 @@ function DriverPreviewModal({
         </div>
         <div className="flex-1 space-y-3 overflow-y-auto p-5">
           {leadsLoading || historyLoading ? (
-            <p className="text-sm text-[#8b95a8]">Loading WhatsApp history…</p>
+            <LogoLoader variant="inline" />
           ) : !lead ? (
             <div
               className="rounded-2xl border border-dashed p-6 text-center text-sm text-[#8b95a8]"
@@ -9301,7 +9270,7 @@ function AccidentCasesView({ toast }: { toast: (m: string, t?: Toast["type"]) =>
           className="rounded-xl border p-12 text-center text-sm"
           style={{ borderColor: T.border, background: T.panel, color: T.muted }}
         >
-          Loading cases…
+          <LogoLoader variant="inline" />
         </div>
       ) : accidents.length === 0 ? (
         <div
