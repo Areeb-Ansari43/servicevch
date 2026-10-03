@@ -3,15 +3,32 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { getRuntimeEnv } from "@/integrations/supabase/config";
 import { sendWhatsAppText } from "@/lib/meta-whatsapp.server";
 
-// In-memory rate limiting store for external API requests
-const requestIpStore = new Map<string, number[]>();
+export async function checkDurableRateLimit(
+  key: string,
+  action: string,
+  limit: number,
+  windowMinutes = 15
+): Promise<boolean> {
+  const windowAgo = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString();
 
-export function checkRateLimit(ip: string, limit = 5, windowMs = 15 * 60 * 1000): boolean {
-  const now = Date.now();
-  const timestamps = (requestIpStore.get(ip) || []).filter((t) => now - t < windowMs);
-  if (timestamps.length >= limit) return false;
-  timestamps.push(now);
-  requestIpStore.set(ip, timestamps);
+  // Count recent records in portal_rate_limits
+  const { data, count, error } = await supabaseAdmin
+    .from("portal_rate_limits")
+    .select("id", { count: "exact" })
+    .eq("key", key)
+    .eq("action", action)
+    .gte("created_at", windowAgo);
+
+  if (!error && count !== null && count >= limit) {
+    return false;
+  }
+
+  // Record this attempt
+  await supabaseAdmin.from("portal_rate_limits").insert({
+    key,
+    action,
+  });
+
   return true;
 }
 
@@ -72,7 +89,6 @@ export async function sendOtpEmail(targetEmail: string, code: string) {
   </body>
 </html>`;
 
-  // Try edge function first
   try {
     const { data: edgeRes, error: edgeErr } = await supabaseAdmin.functions.invoke("send-email", {
       body: {
@@ -121,7 +137,7 @@ export const Route = createFileRoute("/api/public/portal-auth/request-code")({
 });
 
 export async function handleRequestCode(request: Request): Promise<Response> {
-  // Secret verification
+  // 1. Secret verification
   const portalSecret = getRuntimeEnv("PORTAL_SHARED_SECRET");
   const reqSecret = request.headers.get("X-Portal-Secret");
 
@@ -132,15 +148,7 @@ export async function handleRequestCode(request: Request): Promise<Response> {
     });
   }
 
-  // IP rate limiting
-  const clientIp = request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || "unknown";
-  if (!checkRateLimit(clientIp)) {
-    return new Response(JSON.stringify({ error: "Too many requests. Please try again later." }), {
-      status: 429,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
+  // Parse body
   let body: any = {};
   try {
     body = await request.json();
@@ -154,17 +162,22 @@ export async function handleRequestCode(request: Request): Promise<Response> {
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   const password = typeof body.password === "string" ? body.password : "";
 
-  if (!email || !password) {
+  if (!email || !password || email === "admin@fa-ibi.co.uk") {
     return new Response(JSON.stringify({ error: "Invalid email or password" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
     });
   }
 
-  // Restrict staff accounts from using portal endpoints
-  if (email === "admin@fa-ibi.co.uk") {
-    return new Response(JSON.stringify({ error: "Invalid email or password" }), {
-      status: 400,
+  // 2. Durable rate limiting by End-User IP (X-Client-IP) and Email (5 requests / 15 mins)
+  const clientIp = request.headers.get("X-Client-IP") || request.headers.get("cf-connecting-ip") || "unknown";
+
+  const ipAllowed = await checkDurableRateLimit(`ip:${clientIp}`, "request_code", 5, 15);
+  const emailAllowed = await checkDurableRateLimit(`email:${email}`, "request_code", 5, 15);
+
+  if (!ipAllowed || !emailAllowed) {
+    return new Response(JSON.stringify({ error: "Too many requests. Please try again later." }), {
+      status: 429,
       headers: { "Content-Type": "application/json" },
     });
   }
@@ -174,7 +187,7 @@ export async function handleRequestCode(request: Request): Promise<Response> {
     headers: { "Content-Type": "application/json" },
   });
 
-  // Verify driver credentials via Supabase Auth
+  // 3. Verify driver credentials via Supabase Auth
   const { data: authRes, error: authErr } = await supabaseAdmin.auth.signInWithPassword({
     email,
     password,
@@ -184,7 +197,7 @@ export async function handleRequestCode(request: Request): Promise<Response> {
     return genericAuthError;
   }
 
-  // Restrict to portal driver accounts linked to an active, non-deleted driver_tracks row
+  // Restrict to active driver portal customer accounts
   const { data: driverMatch } = await supabaseAdmin
     .from("driver_tracks")
     .select("id, active, deleted_at, phone")

@@ -21,7 +21,17 @@ ALTER TABLE public.login_otps ADD COLUMN IF NOT EXISTS attempts_count integer NO
 CREATE INDEX IF NOT EXISTS idx_login_otps_email ON public.login_otps (email);
 CREATE INDEX IF NOT EXISTS idx_login_otps_expires ON public.login_otps (expires_at);
 
--- 3. Audit logs table
+-- 3. Durable rate limits table for server-to-server portal auth
+CREATE TABLE IF NOT EXISTS public.portal_rate_limits (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  key text NOT NULL,
+  action text NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_portal_rate_limits_key_action ON public.portal_rate_limits (key, action, created_at);
+
+-- 4. Audit logs table
 CREATE TABLE IF NOT EXISTS public.audit_logs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   timestamp timestamp with time zone DEFAULT now() NOT NULL,
@@ -32,7 +42,7 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
   details jsonb DEFAULT '{}'::jsonb
 );
 
--- 4. Email log table
+-- 5. Email log table
 CREATE TABLE IF NOT EXISTS public.email_log (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   recipient text NOT NULL,
@@ -44,7 +54,7 @@ CREATE TABLE IF NOT EXISTS public.email_log (
   created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
--- 5. Driver notifications table
+-- 6. Driver notifications table
 CREATE TABLE IF NOT EXISTS public.driver_notifications (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   driver_id uuid REFERENCES public.driver_tracks(id) ON DELETE CASCADE,
@@ -55,7 +65,7 @@ CREATE TABLE IF NOT EXISTS public.driver_notifications (
   created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
--- 6. Driver charges table
+-- 7. Driver charges table
 CREATE TABLE IF NOT EXISTS public.driver_charges (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   driver_id uuid REFERENCES public.driver_tracks(id) ON DELETE CASCADE NOT NULL,

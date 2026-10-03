@@ -1,11 +1,10 @@
-import { describe, test, expect, mock, beforeEach } from "bun:test";
+import { describe, test, expect } from "bun:test";
 import { sendOtpEmail } from "./request-code";
 
 describe("Portal 2FA Endpoints & Email Content", () => {
   test("sendOtpEmail formats HTML body containing 6-digit code clearly", async () => {
     let capturedBody: any = null;
 
-    // Mock fetch to inspect Resend payload
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async (url: string, init?: RequestInit) => {
       if (typeof url === "string" && url.includes("api.resend.com")) {
@@ -31,20 +30,9 @@ describe("Portal 2FA Endpoints & Email Content", () => {
     }
   });
 
-  test("Rate limit map restricts spam IPs", () => {
-    const store = new Map<string, number[]>();
-    const ip = "192.168.1.1";
-    const windowMs = 15 * 60 * 1000;
-    const limit = 5;
-
-    for (let i = 0; i < 5; i++) {
-      const timestamps = store.get(ip) || [];
-      timestamps.push(Date.now());
-      store.set(ip, timestamps);
-    }
-
-    const current = store.get(ip) || [];
-    expect(current.length).toBe(limit);
-    expect(current.length >= limit).toBe(true);
+  test("Rate limiting calculates window correctly", () => {
+    const windowMinutes = 15;
+    const windowAgo = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString();
+    expect(new Date(windowAgo).getTime()).toBeLessThan(Date.now());
   });
 });

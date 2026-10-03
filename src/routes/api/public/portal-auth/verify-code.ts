@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { getRuntimeEnv } from "@/integrations/supabase/config";
+import { checkDurableRateLimit } from "./request-code";
 
 async function sha256(input: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
@@ -18,7 +19,7 @@ export const Route = createFileRoute("/api/public/portal-auth/verify-code")({
 });
 
 export async function handleVerifyCode(request: Request): Promise<Response> {
-  // Secret verification
+  // 1. Secret verification
   const portalSecret = getRuntimeEnv("PORTAL_SHARED_SECRET");
   const reqSecret = request.headers.get("X-Portal-Secret");
 
@@ -49,6 +50,19 @@ export async function handleVerifyCode(request: Request): Promise<Response> {
 
   if (!email || !code || !/^\d{6}$/.test(code) || email === "admin@fa-ibi.co.uk") {
     return genericInvalidError;
+  }
+
+  // 2. Rate limit verify attempts: 10 per 15 minutes per email and end-user IP
+  const clientIp = request.headers.get("X-Client-IP") || request.headers.get("cf-connecting-ip") || "unknown";
+
+  const ipAllowed = await checkDurableRateLimit(`ip:${clientIp}`, "verify_code", 10, 15);
+  const emailAllowed = await checkDurableRateLimit(`email:${email}`, "verify_code", 10, 15);
+
+  if (!ipAllowed || !emailAllowed) {
+    return new Response(
+      JSON.stringify({ error: "Too many failed attempts. Please try again later." }),
+      { status: 429, headers: { "Content-Type": "application/json" } }
+    );
   }
 
   const codeHash = await sha256(`${email}:${code}`);
@@ -94,10 +108,7 @@ export async function handleVerifyCode(request: Request): Promise<Response> {
     return genericInvalidError;
   }
 
-  // Mark code as single-use consumed
-  await supabaseAdmin.from("login_otps").update({ consumed: true }).eq("id", row.id);
-
-  // Verify driver record is active before minting token
+  // Restrict to active driver portal customer accounts before session exchange
   const { data: driverMatch } = await supabaseAdmin
     .from("driver_tracks")
     .select("id, active, deleted_at, auth_user_id")
@@ -109,7 +120,10 @@ export async function handleVerifyCode(request: Request): Promise<Response> {
     return genericInvalidError;
   }
 
-  // Mint magiclink session on-the-fly via Supabase Admin API
+  // Mark code as single-use consumed
+  await supabaseAdmin.from("login_otps").update({ consumed: true }).eq("id", row.id);
+
+  // Mint magiclink link
   const { data: link, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
     type: "magiclink",
     email,
@@ -122,12 +136,25 @@ export async function handleVerifyCode(request: Request): Promise<Response> {
     });
   }
 
+  // Server-side exchange of token_hash for real access_token and refresh_token
+  const { data: sessionRes, error: sessionErr } = await supabaseAdmin.auth.verifyOtp({
+    token_hash: link.properties.hashed_token,
+    type: "magiclink",
+  });
+
+  if (sessionErr || !sessionRes.session) {
+    return new Response(JSON.stringify({ error: "Failed to establish login session." }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   return new Response(
     JSON.stringify({
       success: true,
       session: {
-        access_token: link.properties.hashed_token,
-        refresh_token: link.properties.hashed_token,
+        access_token: sessionRes.session.access_token,
+        refresh_token: sessionRes.session.refresh_token,
       },
       driver: {
         id: driverMatch?.id || null,
