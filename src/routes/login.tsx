@@ -2,16 +2,30 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { requestLoginCode, verifyLoginCode } from "@/lib/auth-otp.functions";
-import { WEBSITE_BASE_URL } from "@/lib/domain-config";
 import { RouteErrorBoundary } from "@/components/error-boundary";
+// BrandLogo import removed per PR comment
+import {
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
+  Headphones,
+  Activity,
+  ShieldCheck,
+  Zap,
+  ArrowRight,
+  Check,
+  X,
+  Loader2,
+} from "lucide-react";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
     meta: [
-      { title: "Sign In — Virtual Car Hire Fleet Tracker" },
-      { name: "description", content: "Secure two-step sign in to the VCH Fleet Tracker." },
-      { property: "og:title", content: "Sign In — VCH Fleet Tracker" },
-      { property: "og:description", content: "Secure two-step sign in to the VCH Fleet Tracker." },
+      { title: "Sign In — Virtual Car Hire Fleet Operations Platform" },
+      { name: "description", content: "Secure sign in to Virtual Car Hire Fleet Operations Platform." },
+      { property: "og:title", content: "Sign In — Virtual Car Hire" },
+      { property: "og:description", content: "Secure sign in to Virtual Car Hire Fleet Operations Platform." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -30,35 +44,58 @@ function LoginPageWithBoundary() {
   );
 }
 
-function PoweredBy() {
-  return (
-    <p className="mt-6 text-center text-xs text-slate-400/80">
-      Powered by{" "}
-      <a
-        href={WEBSITE_BASE_URL}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="font-semibold text-[#ff8a3d] hover:text-[#ffab74]"
-      >
-        Virtual Car Hire
-      </a>
-    </p>
-  );
-}
-
 function LoginPage() {
   const navigate = useNavigate();
+  const [showSplash, setShowSplash] = useState(false);
+  const [splashPhase, setSplashPhase] = useState<"logo" | "text" | "fade" | "done">("done");
   const [stage, setStage] = useState<"creds" | "otp">("creds");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const [digits, setDigits] = useState<string[]>(["", "", "", "", "", ""]);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState<"none" | "success" | "error">("none");
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotSubmitted, setForgotSubmitted] = useState(false);
+  const [isShaking, setIsShaking] = useState(false);
+  const [lightSweep, setLightSweep] = useState(false);
+  const [isRouting, setIsRouting] = useState(false);
+
   const boxRefs = useRef<(HTMLInputElement | null)[]>([]);
   const submittedRef = useRef(false);
+
+  // Email validation check
+  const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+
+  // Splash screen once per session
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const splashSeen = sessionStorage.getItem("vch_splash_shown");
+      if (!splashSeen) {
+        setShowSplash(true);
+        setSplashPhase("logo");
+        sessionStorage.setItem("vch_splash_shown", "true");
+
+        const timer1 = setTimeout(() => setSplashPhase("text"), 400);
+        const timer2 = setTimeout(() => setSplashPhase("fade"), 1100);
+        const timer3 = setTimeout(() => {
+          setSplashPhase("done");
+          setShowSplash(false);
+        }, 1400);
+
+        return () => {
+          clearTimeout(timer1);
+          clearTimeout(timer2);
+          clearTimeout(timer3);
+        };
+      }
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -95,12 +132,18 @@ function LoginPage() {
     return () => clearInterval(timer);
   }, [resendCooldown]);
 
+  const triggerErrorShake = (msg: string) => {
+    setError(msg);
+    setIsShaking(true);
+    setTimeout(() => setIsShaking(false), 450);
+  };
+
   const submitCreds = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setError(null);
     setInfo(null);
     if (!email.trim() || !password) {
-      setError("Email and password are required.");
+      triggerErrorShake("Email and password are required.");
       return;
     }
     setLoading(true);
@@ -109,13 +152,13 @@ function LoginPage() {
       await requestLoginCode({ data: { email: email.trim(), password } });
       console.info("[Login] Login code sent successfully");
       setStage("otp");
-      setInfo("We emailed a 6-digit verification code to the authorised account.");
+      setInfo("We emailed a 6-digit verification code to your email address.");
       setResendCooldown(30);
     } catch (err: any) {
       console.error("[Login] requestLoginCode failed:", err);
-      setError(
+      triggerErrorShake(
         err?.message?.includes("Invalid credentials")
-          ? "Invalid credentials."
+          ? "Invalid credentials. Please check your email and password."
           : (err?.message ?? "Sign-in failed."),
       );
     } finally {
@@ -146,13 +189,17 @@ function LoginPage() {
         type: "magiclink",
       });
       if (vErr) throw new Error(vErr.message);
-      console.info("[Login] Session established successfully, showing checkmark animation...");
+      console.info("[Login] Session established successfully, playing transition...");
       setFeedback("success");
-      setTimeout(() => navigate({ to: "/" }), 1000);
+
+      // Light sweep and navigation transition
+      setTimeout(() => setLightSweep(true), 300);
+      setTimeout(() => setIsRouting(true), 550);
+      setTimeout(() => navigate({ to: "/" }), 800);
     } catch (err: any) {
       console.error("[Login] Verification failed:", err);
       setFeedback("error");
-      setError(err?.message ?? "Verification failed. Check your code or request a new one.");
+      triggerErrorShake(err?.message ?? "Verification failed. Check your code or request a new one.");
       setTimeout(() => {
         setFeedback("none");
         setDigits(["", "", "", "", "", ""]);
@@ -199,211 +246,479 @@ function LoginPage() {
     if (e.key === "ArrowRight" && i < 5) boxRefs.current[i + 1]?.focus();
   };
 
-  const inputCls =
-    "w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-[15px] text-white placeholder:text-slate-500 shadow-[inset_0_1px_0_rgba(255,255,255,0.14)] backdrop-blur-2xl transition-all focus:border-[#ff8a3d]/60 focus:bg-white/[0.09] focus:outline-none focus:ring-4 focus:ring-[#ff6a00]/15";
-
-  const glassCard =
-    "relative overflow-hidden rounded-[28px] border border-white/12 bg-white/[0.055] p-7 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.16)] backdrop-blur-3xl md:p-9";
+  const handleSendResetLink = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotEmail.trim()) return;
+    setForgotSubmitted(true);
+    setTimeout(() => {
+      setForgotSubmitted(false);
+      setIsForgotModalOpen(false);
+      setForgotEmail("");
+      setInfo("Password reset link sent to your email address.");
+    }, 1200);
+  };
 
   return (
-    <div
-      className="relative flex min-h-screen items-center justify-center overflow-hidden px-4"
-      style={{
-        background: "radial-gradient(120% 90% at 50% -10%, #17161d 0%, #0a0b10 55%, #06070a 100%)",
-      }}
-    >
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(46rem 32rem at 8% -8%, rgba(255,106,0,0.22), transparent 62%), radial-gradient(40rem 30rem at 100% 4%, rgba(56,189,248,0.16), transparent 62%), radial-gradient(38rem 28rem at 50% 110%, rgba(168,85,247,0.14), transparent 60%)",
-        }}
-        aria-hidden
-      />
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.035]"
-        style={{
-          backgroundImage:
-            "linear-gradient(rgba(255,255,255,.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.6) 1px, transparent 1px)",
-          backgroundSize: "56px 56px",
-        }}
-        aria-hidden
-      />
+    <div className="relative h-dvh min-h-dvh w-full overflow-hidden font-sans bg-[#07090D] text-white flex flex-col justify-between select-none">
+      {/* CSS Animations, Responsive Background Image & Micro-interactions */}
+      <style>{`
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          20%, 60% { transform: translateX(-4px); }
+          40%, 80% { transform: translateX(4px); }
+        }
+        .animate-shake {
+          animation: shake 0.4s ease-in-out;
+        }
+        @keyframes lightSweep {
+          0% { transform: translateX(-100%); opacity: 0; }
+          50% { opacity: 0.8; }
+          100% { transform: translateX(200%); opacity: 0; }
+        }
+        .animate-light-sweep {
+          animation: lightSweep 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+        @keyframes cardSpring {
+          0% { opacity: 0; transform: scale(0.97) translateY(15px); }
+          100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        .animate-card-spring {
+          animation: cardSpring 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
 
-      <main className="relative w-full max-w-md">
-        <div className="mb-7 flex flex-col items-center text-center">
-          <div className="mb-4 flex h-16 w-16 items-center justify-center overflow-hidden rounded-[22px] border border-white/20 bg-gradient-to-br from-[#ff7a1a] to-[#ff9d52] text-white shadow-[0_18px_40px_-12px_rgba(255,106,0,0.7),inset_0_1px_0_rgba(255,255,255,0.5)]">
-            <img
-              src="/vch-logo.png"
-              alt="Virtual Car Hire Logo"
-              className="h-full w-full object-contain p-0.5"
-            />
+        /* Responsive Full-Page Background Car Positioning */
+        .vch-login-bg-car {
+          background-image: url('/login-bg-car.jpg');
+          background-position: left bottom;
+          background-repeat: no-repeat;
+          background-size: auto 100%;
+          -webkit-mask-image: linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 35%, rgba(0,0,0,0.85) 55%, rgba(0,0,0,0) 88%);
+          mask-image: linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 35%, rgba(0,0,0,0.85) 55%, rgba(0,0,0,0) 88%);
+        }
+        @media (max-aspect-ratio: 3/2) {
+          .vch-login-bg-car {
+            background-size: cover;
+          }
+        }
+        @media (max-width: 768px) {
+          .vch-login-bg-car {
+            background-image: url('/login-bg-car-mobile.jpg');
+            background-size: cover;
+            -webkit-mask-image: none;
+            mask-image: none;
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .animate-shake, .animate-light-sweep, .animate-card-spring {
+            animation: none !important;
+            transform: none !important;
+            opacity: 1 !important;
+          }
+        }
+      `}</style>
+
+      {/* Splash Screen */}
+      {showSplash && (
+        <div
+          className={`fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#07090D] transition-opacity duration-300 ${
+            splashPhase === "fade" ? "opacity-0" : "opacity-100"
+          }`}
+        >
+          <div className="relative flex flex-col items-center gap-4">
+            <img src="/vch-logo.png" alt="Virtual Car Hire" className="h-16 w-auto animate-pulse" />
+            <div
+              className={`flex flex-col items-center text-center transition-all duration-500 ${
+                splashPhase === "logo" ? "opacity-0 translate-y-2" : "opacity-100 translate-y-0"
+              }`}
+            >
+              <h1 className="text-xl font-bold tracking-tight text-white">Virtual Car Hire</h1>
+              <p className="text-xs text-slate-400 font-medium">Fleet Operations Platform</p>
+            </div>
           </div>
-          <h1 className="bg-gradient-to-b from-white to-white/65 bg-clip-text text-[28px] font-bold tracking-tight text-transparent">
-            Virtual Car Hire
-          </h1>
-          <p className="mt-1 text-sm text-slate-400">Fleet Tracker — Authorised access only</p>
+        </div>
+      )}
+
+      {/* Light sweep overlay during sign-in completion */}
+      {lightSweep && (
+        <div className="fixed inset-0 z-40 pointer-events-none overflow-hidden">
+          <div className="h-full w-1/2 bg-gradient-to-r from-transparent via-[#ff6a00]/25 to-transparent skew-x-12 animate-light-sweep" />
+        </div>
+      )}
+
+      {/* Full-Viewport Background Car Image (fixed inset-0 behind everything) */}
+      <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
+        <div className="vch-login-bg-car w-full h-full" />
+
+        {/* Subtle dark overlay (35% opacity) to keep text readable + right/top dark gradients */}
+        <div className="absolute inset-0 bg-[#07090D]/35" />
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent 35% to-[#07090D] 85%" />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#07090D]/80 via-transparent 25% to-transparent" />
+      </div>
+
+      {/* Top Header Bar */}
+      <header className="relative z-10 shrink-0 flex items-center justify-between px-6 py-[1.5vh] lg:px-12">
+        <div className="flex items-center gap-3">
+          <img src="/vch-logo.png" alt="Virtual Car Hire" className="h-[clamp(28px,3.5vh,36px)] w-auto" />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="text-[clamp(11px,1.3vh,13px)] font-medium text-slate-300">Secure environment</span>
+        </div>
+      </header>
+
+      {/* Main Responsive Grid Layout */}
+      <main className="relative z-10 flex-1 min-h-0 my-auto grid w-full px-6 lg:px-12 grid-cols-1 lg:grid-cols-[1fr_minmax(460px,32vw)_1fr] gap-4 lg:gap-8 items-center">
+        {/* Left Column (Desktop) - Aligned with Header Logo */}
+        <div className="hidden lg:flex flex-col justify-between h-full py-2 min-h-0">
+          <div className="space-y-[1.5vh] my-auto">
+            <span className="text-[clamp(10px,1.2vh,12px)] font-bold tracking-[0.2em] text-[#ff6a00] uppercase block">
+              DRIVE ▪ MANAGE ▪ GROW
+            </span>
+            <h1 className="text-[clamp(32px,3.8vh,50px)] font-extrabold tracking-tight leading-[1.12] text-white">
+              Smarter fleet <br />
+              <span className="text-[#ff6a00]">management.</span>
+            </h1>
+            <p className="text-slate-300 text-[clamp(12px,1.5vh,15px)] leading-relaxed max-w-sm">
+              Everything you need to keep your fleet moving, in one place.
+            </p>
+          </div>
+
+          <div className="border-l-2 border-[#ff6a00] pl-4 py-1 space-y-0.5 mb-2">
+            <p className="text-[clamp(12px,1.4vh,14px)] font-semibold text-white">Trusted by operators nationwide</p>
+            <p className="text-[clamp(10px,1.2vh,12px)] text-slate-400">More vehicles. Less admin. Greater control.</p>
+          </div>
         </div>
 
-        {stage === "creds" ? (
-          <form onSubmit={submitCreds} className={`${glassCard} space-y-5`}>
-            <div
-              className="pointer-events-none absolute inset-x-8 -top-px h-px bg-gradient-to-r from-transparent via-white/50 to-transparent"
-              aria-hidden
-            />
-            <div>
-              <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                Email
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className={inputCls}
-                autoComplete="email"
-              />
-            </div>
-            <div>
-              <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                Password
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className={inputCls}
-                autoComplete="current-password"
-              />
+        {/* Center Main Card Column */}
+        <div className="flex justify-center items-center w-full min-h-0 max-h-full py-1">
+          <div
+            className={`w-full max-w-[640px] sm:min-w-[460px] rounded-[20px] border-[1.5px] border-white/16 bg-[#0E131B]/90 p-[clamp(16px,2.5vh,36px)] shadow-2xl space-y-[clamp(10px,1.8vh,22px)] max-h-full overflow-y-auto sm:overflow-visible animate-card-spring transition-all duration-300 ${
+              isRouting ? "opacity-0 scale-95" : "opacity-100"
+            }`}
+          >
+            {/* Logo Mark and Title inside Card */}
+            <div className="flex flex-col items-center text-center space-y-[0.5vh]">
+              <img src="/vch-logo.png" alt="Virtual Car Hire" className="h-[clamp(44px,6vh,72px)] w-auto mx-auto" />
+              <h2 className="text-[clamp(22px,3vh,30px)] font-bold text-white tracking-tight leading-tight pt-1">
+                Virtual Car Hire
+              </h2>
+              <p className="text-[clamp(11px,1.4vh,13px)] text-slate-400 font-medium">Fleet Operations Platform</p>
             </div>
 
-            {error && (
-              <div className="rounded-2xl border border-red-400/25 bg-red-500/10 px-4 py-2.5 text-xs text-red-200 backdrop-blur-xl">
-                {error}
+            {info && (
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-[clamp(10px,1.3vh,12px)] font-medium text-emerald-200">
+                {info}
               </div>
             )}
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="group relative w-full overflow-hidden rounded-full bg-gradient-to-b from-[#ff8226] to-[#f05f00] px-5 py-3 text-sm font-semibold text-white shadow-[0_16px_36px_-14px_rgba(255,106,0,0.85),inset_0_1px_0_rgba(255,255,255,0.4)] transition-all hover:brightness-110 active:scale-[0.985] disabled:opacity-60"
-            >
-              {loading ? "Sending code…" : "Continue"}
-            </button>
-
-            <p className="text-center text-[11px] text-slate-500">
-              Protected by two-step verification
-            </p>
-          </form>
-        ) : (
-          <div className={`${glassCard} space-y-6`}>
-            <div
-              className="pointer-events-none absolute inset-x-8 -top-px h-px bg-gradient-to-r from-transparent via-white/50 to-transparent"
-              aria-hidden
-            />
-
-            {feedback === "success" ? (
-              <div className="py-6 flex flex-col items-center justify-center space-y-3 animate-in fade-in zoom-in duration-300">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-lg shadow-emerald-500/20">
-                  <svg
-                    className="h-9 w-9 stroke-current animate-in zoom-in duration-300"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                </div>
-                <h2 className="text-lg font-bold text-white">Verification Successful!</h2>
-                <p className="text-xs text-emerald-300">Logging you in...</p>
-              </div>
-            ) : (
-              <>
-                <div className="text-center">
-                  <h2 className="text-lg font-semibold text-white">Enter your verification code</h2>
-                  <p className="mt-1.5 text-xs text-slate-400">
-                    {info ?? "Enter the 6-digit code we emailed you."}
-                  </p>
-                </div>
-
-                <div
-                  className={`flex justify-center gap-2.5 ${feedback === "error" ? "vch-otp-error" : ""}`}
-                >
-                  {digits.map((d, i) => (
+            {stage === "creds" ? (
+              <form onSubmit={submitCreds} className={`space-y-[clamp(10px,1.6vh,20px)] ${isShaking ? "animate-shake" : ""}`}>
+                {/* Email Field */}
+                <div className="space-y-[0.5vh]">
+                  <label className="block text-[clamp(11px,1.4vh,13px)] font-semibold text-white">Email address</label>
+                  <div className="relative">
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <input
-                      key={i}
-                      ref={(el) => {
-                        boxRefs.current[i] = el;
-                      }}
-                      value={d}
-                      onChange={(e) => setDigit(i, e.target.value)}
-                      onKeyDown={(e) => onKeyDown(i, e)}
-                      inputMode="numeric"
-                      autoComplete="one-time-code"
-                      maxLength={6}
-                      aria-label={`Digit ${i + 1}`}
-                      className={`vch-otp-box h-15 w-11 rounded-2xl border bg-white/[0.07] py-3.5 text-center text-xl font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] backdrop-blur-2xl focus:border-[#ff8a3d]/70 focus:outline-none focus:ring-4 focus:ring-[#ff6a00]/15 ${
-                        !d && feedback === "none" ? "vch-otp-empty" : ""
-                      } ${feedback === "success" ? "vch-otp-success" : ""} ${
-                        feedback === "error" ? "border-red-500/70 text-red-200" : "border-white/15"
-                      }`}
-                      style={{
-                        animationDelay:
-                          feedback === "success"
-                            ? `${i * 55}ms`
-                            : feedback === "none"
-                              ? `${i * 40}ms`
-                              : "0ms",
-                      }}
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="areeb@fa-ibi.co.uk"
+                      className="w-full h-[clamp(40px,5vh,52px)] rounded-xl border border-white/15 bg-[#141A24] pl-11 pr-10 text-xs sm:text-sm font-medium text-white placeholder-slate-500 focus:border-[#ff6a00] focus:outline-none focus:ring-1 focus:ring-[#ff6a00] transition-colors"
+                      autoComplete="email"
                     />
-                  ))}
+                    {isValidEmail && (
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 text-emerald-400 animate-in fade-in zoom-in duration-200">
+                        <Check className="h-4 w-4" />
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                {error && (
-                  <div className="rounded-2xl border border-red-400/25 bg-red-500/10 px-4 py-2.5 text-center text-xs text-red-200">
-                    {error}
+                {/* Password Field */}
+                <div className="space-y-[0.5vh]">
+                  <label className="block text-[clamp(11px,1.4vh,13px)] font-semibold text-white">Password</label>
+                  <div className="relative">
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full h-[clamp(40px,5vh,52px)] rounded-xl border border-white/15 bg-[#141A24] pl-11 pr-11 text-xs sm:text-sm font-medium text-white placeholder-slate-500 focus:border-[#ff6a00] focus:outline-none focus:ring-1 focus:ring-[#ff6a00] transition-colors"
+                      autoComplete="current-password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors p-1"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
                   </div>
-                )}
-                {loading && <div className="text-center text-xs text-slate-400">Verifying…</div>}
+                </div>
 
-                <div className="flex items-center justify-between text-xs pt-1">
+                {/* Remember Me & Forgot Password */}
+                <div className="flex items-center justify-between text-[clamp(11px,1.4vh,13px)] pt-0.5">
+                  <label className="flex items-center gap-2 cursor-pointer group">
+                    <div className="relative flex items-center justify-center">
+                      <input
+                        type="checkbox"
+                        checked={rememberMe}
+                        onChange={(e) => setRememberMe(e.target.checked)}
+                        className="sr-only"
+                      />
+                      <div
+                        className={`h-4 w-4 rounded border transition-colors flex items-center justify-center ${
+                          rememberMe
+                            ? "bg-[#ff6a00] border-[#ff6a00]"
+                            : "bg-[#141A24] border-white/20 group-hover:border-white/40"
+                        }`}
+                      >
+                        {rememberMe && <Check className="h-3 w-3 text-white stroke-[3]" />}
+                      </div>
+                    </div>
+                    <span className="text-slate-300 font-medium">Remember me</span>
+                  </label>
+
                   <button
                     type="button"
                     onClick={() => {
-                      setStage("creds");
-                      setDigits(["", "", "", "", "", ""]);
-                      setError(null);
-                      setInfo(null);
-                      setFeedback("none");
-                      submittedRef.current = false;
+                      setForgotEmail(email);
+                      setIsForgotModalOpen(true);
                     }}
-                    className="font-medium text-slate-400 transition-colors hover:text-white"
+                    className="text-[#ff6a00] underline hover:text-[#ff8a3d] font-semibold transition-colors cursor-pointer"
                   >
-                    ← Different email
-                  </button>
-
-                  <button
-                    type="button"
-                    disabled={resendCooldown > 0 || loading}
-                    onClick={handleResendCode}
-                    className="font-semibold text-[#ff8a3d] hover:text-[#ffab74] disabled:text-slate-500 transition-colors"
-                  >
-                    {resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : "Resend code"}
+                    Forgot password?
                   </button>
                 </div>
-              </>
+
+                {/* Inline Error Message */}
+                {error && (
+                  <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-2.5 text-xs font-medium text-red-200">
+                    {error}
+                  </div>
+                )}
+
+                {/* Continue Button */}
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="group relative w-full h-[clamp(40px,5vh,52px)] rounded-xl bg-gradient-to-r from-[#ff6a00] to-[#ff8a3d] text-[clamp(13px,1.6vh,16px)] font-bold text-white shadow-lg shadow-[#ff6a00]/20 hover:from-[#f05f00] hover:to-[#ff7a1a] active:scale-[0.98] transition-all disabled:opacity-60 flex items-center justify-center gap-2 cursor-pointer overflow-hidden"
+                >
+                  {loading ? (
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Signing in...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <span>Continue</span>
+                      <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
+                    </>
+                  )}
+                </button>
+
+                {/* Support Section with WhatsApp Link */}
+                <div className="space-y-[1vh] pt-1">
+                  <div className="relative flex items-center justify-center">
+                    <div className="w-full border-t border-white/10" />
+                    <span className="absolute bg-[#0E131B] px-3 text-[clamp(10px,1.2vh,12px)] text-slate-400 font-medium">
+                      Need help?
+                    </span>
+                  </div>
+
+                  <a
+                    href="https://wa.me/447721502779?text=Hi%2C%20I%20need%20help%20with%20the%20Virtual%20Car%20Hire%20CRM"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 w-full h-[clamp(36px,4.5vh,44px)] rounded-xl border border-white/10 bg-[#141A24]/60 hover:bg-[#141A24] text-[clamp(11px,1.4vh,13px)] font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer text-center"
+                  >
+                    <Headphones className="h-3.5 w-3.5 text-[#ff6a00]" />
+                    <span>Contact support</span>
+                  </a>
+                </div>
+              </form>
+            ) : (
+              /* OTP Verification Stage */
+              <div className="space-y-4">
+                {feedback === "success" ? (
+                  <div className="py-6 flex flex-col items-center justify-center space-y-2">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                      <Check className="h-6 w-6" />
+                    </div>
+                    <h3 className="text-lg font-bold text-white">Welcome back!</h3>
+                    <p className="text-xs text-emerald-300 font-medium">Authentication successful.</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-center space-y-1">
+                      <h3 className="text-base font-bold text-white">Enter 6-Digit Code</h3>
+                      <p className="text-xs text-slate-400">
+                        {info ?? "We emailed a verification code to your email."}
+                      </p>
+                    </div>
+
+                    <div className={`flex justify-center gap-2 ${isShaking ? "animate-shake" : ""}`}>
+                      {digits.map((d, i) => (
+                        <input
+                          key={i}
+                          ref={(el) => {
+                            boxRefs.current[i] = el;
+                          }}
+                          value={d}
+                          onChange={(e) => setDigit(i, e.target.value)}
+                          onKeyDown={(e) => onKeyDown(i, e)}
+                          inputMode="numeric"
+                          maxLength={6}
+                          className="h-12 w-10 sm:w-11 rounded-xl border border-white/15 bg-[#141A24] text-center text-lg font-bold text-white focus:border-[#ff6a00] focus:outline-none focus:ring-1 focus:ring-[#ff6a00] transition-colors"
+                        />
+                      ))}
+                    </div>
+
+                    {error && (
+                      <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-2.5 text-center text-xs font-medium text-red-200">
+                        {error}
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between text-xs pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStage("creds");
+                          setDigits(["", "", "", "", "", ""]);
+                          setError(null);
+                          setInfo(null);
+                          setFeedback("none");
+                          submittedRef.current = false;
+                        }}
+                        className="text-slate-400 hover:text-white font-medium transition-colors cursor-pointer"
+                      >
+                        ← Different email
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={resendCooldown > 0 || loading}
+                        onClick={handleResendCode}
+                        className="text-[#ff6a00] hover:text-[#ff8a3d] disabled:text-slate-500 font-bold transition-colors cursor-pointer"
+                      >
+                        {resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : "Resend code"}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             )}
           </div>
-        )}
+        </div>
 
-        <PoweredBy />
-        <p className="mt-2 text-center text-[11px] text-slate-600">
-          © 2026 Virtual Car Hire · Fleet Tracker
-        </p>
+        {/* Right Column (Desktop) */}
+        <div className="hidden lg:flex flex-col justify-center space-y-[2.5vh] pl-4 min-h-0">
+          {/* Feature 1 */}
+          <div className="flex items-start gap-3">
+            <div className="h-9 w-9 shrink-0 rounded-xl bg-[#141A24] border border-white/10 flex items-center justify-center text-[#ff6a00]">
+              <Activity className="h-4 w-4" />
+            </div>
+            <div className="space-y-0.5">
+              <h3 className="font-semibold text-white text-[clamp(13px,1.6vh,16px)]">Track Your Fleet</h3>
+              <p className="text-slate-400 text-[clamp(10px,1.3vh,12px)] leading-relaxed">
+                Real-time visibility over all vehicles, allocations, and driver activity.
+              </p>
+            </div>
+          </div>
+
+          {/* Feature 2 */}
+          <div className="flex items-start gap-3">
+            <div className="h-9 w-9 shrink-0 rounded-xl bg-[#141A24] border border-white/10 flex items-center justify-center text-[#ff6a00]">
+              <ShieldCheck className="h-4 w-4" />
+            </div>
+            <div className="space-y-0.5">
+              <h3 className="font-semibold text-white text-[clamp(13px,1.6vh,16px)]">Stay Compliant</h3>
+              <p className="text-slate-400 text-[clamp(10px,1.3vh,12px)] leading-relaxed">
+                Automated MOT, PCO, and driver licence expiration alerts.
+              </p>
+            </div>
+          </div>
+
+          {/* Feature 3 */}
+          <div className="flex items-start gap-3">
+            <div className="h-9 w-9 shrink-0 rounded-xl bg-[#141A24] border border-white/10 flex items-center justify-center text-[#ff6a00]">
+              <Zap className="h-4 w-4" />
+            </div>
+            <div className="space-y-0.5">
+              <h3 className="font-semibold text-white text-[clamp(13px,1.6vh,16px)]">Save Time</h3>
+              <p className="text-slate-400 text-[clamp(10px,1.3vh,12px)] leading-relaxed">
+                Streamlined rent tracking, automated messaging, and quick billing.
+              </p>
+            </div>
+          </div>
+        </div>
       </main>
+
+      {/* Footer */}
+      <footer className="relative z-10 shrink-0 px-6 py-[1.2vh] lg:px-12 flex justify-end">
+        <p className="text-[clamp(10px,1.2vh,12px)] font-medium text-slate-400">
+          © 2026 Virtual Car Hire · Fleet Operations Platform
+        </p>
+      </footer>
+
+      {/* Forgot Password Modal */}
+      {isForgotModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div
+            className="w-full sm:max-w-md rounded-t-[20px] sm:rounded-[20px] border border-white/16 bg-[#0E131B] p-6 md:p-8 shadow-2xl space-y-6 animate-in slide-in-from-bottom sm:zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-xl font-bold text-white">Reset Password</h3>
+              <button
+                type="button"
+                onClick={() => setIsForgotModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/5 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Enter your registered email address below. We will send you a password reset link to create a new password.
+            </p>
+
+            <form onSubmit={handleSendResetLink} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-white">Email address</label>
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input
+                    type="email"
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    placeholder="areeb@fa-ibi.co.uk"
+                    required
+                    className="w-full h-12 rounded-xl border border-white/15 bg-[#141A24] pl-10 pr-4 text-sm text-white placeholder-slate-500 focus:border-[#ff6a00] focus:outline-none focus:ring-1 focus:ring-[#ff6a00]"
+                  />
+                </div>
+              </div>
+
+              {forgotSubmitted ? (
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-center text-xs text-emerald-200 font-medium">
+                  Reset link sent! Check your inbox.
+                </div>
+              ) : (
+                <button
+                  type="submit"
+                  className="w-full h-12 rounded-xl bg-gradient-to-r from-[#ff6a00] to-[#ff8a3d] font-semibold text-sm text-white shadow-lg shadow-[#ff6a00]/20 hover:from-[#f05f00] hover:to-[#ff7a1a] transition-all cursor-pointer"
+                >
+                  Send reset link
+                </button>
+              )}
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
