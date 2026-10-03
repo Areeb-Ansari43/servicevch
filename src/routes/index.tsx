@@ -44,6 +44,7 @@ import { type AuditLogEntry } from "@/lib/audit-logger";
 import { WEBSITE_BASE_URL } from "@/lib/domain-config";
 import { TermsModal } from "@/components/terms-modal";
 import { RouteErrorBoundary } from "@/components/error-boundary";
+import { BrandLogo } from "@/components/brand-logo";
 import { calculateContractEndDate, getContractDaysRemaining } from "@/lib/contract-helpers";
 import {
   listPortalAuthUsers,
@@ -2258,12 +2259,8 @@ export function FleetShell({ view }: { view: View }) {
         style={{ background: T.bg }}
       >
         <div className="flex flex-col items-center text-center">
-          <div className="mb-4 flex h-14 w-14 animate-pulse items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-gradient-to-br from-[#ff7a1a] to-[#ff9d52] text-white shadow-[0_18px_40px_-12px_rgba(255,106,0,0.7)]">
-            <img
-              src="/vch-logo.png"
-              alt="Virtual Car Hire"
-              className="h-full w-full object-contain p-0.5"
-            />
+          <div className="mb-4 flex h-14 items-center justify-center animate-pulse">
+            <BrandLogo className="h-12 w-auto object-contain" />
           </div>
           <div className="flex items-center gap-2 text-sm font-semibold text-[#ff8a3d]">
             <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#ff8a3d] border-t-transparent" />
