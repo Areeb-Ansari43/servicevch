@@ -30,6 +30,8 @@ import { Route as ApiPublicExpiryAlertsRouteImport } from './routes/api/public/e
 import { Route as ApiPublicAiIntakeRouteImport } from './routes/api/public/ai-intake'
 import { Route as ApiPublicAgentWebhookRouteImport } from './routes/api/public/agent-webhook'
 import { Route as ApiJobsInactivityRouteImport } from './routes/api/jobs/inactivity'
+import { Route as ApiPublicPortalAuthVerifyCodeRouteImport } from './routes/api/public/portal-auth/verify-code'
+import { Route as ApiPublicPortalAuthRequestCodeRouteImport } from './routes/api/public/portal-auth/request-code'
 
 const WhatsappLeadsRoute = WhatsappLeadsRouteImport.update({
   id: '/whatsapp-leads',
@@ -136,6 +138,18 @@ const ApiJobsInactivityRoute = ApiJobsInactivityRouteImport.update({
   path: '/api/jobs/inactivity',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicPortalAuthVerifyCodeRoute =
+  ApiPublicPortalAuthVerifyCodeRouteImport.update({
+    id: '/api/public/portal-auth/verify-code',
+    path: '/api/public/portal-auth/verify-code',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicPortalAuthRequestCodeRoute =
+  ApiPublicPortalAuthRequestCodeRouteImport.update({
+    id: '/api/public/portal-auth/request-code',
+    path: '/api/public/portal-auth/request-code',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -159,6 +173,8 @@ export interface FileRoutesByFullPath {
   '/api/public/expiry-alerts': typeof ApiPublicExpiryAlertsRoute
   '/api/public/ocr-odometer': typeof ApiPublicOcrOdometerRoute
   '/api/public/telegram-bot': typeof ApiPublicTelegramBotRoute
+  '/api/public/portal-auth/request-code': typeof ApiPublicPortalAuthRequestCodeRoute
+  '/api/public/portal-auth/verify-code': typeof ApiPublicPortalAuthVerifyCodeRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -182,6 +198,8 @@ export interface FileRoutesByTo {
   '/api/public/expiry-alerts': typeof ApiPublicExpiryAlertsRoute
   '/api/public/ocr-odometer': typeof ApiPublicOcrOdometerRoute
   '/api/public/telegram-bot': typeof ApiPublicTelegramBotRoute
+  '/api/public/portal-auth/request-code': typeof ApiPublicPortalAuthRequestCodeRoute
+  '/api/public/portal-auth/verify-code': typeof ApiPublicPortalAuthVerifyCodeRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -206,6 +224,8 @@ export interface FileRoutesById {
   '/api/public/expiry-alerts': typeof ApiPublicExpiryAlertsRoute
   '/api/public/ocr-odometer': typeof ApiPublicOcrOdometerRoute
   '/api/public/telegram-bot': typeof ApiPublicTelegramBotRoute
+  '/api/public/portal-auth/request-code': typeof ApiPublicPortalAuthRequestCodeRoute
+  '/api/public/portal-auth/verify-code': typeof ApiPublicPortalAuthVerifyCodeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -231,6 +251,8 @@ export interface FileRouteTypes {
     | '/api/public/expiry-alerts'
     | '/api/public/ocr-odometer'
     | '/api/public/telegram-bot'
+    | '/api/public/portal-auth/request-code'
+    | '/api/public/portal-auth/verify-code'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -254,6 +276,8 @@ export interface FileRouteTypes {
     | '/api/public/expiry-alerts'
     | '/api/public/ocr-odometer'
     | '/api/public/telegram-bot'
+    | '/api/public/portal-auth/request-code'
+    | '/api/public/portal-auth/verify-code'
   id:
     | '__root__'
     | '/'
@@ -277,6 +301,8 @@ export interface FileRouteTypes {
     | '/api/public/expiry-alerts'
     | '/api/public/ocr-odometer'
     | '/api/public/telegram-bot'
+    | '/api/public/portal-auth/request-code'
+    | '/api/public/portal-auth/verify-code'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -301,6 +327,8 @@ export interface RootRouteChildren {
   ApiPublicExpiryAlertsRoute: typeof ApiPublicExpiryAlertsRoute
   ApiPublicOcrOdometerRoute: typeof ApiPublicOcrOdometerRoute
   ApiPublicTelegramBotRoute: typeof ApiPublicTelegramBotRoute
+  ApiPublicPortalAuthRequestCodeRoute: typeof ApiPublicPortalAuthRequestCodeRoute
+  ApiPublicPortalAuthVerifyCodeRoute: typeof ApiPublicPortalAuthVerifyCodeRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -452,6 +480,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiJobsInactivityRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/portal-auth/verify-code': {
+      id: '/api/public/portal-auth/verify-code'
+      path: '/api/public/portal-auth/verify-code'
+      fullPath: '/api/public/portal-auth/verify-code'
+      preLoaderRoute: typeof ApiPublicPortalAuthVerifyCodeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/portal-auth/request-code': {
+      id: '/api/public/portal-auth/request-code'
+      path: '/api/public/portal-auth/request-code'
+      fullPath: '/api/public/portal-auth/request-code'
+      preLoaderRoute: typeof ApiPublicPortalAuthRequestCodeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -477,6 +519,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicExpiryAlertsRoute: ApiPublicExpiryAlertsRoute,
   ApiPublicOcrOdometerRoute: ApiPublicOcrOdometerRoute,
   ApiPublicTelegramBotRoute: ApiPublicTelegramBotRoute,
+  ApiPublicPortalAuthRequestCodeRoute: ApiPublicPortalAuthRequestCodeRoute,
+  ApiPublicPortalAuthVerifyCodeRoute: ApiPublicPortalAuthVerifyCodeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
