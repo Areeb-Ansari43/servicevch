@@ -117,9 +117,9 @@ function VehicleDetailPage() {
         style={{ background: T.bg }}
       >
         <div className="flex flex-col items-center text-center">
-          <div className="mb-4 flex h-14 w-14 animate-pulse items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-gradient-to-br from-[#ff7a1a] to-[#ff9d52] text-white shadow-[0_18px_40px_-12px_rgba(255,106,0,0.7)]">
+            <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-[#0B0D12] p-1 text-white shadow-lg">
             <img
-              src="/vch-logo.png"
+                src="/brand-logo.png"
               alt="Virtual Car Hire"
               className="h-full w-full object-contain p-0.5"
             />
