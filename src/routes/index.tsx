@@ -1176,12 +1176,387 @@ function PortalAccountsAdminCard({
   );
 }
 
+function RentRemindersAdminCard({
+  drivers,
+  toast,
+}: {
+  drivers: DriverTrack[];
+  toast: (m: string, t?: Toast["type"]) => void;
+}) {
+  const [runningScanner, setRunningScanner] = useState(false);
+  const [selectedDriverId, setSelectedDriverId] = useState<string>("");
+  const [sendingTest, setSendingTest] = useState(false);
+  const [emailLogs, setEmailLogs] = useState<any[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+
+  const loadLogs = useCallback(async () => {
+    setLoadingLogs(true);
+    try {
+      const { data, error } = await supabase
+        .from("email_log")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (!error && data) {
+        setEmailLogs(data);
+      }
+    } catch (err) {
+      console.warn("Failed to load email logs:", err);
+    } finally {
+      setLoadingLogs(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadLogs();
+  }, [loadLogs]);
+
+  // Evaluate all drivers for dry-run
+  const dryRunList = useMemo(() => {
+    const londonNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/London" }));
+
+    return drivers.map((d) => {
+      const isInactive = d.status === "inactive" || d.active === false || !!d.deleted_at;
+      const weeklyRent = Number(d.weekly_rent || 0);
+
+      if (isInactive) {
+        return {
+          d,
+          wouldSend: false,
+          reason: "Inactive status",
+          dueStr: "N/A",
+          days: NaN,
+        };
+      }
+      if (weeklyRent <= 0) {
+        return {
+          d,
+          wouldSend: false,
+          reason: "Weekly rent is £0",
+          dueStr: "N/A",
+          days: NaN,
+        };
+      }
+      if (!d.start_date || !d.rent_due_day) {
+        return {
+          d,
+          wouldSend: false,
+          reason: "Missing start date or rent due day",
+          dueStr: "N/A",
+          days: NaN,
+        };
+      }
+
+      const nextDue = calculateNextPaymentDueDate(d.start_date, d.rent_due_day, londonNow);
+
+      const targetMidnight = Date.UTC(nextDue.getFullYear(), nextDue.getMonth(), nextDue.getDate());
+      const nowMidnight = Date.UTC(londonNow.getFullYear(), londonNow.getMonth(), londonNow.getDate());
+      const days = Math.round((targetMidnight - nowMidnight) / 86400000);
+
+      const dueStr = nextDue.toISOString().slice(0, 10);
+      const email = d.email?.trim() || null;
+
+      if (days !== 1) {
+        return {
+          d,
+          wouldSend: false,
+          reason: `Rent due ${dueStr} (in ${days} day${days === 1 ? "" : "s"})`,
+          dueStr,
+          days,
+        };
+      }
+
+      if (!email) {
+        return {
+          d,
+          wouldSend: true,
+          reason: "No driver email on file (driver direct email skipped, staff summary copy WILL send to admin@fa-ibi.co.uk)",
+          dueStr,
+          days,
+        };
+      }
+
+      return {
+        d,
+        wouldSend: true,
+        reason: `Due tomorrow (${dueStr}). Direct driver email + staff summary WILL send.`,
+        dueStr,
+        days,
+      };
+    });
+  }, [drivers]);
+
+  const handleRunScannerNow = async () => {
+    try {
+      setRunningScanner(true);
+      const res = await fetch("/api/public/expiry-alerts", { method: "POST" });
+      const data = await res.json();
+      toast(`Scanner job completed! Sent: ${data.sent ?? 0}, Skipped: ${data.skipped ?? 0}`);
+      await loadLogs();
+    } catch (err: any) {
+      toast(`Error executing scanner: ${err?.message || err}`, "error");
+    } finally {
+      setRunningScanner(false);
+    }
+  };
+
+  const handleSendTestForDriver = async (d: DriverTrack) => {
+    try {
+      setSendingTest(true);
+      const weeklyRent = Number(d.weekly_rent || 0);
+      const email = d.email?.trim() || null;
+      const dueStr = new Date().toISOString().slice(0, 10);
+
+      let driverSent = false;
+      let staffSent = false;
+
+      if (email) {
+        const res = await supabase.functions.invoke("send-email", {
+          body: {
+            recipient: email,
+            subject: `[TEST] Reminder: Your rent is due tomorrow — Virtual Car Hire`,
+            template_type: "rent_due_tomorrow",
+            template_data: {
+              recipientName: d.driver_name,
+              headline: "Rent due tomorrow",
+              subtext: `Hi ${d.driver_name}, your weekly rent of £${weeklyRent.toFixed(2)} for ${d.reg || "your vehicle"} is due tomorrow (${dueStr}).`,
+              drivers: [
+                {
+                  driverName: d.driver_name,
+                  reg: d.reg || "N/A",
+                  weeklyRent,
+                  dueDate: dueStr,
+                  rentStatus: d.rent_status || "unpaid",
+                },
+              ],
+              actionUrl: DRIVER_PORTAL_URL,
+              actionText: "View Details in Portal",
+            },
+            metadata: { driver_id: d.id, test: true },
+          },
+        });
+        if (!res.error && res.data?.status === "sent") driverSent = true;
+      }
+
+      const staffRes = await supabase.functions.invoke("send-email", {
+        body: {
+          recipient: "admin@fa-ibi.co.uk",
+          subject: `[TEST] Rent Due Tomorrow Summary — ${d.driver_name}`,
+          template_type: "rent_due_tomorrow",
+          template_data: {
+            recipientName: "Operations Team",
+            headline: "Rent due tomorrow (TEST)",
+            subtext: `Test reminder execution for driver ${d.driver_name}:`,
+            drivers: [
+              {
+                driverName: d.driver_name,
+                reg: d.reg || "N/A",
+                weeklyRent,
+                dueDate: dueStr,
+                rentStatus: d.rent_status || "unpaid",
+              },
+            ],
+            actionUrl: `${CRM_BASE_URL}/drivers`,
+            actionText: "View Drivers",
+          },
+          metadata: { driver_id: d.id, test: true },
+        },
+      });
+      if (!staffRes.error && staffRes.data?.status === "sent") staffSent = true;
+
+      toast(`Test reminder result: Driver copy ${driverSent ? "SENT" : email ? "FAILED" : "SKIPPED (no email)"}. Staff copy: ${staffSent ? "SENT" : "FAILED"}.`);
+      await loadLogs();
+    } catch (err: any) {
+      toast(`Failed sending test reminder: ${err?.message || err}`, "error");
+    } finally {
+      setSendingTest(false);
+    }
+  };
+
+  const selectedDriver = drivers.find((d) => d.id === selectedDriverId);
+
+  return (
+    <div className="rounded-2xl border p-5 space-y-6" style={{ borderColor: T.border, background: T.panel }}>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4" style={{ borderColor: T.borderSoft }}>
+        <div>
+          <div className="flex items-center gap-2">
+            <Icon.Wrench className="h-5 w-5 text-[#ff6a00]" />
+            <h2 className="text-base font-bold text-white">Rent Reminders Admin & Dry Run</h2>
+          </div>
+          <p className="mt-0.5 text-xs text-[#9aa5b8]">
+            Diagnose rent due calculations, run manual dry-runs, send single-driver test reminders, and inspect outbound send logs.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleRunScannerNow}
+          disabled={runningScanner}
+          className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#ff6a00] to-[#ff9d4d] px-3.5 py-2 text-xs font-bold text-white shadow-md transition hover:opacity-90 disabled:opacity-50 shrink-0"
+        >
+          {runningScanner ? "Running Scanner..." : "Run Scanner Now"}
+        </button>
+      </div>
+
+      {/* DRY RUN DRIVER EVALUATION TABLE */}
+      <div>
+        <h3 className="text-xs font-bold uppercase tracking-wider text-[#9aa5b8] mb-3">
+          Driver Rent Due Dry Run (Europe/London Timezone)
+        </h3>
+        <div className="overflow-x-auto rounded-xl border" style={{ borderColor: T.borderSoft, background: T.panel2 }}>
+          <table className="w-full text-left text-xs text-white">
+            <thead>
+              <tr className="border-b bg-black/40 text-[11px] font-bold text-[#8b95a8]" style={{ borderColor: T.borderSoft }}>
+                <th className="p-3">Driver Name</th>
+                <th className="p-3">Vehicle</th>
+                <th className="p-3">Weekly Rent</th>
+                <th className="p-3">Next Due Date</th>
+                <th className="p-3">Status</th>
+                <th className="p-3">Email on File</th>
+                <th className="p-3">Outcome / Skip Reason</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y" style={{ borderColor: T.borderSoft }}>
+              {dryRunList.map(({ d, wouldSend, reason, dueStr }) => (
+                <tr key={d.id} className="hover:bg-white/5 transition">
+                  <td className="p-3 font-semibold text-white">{d.driver_name}</td>
+                  <td className="p-3 text-[#9aa5b8]">{d.reg || d.registration || "—"}</td>
+                  <td className="p-3 font-semibold text-white">£{Number(d.weekly_rent || 0).toFixed(2)}</td>
+                  <td className="p-3 text-white font-mono text-[11px]">{dueStr}</td>
+                  <td className="p-3">
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                      d.status === "active" || (!d.status && d.active !== false)
+                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+                        : "bg-zinc-700/50 text-zinc-400 border border-zinc-600"
+                    }`}>
+                      {d.status || (d.active !== false ? "active" : "inactive")}
+                    </span>
+                  </td>
+                  <td className="p-3 text-[#9aa5b8]">{d.email?.trim() || <span className="text-amber-400 font-semibold">None</span>}</td>
+                  <td className="p-3">
+                    <span className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold ${
+                      wouldSend
+                        ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/30"
+                        : "bg-zinc-800 text-zinc-400 border border-zinc-700"
+                    }`}>
+                      {wouldSend ? "✓ WOULD SEND" : "SKIP"}: {reason}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* SINGLE DRIVER TEST REMINDER SENDER */}
+      <div className="rounded-xl border p-4" style={{ borderColor: T.borderSoft, background: T.panel2 }}>
+        <h3 className="text-xs font-bold text-white mb-2">Send Test Reminder For Specific Driver</h3>
+        <p className="text-xs text-[#9aa5b8] mb-3">
+          Select any driver to immediately trigger a test rent reminder send to their email address (if present) and staff copy to <span className="text-sky-400 font-semibold">admin@fa-ibi.co.uk</span>.
+        </p>
+
+        <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+          <select
+            value={selectedDriverId}
+            onChange={(e) => setSelectedDriverId(e.target.value)}
+            className="rounded-xl border bg-black/40 px-3 py-2 text-xs text-white focus:border-[#ff6a00] focus:outline-none flex-1"
+            style={{ borderColor: T.borderSoft }}
+          >
+            <option value="">-- Choose Driver --</option>
+            {drivers.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.driver_name} ({d.reg || "No Reg"}) - £{Number(d.weekly_rent || 0)}/wk - {d.email || "No Email"}
+              </option>
+            ))}
+          </select>
+
+          <button
+            type="button"
+            disabled={!selectedDriver || sendingTest}
+            onClick={() => selectedDriver && handleSendTestForDriver(selectedDriver)}
+            className="rounded-xl bg-[#ff6a00] px-4 py-2 text-xs font-bold text-white hover:bg-[#ff8a3d] transition disabled:opacity-50 shrink-0"
+          >
+            {sendingTest ? "Sending Test..." : "Send Test Reminder Now"}
+          </button>
+        </div>
+      </div>
+
+      {/* RECENT OUTBOUND EMAIL LOGS (LAST 50 SENDS) */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-[#9aa5b8]">
+            Outbound Email Logs (Last 50 Sends)
+          </h3>
+          <button
+            type="button"
+            onClick={loadLogs}
+            disabled={loadingLogs}
+            className="text-xs font-bold text-[#ff8a3d] hover:underline disabled:opacity-50"
+          >
+            {loadingLogs ? "Refreshing..." : "↻ Refresh Logs"}
+          </button>
+        </div>
+
+        <div className="overflow-x-auto rounded-xl border max-h-72" style={{ borderColor: T.borderSoft, background: T.panel2 }}>
+          <table className="w-full text-left text-xs text-white">
+            <thead className="sticky top-0 bg-[#0B0E17] border-b" style={{ borderColor: T.borderSoft }}>
+              <tr className="text-[11px] font-bold text-[#8b95a8]">
+                <th className="p-2.5">Date / Time</th>
+                <th className="p-2.5">Recipient</th>
+                <th className="p-2.5">Type</th>
+                <th className="p-2.5">Subject</th>
+                <th className="p-2.5">Status</th>
+                <th className="p-2.5">Error / Notes</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y" style={{ borderColor: T.borderSoft }}>
+              {emailLogs.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="p-4 text-center text-xs text-[#9aa5b8]">
+                    No email logs recorded yet.
+                  </td>
+                </tr>
+              ) : (
+                emailLogs.map((log) => (
+                  <tr key={log.id} className="hover:bg-white/5 transition text-[11px]">
+                    <td className="p-2.5 text-[#9aa5b8] whitespace-nowrap">
+                      {new Date(log.created_at).toLocaleString("en-GB", { timeZone: "Europe/London" })}
+                    </td>
+                    <td className="p-2.5 font-semibold text-white">{log.recipient}</td>
+                    <td className="p-2.5 font-mono text-xs text-sky-400">{log.type}</td>
+                    <td className="p-2.5 text-[#9aa5b8] max-w-xs truncate">{log.subject}</td>
+                    <td className="p-2.5">
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        log.status === "sent"
+                          ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+                          : log.status === "failed"
+                          ? "bg-rose-500/10 text-rose-400 border border-rose-500/30"
+                          : "bg-amber-500/10 text-amber-400 border border-amber-500/30"
+                      }`}>
+                        {log.status.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="p-2.5 text-rose-300 max-w-xs truncate">{log.error_message || "—"}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function UserSettingsView({
   account,
   toast,
+  drivers = [],
 }: {
   account: { email: string } | null;
   toast: (m: string, t?: Toast["type"]) => void;
+  drivers?: DriverTrack[];
 }) {
   const email = account?.email || "admin@virtualcarhire.com";
   const [newPassword, setNewPassword] = useState("");
@@ -1435,6 +1810,9 @@ function UserSettingsView({
 
       {/* PORTAL ACCOUNTS & STRAY CREDENTIALS AUDIT */}
       <PortalAccountsAdminCard toast={toast} />
+
+      {/* RENT REMINDERS ADMIN & DRY RUN */}
+      <RentRemindersAdminCard drivers={drivers} toast={toast} />
 
       {/* EMAIL TEMPLATE PREVIEWS */}
       <div
@@ -2411,7 +2789,7 @@ export function FleetShell({ view }: { view: View }) {
           ) : view === "generations" ? (
             <GenerationsView vehicles={data.vehicles} drivers={data.drivers} toast={toast} />
           ) : view === "settings" ? (
-            <UserSettingsView account={account} toast={toast} />
+            <UserSettingsView account={account} toast={toast} drivers={data.drivers} />
           ) : view === "audit-logs" ? (
             <RouteErrorBoundary
               fallbackTitle="Audit Logs Error"

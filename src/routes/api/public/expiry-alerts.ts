@@ -96,8 +96,9 @@ async function runExpiryScan() {
         if (!isNaN(d)) pcoDays = d;
       }
 
-      const motExpiring = motDays !== undefined && motDays <= 7 && motDays >= 0;
-      const pcoExpiring = pcoDays !== undefined && pcoDays <= 10 && pcoDays >= 0;
+      // Include all vehicles with MOT or PCO <= 30 days (including overdue/expired < 0)
+      const motExpiring = motDays !== undefined && motDays <= 30;
+      const pcoExpiring = pcoDays !== undefined && pcoDays <= 30;
 
       if (motExpiring || pcoExpiring) {
         const artwork = vehicleArtworkPath(v);
@@ -107,10 +108,10 @@ async function runExpiryScan() {
           registration: v.reg,
           model: `${v.make} ${v.model}`,
           photoUrl,
-          motExpiry: motExpiring ? motDate! : undefined,
-          motDaysRemaining: motExpiring ? motDays : undefined,
-          pcoExpiry: pcoExpiring ? pcoDate! : undefined,
-          pcoDaysRemaining: pcoExpiring ? pcoDays : undefined,
+          motExpiry: motDate || undefined,
+          motDaysRemaining: motDays,
+          pcoExpiry: pcoDate || undefined,
+          pcoDaysRemaining: pcoDays,
           detailsUrl: `${CRM_BASE_URL}/vehicles/${v.reg}`,
         });
 
@@ -140,31 +141,38 @@ async function runExpiryScan() {
           }
 
           const driverEmail = assignedDriver.email?.trim() || null;
-          const driverRes = await supabaseAdmin.functions.invoke("send-email", {
-            body: {
-              recipient: driverEmail || "none",
-              skip: !driverEmail,
-              skip_reason: `Driver ${assignedDriver.driver_name} has no email on file`,
-              subject: `Important Notice: Upcoming Vehicle Expiry for ${v.reg}`,
-              template_type: "driver_alert",
-              template_data: {
-                recipientName: assignedDriver.driver_name,
-                headline: `Vehicle Expiry Notice — ${v.reg}`,
-                subtext: "Please review the details below and schedule an inspection.",
-                cards,
-                actionUrl: DRIVER_PORTAL_URL,
-                actionText: "View Details in Portal",
-              },
-              metadata: { vehicle_reg: v.reg, driver_id: assignedDriver.id },
-            },
-          });
 
-          if (driverRes.error) {
-            console.error(`[ExpiryScan] Error sending driver alert email for ${assignedDriver.id}:`, driverRes.error);
-          } else if (driverRes.data?.status === "sent") {
-            totalSent++;
-          } else if (driverRes.data?.status === "skipped") {
+          if (driverEmail) {
+            // Throttle Resend requests (2 req/s max)
+            await new Promise((r) => setTimeout(r, 200));
+
+            const driverRes = await supabaseAdmin.functions.invoke("send-email", {
+              body: {
+                recipient: driverEmail,
+                subject: `Important Notice: Upcoming Vehicle Expiry for ${v.reg}`,
+                template_type: "driver_alert",
+                template_data: {
+                  recipientName: assignedDriver.driver_name,
+                  headline: `Vehicle Expiry Notice — ${v.reg}`,
+                  subtext: "Please review the details below and schedule an inspection.",
+                  cards,
+                  actionUrl: DRIVER_PORTAL_URL,
+                  actionText: "View Details in Portal",
+                },
+                metadata: { vehicle_reg: v.reg, driver_id: assignedDriver.id },
+              },
+            });
+
+            if (driverRes.error) {
+              console.error(`[ExpiryScan] Error sending driver alert email for ${assignedDriver.id}:`, driverRes.error);
+            } else if (driverRes.data?.status === "sent") {
+              totalSent++;
+            } else if (driverRes.data?.status === "skipped") {
+              totalSkipped++;
+            }
+          } else {
             totalSkipped++;
+            console.info(`[ExpiryScan] Driver ${assignedDriver.driver_name} has no email on file. Direct email skipped, included in staff summary.`);
           }
         }
       }
@@ -219,7 +227,7 @@ async function runExpiryScan() {
     try {
       if (d.licence_expiry_date) {
         const days = getDaysDiff(d.licence_expiry_date, now);
-        if (!isNaN(days) && days <= 30 && days >= 0) {
+        if (!isNaN(days) && days <= 30) {
           licenceExpiryItems.push({
             driverId: d.id ? d.id.slice(0, 8) : "DRIVER",
             name: d.driver_name,
@@ -288,8 +296,20 @@ async function runExpiryScan() {
             email: driverEmail,
           });
 
-          // Idempotency check: Query if a 'rent_due' notification or email was already sent today for this driver & due date
+          // Idempotency check: Query email_log for a SUCCESSFUL send ('sent') today for this driver & rent_due_tomorrow
           const startOfTodayISO = `${londonTodayStr}T00:00:00.000Z`;
+          const { data: existingLogs } = await supabaseAdmin
+            .from("email_log")
+            .select("id")
+            .eq("recipient", driverEmail || "")
+            .eq("type", "rent_due_tomorrow")
+            .eq("status", "sent")
+            .gte("created_at", startOfTodayISO)
+            .limit(1);
+
+          const alreadySentToDriver = existingLogs && existingLogs.length > 0;
+
+          // Always ensure in-app notification exists
           const { data: existingNotifs } = await supabaseAdmin
             .from("driver_notifications")
             .select("id")
@@ -298,19 +318,20 @@ async function runExpiryScan() {
             .gte("created_at", startOfTodayISO)
             .limit(1);
 
-          const alreadyProcessed = existingNotifs && existingNotifs.length > 0;
-
-          if (!alreadyProcessed) {
-            // Insert in-app CRM alert notification exactly ONCE
+          if (!existingNotifs || existingNotifs.length === 0) {
             await supabaseAdmin.from("driver_notifications").insert({
               driver_id: d.id,
               type: "rent_due",
               title: "Rent Payment Due Tomorrow",
               message: `Rent of £${Number(d.weekly_rent).toFixed(2)} is due tomorrow (${dueStr}).`,
             });
+          }
 
-            // Send driver-facing rent reminder email if driver has email on file
+          if (!alreadySentToDriver) {
             if (driverEmail) {
+              // Throttle Resend API calls to stay within rate limit (2 req/s)
+              await new Promise((r) => setTimeout(r, 200));
+
               const rentEmailRes = await supabaseAdmin.functions.invoke("send-email", {
                 body: {
                   recipient: driverEmail,
@@ -330,7 +351,7 @@ async function runExpiryScan() {
                       },
                     ],
                     actionUrl: DRIVER_PORTAL_URL,
-                    actionText: "View Drivers",
+                    actionText: "View Details in Portal",
                   },
                   metadata: { driver_id: d.id, weekly_rent: d.weekly_rent, due_date: dueStr },
                 },
@@ -344,12 +365,11 @@ async function runExpiryScan() {
                 totalSkipped++;
               }
             } else {
-              // Log skipped driver without blocking staff email
               totalSkipped++;
               console.info(`[ExpiryScan] Driver ${d.driver_name} has no email on file. Skipped direct email, included in staff summary.`);
             }
           } else {
-            console.info(`[ExpiryScan] Rent reminder already processed today for driver ${d.id}. Skipping duplicate send.`);
+            console.info(`[ExpiryScan] Rent reminder already successfully sent today to ${driverEmail} for driver ${d.id}. Skipping duplicate.`);
           }
         }
       }

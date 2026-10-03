@@ -6,24 +6,27 @@ import {
   renderFleetSummaryTemplate,
   renderDriverLicenceSummaryTemplate,
   VCH_LOGO_URL,
+  EMAIL_LOGO_URL,
   HERO_IMAGE_URL,
 } from "./email-templates";
 
 describe("Email Templates Foundation", () => {
   it("uses exact real brand logo and hero image URLs across templates", () => {
-    expect(VCH_LOGO_URL).toBe("https://virtual-carhire.co.uk/vch-logo.png");
-    expect(HERO_IMAGE_URL).toBe("https://virtual-carhire.co.uk/whatsapp/virtual-car-hire-welcome.jpg");
+    expect(EMAIL_LOGO_URL).toBe("https://hq.virtual-carhire.co.uk/email-logo.png");
+    expect(HERO_IMAGE_URL).toBe("https://hq.virtual-carhire.co.uk/whatsapp/virtual-car-hire-welcome.jpg");
   });
 
   describe("Template 1: 2FA Verification Code", () => {
-    it("renders verification code, expiry note, hero image, and 180px PNG logo", () => {
+    it("renders verification code, expiry note, hero image, and email logo above headline", () => {
       const html = render2FATemplate({ code: "849201", recipientName: "John" });
       expect(html).toContain("849201");
       expect(html).toContain("Hi John");
       expect(html).toContain("SECURITY VERIFICATION");
       expect(html).toContain("Here's your login code");
       expect(html).toContain("Expires in <strong>10 minutes</strong>");
-      expect(html).toContain(VCH_LOGO_URL);
+      expect(html).toContain(EMAIL_LOGO_URL);
+      expect(html).toContain('width="96"');
+      expect(html).toContain('height="96"');
       expect(html).toContain(HERO_IMAGE_URL);
       expect(html).toContain("Smarter Fleet Management");
     });
