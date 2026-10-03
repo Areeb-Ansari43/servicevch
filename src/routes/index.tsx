@@ -21,8 +21,6 @@ import {
   X,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { BrandLogo } from "@/components/brand-logo";
-import { LogoLoader } from "@/components/logo-loader";
 import {
   useFleetData,
   getVehicleDefaultDeposit,
@@ -2264,7 +2262,17 @@ export function FleetShell({ view }: { view: View }) {
         style={{ background: T.bg }}
       >
         <div className="flex flex-col items-center text-center">
-          <LogoLoader message="Authenticating session..." />
+          <div className="mb-4 flex h-14 w-14 animate-pulse items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-gradient-to-br from-[#ff7a1a] to-[#ff9d52] text-white shadow-[0_18px_40px_-12px_rgba(255,106,0,0.7)]">
+            <img
+              src="/vch-logo.png"
+              alt="Virtual Car Hire"
+              className="h-full w-full object-contain p-0.5"
+            />
+          </div>
+          <div className="flex items-center gap-2 text-sm font-semibold text-[#ff8a3d]">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#ff8a3d] border-t-transparent" />
+            <span>Authenticating session…</span>
+          </div>
           {authError && (
             <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs text-red-200">
               {authError}.{" "}
@@ -2640,8 +2648,12 @@ function Sidebar({
       >
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-3.5">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#FF6A00]/30 bg-[#0B0D12] p-1">
-              <BrandLogo className="h-full w-full" />
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#FF6A00]/30 bg-[#0B0D12]">
+              <img
+                src="/vch-logo.png"
+                alt="Virtual Car Hire Logo"
+                className="h-full w-full object-contain p-0.5"
+              />
             </div>
             {expanded && (
               <div className="min-w-0 flex-1">
