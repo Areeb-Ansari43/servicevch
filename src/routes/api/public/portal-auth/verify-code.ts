@@ -1,14 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { getRuntimeEnv } from "@/integrations/supabase/config";
-import { checkDurableRateLimit } from "./request-code";
-
-async function sha256(input: string): Promise<string> {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
-  return Array.from(new Uint8Array(buf))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
+import { checkDurableRateLimit, hmacSha256 } from "./request-code";
 
 export const Route = createFileRoute("/api/public/portal-auth/verify-code")({
   server: {
@@ -65,12 +58,12 @@ export async function handleVerifyCode(request: Request): Promise<Response> {
     );
   }
 
-  const codeHash = await sha256(`${email}:${code}`);
+  const codeHash = await hmacSha256(`${code}:${email}`);
 
   // Query active unconsumed OTP for this email
   const { data: rows, error } = await supabaseAdmin
     .from("login_otps")
-    .select("id, expires_at, consumed, attempts_count, code_hash")
+    .select("id, expires_at, consumed, attempts_count, otp_hash")
     .eq("email", email)
     .eq("consumed", false)
     .order("created_at", { ascending: false })
@@ -95,8 +88,8 @@ export async function handleVerifyCode(request: Request): Promise<Response> {
     return genericInvalidError;
   }
 
-  // Check code hash match
-  if (row.code_hash !== codeHash) {
+  // Check code HMAC hash match
+  if (row.otp_hash !== codeHash) {
     const nextAttempts = currentAttempts + 1;
     await supabaseAdmin
       .from("login_otps")

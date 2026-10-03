@@ -5,12 +5,20 @@ import { sendWhatsAppText } from "@/lib/meta-whatsapp.server";
 
 const ALLOWED_EMAIL = "admin@fa-ibi.co.uk";
 const ALLOWED_PASSWORD = "Pakistan1!";
-// Existing Supabase auth user that owns all fleet data for admin login.
 const SESSION_USER_EMAIL = "admin@fa-ibi.co.uk";
 
-async function sha256(input: string): Promise<string> {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
-  return Array.from(new Uint8Array(buf))
+async function hmacSha256(data: string): Promise<string> {
+  const pepper = getRuntimeEnv("PORTAL_OTP_PEPPER") || "vch-default-otp-pepper-secret-2026";
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(pepper),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, enc.encode(data));
+  return Array.from(new Uint8Array(signature))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 }
@@ -65,7 +73,6 @@ async function sendOtpEmail(targetEmail: string, code: string) {
   </body>
 </html>`;
 
-  // 1. First attempt sending via shared 'send-email' Edge Function
   try {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: edgeRes, error: edgeErr } = await supabaseAdmin.functions.invoke("send-email", {
@@ -78,14 +85,12 @@ async function sendOtpEmail(targetEmail: string, code: string) {
     });
 
     if (!edgeErr && edgeRes && edgeRes.status !== "failed") {
-      console.info("[2FA] Email sent via send-email edge function to:", targetEmail);
       return;
     }
-  } catch (err) {
-    console.warn("[2FA] Edge function invoke exception, proceeding to Resend direct call:", err);
+  } catch {
+    // Fall back to direct Resend API
   }
 
-  // 2. Direct Resend API fallback if edge function is unhandled or unavailable
   const resendKey = getRuntimeEnv("RESEND_API_KEY");
   if (!resendKey) throw new Error("Email service not configured: RESEND_API_KEY missing");
 
@@ -124,7 +129,6 @@ export const requestLoginCode = createServerFn({ method: "POST" })
     if (email === ALLOWED_EMAIL && password === ALLOWED_PASSWORD) {
       isStaff = true;
     } else {
-      // Authenticate driver portal customer against Supabase Auth
       const { data: authRes, error: authErr } = await supabaseAdmin.auth.signInWithPassword({
         email,
         password,
@@ -135,7 +139,6 @@ export const requestLoginCode = createServerFn({ method: "POST" })
         throw new Error("Invalid credentials");
       }
 
-      // Check linked driver record to ensure account is active
       const { data: driverMatch } = await supabaseAdmin
         .from("driver_tracks")
         .select("id, active, deleted_at, phone")
@@ -152,7 +155,6 @@ export const requestLoginCode = createServerFn({ method: "POST" })
       }
     }
 
-    // Rate limiting: prevent spamming codes faster than once every 30 seconds
     const thirtySecsAgo = new Date(Date.now() - 30 * 1000).toISOString();
     const { data: recentOtps } = await supabaseAdmin
       .from("login_otps")
@@ -165,10 +167,9 @@ export const requestLoginCode = createServerFn({ method: "POST" })
     }
 
     const code = String(Math.floor(100000 + Math.random() * 900000));
-    const codeHash = await sha256(`${email}:${code}`);
+    const codeHash = await hmacSha256(`${code}:${email}`);
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
-    // Mark prior unconsumed codes for this email as consumed
     await supabaseAdmin
       .from("login_otps")
       .update({ consumed: true })
@@ -177,7 +178,7 @@ export const requestLoginCode = createServerFn({ method: "POST" })
 
     const { error } = await supabaseAdmin.from("login_otps").insert({
       email,
-      code_hash: codeHash,
+      otp_hash: codeHash,
       expires_at: expiresAt,
       consumed: false,
       attempts_count: 0,
@@ -185,7 +186,6 @@ export const requestLoginCode = createServerFn({ method: "POST" })
 
     if (error) throw new Error(error.message);
 
-    // Delivery routing
     if (email) {
       try {
         await sendOtpEmail(email, code);
@@ -223,13 +223,12 @@ export const verifyLoginCode = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const email = (data.email || ALLOWED_EMAIL).trim().toLowerCase();
-    const codeHash = await sha256(`${email}:${data.code}`);
+    const codeHash = await hmacSha256(`${data.code}:${email}`);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    // Query active unconsumed OTP for this email
     const { data: rows, error } = await supabaseAdmin
       .from("login_otps")
-      .select("id, expires_at, consumed, attempts_count, code_hash")
+      .select("id, expires_at, consumed, attempts_count, otp_hash")
       .eq("email", email)
       .eq("consumed", false)
       .order("created_at", { ascending: false })
@@ -242,21 +241,18 @@ export const verifyLoginCode = createServerFn({ method: "POST" })
       throw new Error("Invalid or expired verification code.");
     }
 
-    // Check expiration (10 minutes)
     if (new Date(row.expires_at).getTime() < Date.now()) {
       await supabaseAdmin.from("login_otps").update({ consumed: true }).eq("id", row.id);
       throw new Error("Verification code expired. Please request a new code.");
     }
 
-    // Check maximum failed attempts (limit 5)
     const currentAttempts = Number(row.attempts_count || 0);
     if (currentAttempts >= 5) {
       await supabaseAdmin.from("login_otps").update({ consumed: true }).eq("id", row.id);
       throw new Error("Too many failed attempts. Please request a new verification code.");
     }
 
-    // Check code match
-    if (row.code_hash !== codeHash) {
+    if (row.otp_hash !== codeHash) {
       const nextAttempts = currentAttempts + 1;
       if (nextAttempts >= 5) {
         await supabaseAdmin
@@ -273,10 +269,8 @@ export const verifyLoginCode = createServerFn({ method: "POST" })
       }
     }
 
-    // Mark code as single-use consumed
     await supabaseAdmin.from("login_otps").update({ consumed: true }).eq("id", row.id);
 
-    // Mint session magiclink
     const sessionEmail = email === ALLOWED_EMAIL ? SESSION_USER_EMAIL : email;
     const { data: link, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
       type: "magiclink",

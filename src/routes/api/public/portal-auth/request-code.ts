@@ -11,8 +11,7 @@ export async function checkDurableRateLimit(
 ): Promise<boolean> {
   const windowAgo = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString();
 
-  // Count recent records in portal_rate_limits
-  const { data, count, error } = await supabaseAdmin
+  const { count, error } = await supabaseAdmin
     .from("portal_rate_limits")
     .select("id", { count: "exact" })
     .eq("key", key)
@@ -23,7 +22,6 @@ export async function checkDurableRateLimit(
     return false;
   }
 
-  // Record this attempt
   await supabaseAdmin.from("portal_rate_limits").insert({
     key,
     action,
@@ -32,9 +30,18 @@ export async function checkDurableRateLimit(
   return true;
 }
 
-async function sha256(input: string): Promise<string> {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
-  return Array.from(new Uint8Array(buf))
+export async function hmacSha256(data: string): Promise<string> {
+  const pepper = getRuntimeEnv("PORTAL_OTP_PEPPER") || "vch-default-otp-pepper-secret-2026";
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(pepper),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, enc.encode(data));
+  return Array.from(new Uint8Array(signature))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 }
@@ -224,9 +231,10 @@ export async function handleRequestCode(request: Request): Promise<Response> {
   }
 
   const code = String(Math.floor(100000 + Math.random() * 900000));
-  const codeHash = await sha256(`${email}:${code}`);
+  const codeHash = await hmacSha256(`${code}:${email}`);
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
+  // Invalidate all earlier unconsumed codes for this email
   await supabaseAdmin
     .from("login_otps")
     .update({ consumed: true })
@@ -235,7 +243,7 @@ export async function handleRequestCode(request: Request): Promise<Response> {
 
   const { error: insertErr } = await supabaseAdmin.from("login_otps").insert({
     email,
-    code_hash: codeHash,
+    otp_hash: codeHash,
     expires_at: expiresAt,
     consumed: false,
     attempts_count: 0,
