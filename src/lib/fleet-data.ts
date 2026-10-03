@@ -461,6 +461,25 @@ export function useFleetData() {
     const active = allDriverTracks.filter((d) => !d.deleted_at && d.active !== false);
     const softDeleted = allDriverTracks.filter((d) => Boolean(d.deleted_at) || d.active === false);
 
+    const loadedVehicles = (vRes.data ?? []).map(vFromRow);
+    if (loadedVehicles.length === 0 && typeof window !== "undefined" && (window as any).__MOCK_AUTH__) {
+      const mockVehicles: Vehicle[] = PDF_FLEET.slice(0, 12).map((pv, idx) => ({
+        id: `mock_v_${idx}`,
+        registration: pv.registration,
+        make: pv.displayName.split(" ")[0] || "Mercedes-Benz",
+        model: pv.displayName.split(" ").slice(1).join(" ") || "E-Class",
+        year: pv.year,
+        fuel_type: (pv.fuelType === "Plug-in-Hybrid" ? "Hybrid" : pv.fuelType) as Vehicle["fuel_type"],
+        current_mileage: 25000 + idx * 1200,
+        status: idx % 3 === 0 ? "Rented" : idx % 3 === 1 ? "Active" : "In Service",
+        next_mot_date: "2026-11-15",
+        insurance_expiry: "2026-12-01",
+      }));
+      setVehicles(mockVehicles);
+    } else {
+      setVehicles(loadedVehicles);
+    }
+
     setDrivers(active);
     setDeletedDrivers(softDeleted);
     setLoading(false);
