@@ -2262,9 +2262,9 @@ export function FleetShell({ view }: { view: View }) {
         style={{ background: T.bg }}
       >
         <div className="flex flex-col items-center text-center">
-          <div className="mb-4 flex h-14 w-14 animate-pulse items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-gradient-to-br from-[#ff7a1a] to-[#ff9d52] text-white shadow-[0_18px_40px_-12px_rgba(255,106,0,0.7)]">
+          <div className="mb-4 flex h-14 w-14 animate-pulse items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-[#0B0D12] text-white shadow-[0_18px_40px_-12px_rgba(255,106,0,0.7)]">
             <img
-              src="/vch-logo.png"
+              src="/brand-logo.png"
               alt="Virtual Car Hire"
               className="h-full w-full object-contain p-0.5"
             />
@@ -2315,7 +2315,7 @@ export function FleetShell({ view }: { view: View }) {
         isPinned={isPinned}
         onTogglePin={handleTogglePin}
       />
-      <div className={`relative z-10 ml-0 transition-all duration-300 ${isPinned ? "lg:ml-[260px]" : "lg:ml-[72px]"} pb-24 lg:pb-6`}>
+      <div className={`relative z-10 ml-0 transition-all duration-350 ease-out ${isPinned ? "lg:ml-[280px]" : "lg:ml-[80px]"} pb-24 lg:pb-6`}>
         <Topbar vehicles={data.vehicles} goto={go} onMenu={() => setMobileNavOpen(true)} />
         <main className="mx-auto w-full max-w-[1400px] p-3 sm:p-5 xl:p-6">
           {data.loading ? (
@@ -2581,55 +2581,18 @@ function Sidebar({
       ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
       : false;
 
-  const renderNavItem = (it: NavItem) => {
-    const active = view === it.id;
-    const ItemIcon = it.Icon;
-
-    if (!expanded) {
-      return (
-        <div key={it.id} className="relative group flex justify-center py-1">
-          <motion.button
-            whileHover={{ y: prefersReducedMotion ? 0 : -3 }}
-            transition={{ type: "spring", stiffness: 400, damping: 17 }}
-            onClick={() => setView(it.id)}
-            className={`flex h-11 w-11 items-center justify-center rounded-2xl transition-all ${
-              active
-                ? "bg-[#FF6A00]/20 text-[#FF8A3D] border border-[#FF6A00]/40 shadow-sm"
-                : "text-[#9AA5B8] hover:bg-white/10 hover:text-white"
-            }`}
-            aria-label={it.label}
-          >
-            <ItemIcon className="h-5 w-5" />
-          </motion.button>
-
-          <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center z-50 pointer-events-none">
-            <div className="rounded-lg bg-[#141B2D] border border-white/15 px-3 py-1.5 text-xs font-semibold text-white shadow-xl whitespace-nowrap flex items-center gap-2">
-              <span>{it.label}</span>
-              {active && <span className="text-[10px] font-bold text-[#FF8A3D] uppercase">Active</span>}
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <button
-        key={it.id}
-        onClick={() => setView(it.id)}
-        className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-xs font-semibold transition-all min-h-[42px] ${
-          active
-            ? "bg-[#FF6A00]/15 text-[#FF8A3D] border border-[#FF6A00]/30 shadow-sm font-bold"
-            : "text-[#C5CBD6] hover:bg-white/10 hover:text-white"
-        }`}
-      >
-        <ItemIcon className={`h-4 w-4 shrink-0 ${active ? "text-[#FF6A00]" : "text-[#9AA5B8]"}`} />
-        <span className="truncate">{it.label}</span>
-      </button>
-    );
-  };
+  const allNavItems = [...fleetItems, ...driverItems];
 
   return (
     <>
+      {/* 16px Left edge zone trigger for hover opening */}
+      {!isPinned && (
+        <div
+          onMouseEnter={handleMouseEnter}
+          className="hidden lg:block fixed top-0 bottom-0 left-0 w-4 z-[45]"
+        />
+      )}
+
       {mobileOpen && (
         <button
           aria-label="Close navigation"
@@ -2638,168 +2601,290 @@ function Sidebar({
         />
       )}
 
-      <aside
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-        className={`fixed inset-y-0 left-0 z-50 flex flex-col border-r border-white/10 bg-[#0C101B]/95 backdrop-blur-2xl transition-all duration-300
-          ${mobileOpen ? "translate-x-0 w-[min(19rem,88vw)] lg:w-[260px]" : "-translate-x-full lg:translate-x-0"}
-          ${!isPinned && isHovered ? "lg:w-[260px] lg:shadow-2xl" : isPinned ? "lg:w-[260px]" : "lg:w-[72px]"}
-        `}
-      >
-        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3.5">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#FF6A00]/30 bg-[#0B0D12]">
-              <img
-                src="/vch-logo.png"
-                alt="Virtual Car Hire Logo"
-                className="h-full w-full object-contain p-0.5"
-              />
+      {/* Floating Bubbles Rail (Collapsed) */}
+      {!expanded && (
+        <div
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          className="hidden lg:flex fixed top-3 left-3 bottom-3 z-50 flex-col items-center justify-between pointer-events-auto"
+        >
+          <div className="flex flex-col items-center gap-2.5">
+            {/* Logo Bubble */}
+            <div className="group relative flex items-center justify-center">
+              <motion.button
+                whileHover={prefersReducedMotion ? {} : { scale: 1.12 }}
+                transition={{ type: "spring", stiffness: 400, damping: 18 }}
+                onClick={onTogglePin}
+                aria-label="Expand Navigation"
+                aria-expanded={false}
+                className="flex h-[56px] w-[56px] items-center justify-center rounded-full border border-[var(--vch-border)] bg-[var(--vch-surface-solid)] shadow-xl backdrop-blur-xl p-1.5 transition-colors hover:border-[var(--vch-accent)]"
+              >
+                <img
+                  src="/brand-logo.png"
+                  alt="Virtual Car Hire"
+                  className="h-full w-full object-contain"
+                />
+              </motion.button>
+              {/* Pin Toggle indicator on hover */}
+              <button
+                type="button"
+                onClick={onTogglePin}
+                aria-label="Pin sidebar open"
+                title="Pin sidebar open (Cmd+B)"
+                className="absolute -right-2 top-1/2 -translate-y-1/2 hidden group-hover:flex h-6 w-6 items-center justify-center rounded-full border border-[var(--vch-border)] bg-[var(--vch-accent)] text-white shadow-lg"
+              >
+                <PanelLeftOpen className="h-3.5 w-3.5" />
+              </button>
             </div>
-            {expanded && (
+
+            {/* Nav Bubbles */}
+            <div className="flex flex-col items-center gap-2">
+              {allNavItems.map((it, idx) => {
+                const active = view === it.id;
+                const ItemIcon = it.Icon;
+                return (
+                  <div key={it.id} className="group relative flex items-center justify-center">
+                    <motion.button
+                      initial={prefersReducedMotion ? {} : { scale: 0.4, x: -24 }}
+                      animate={{ scale: 1, x: 0 }}
+                      transition={
+                        prefersReducedMotion
+                          ? { duration: 0.15 }
+                          : { type: "spring", stiffness: 380, damping: 20, delay: idx * 0.03 }
+                      }
+                      whileHover={prefersReducedMotion ? {} : { scale: 1.12 }}
+                      onClick={() => setView(it.id)}
+                      aria-label={it.label}
+                      className={`flex h-[48px] w-[48px] items-center justify-center rounded-full border shadow-lg backdrop-blur-xl transition-all ${
+                        active
+                          ? "bg-[var(--vch-accent)] border-[var(--vch-accent)] text-white shadow-lg shadow-[var(--vch-accent-soft)]"
+                          : "border-[var(--vch-border)] bg-[var(--vch-surface-solid)] text-[var(--vch-text-muted)] hover:border-[var(--vch-accent)] hover:text-[var(--vch-text)]"
+                      }`}
+                    >
+                      <ItemIcon className="h-5 w-5" />
+                    </motion.button>
+
+                    {/* Pop-out Label Pill */}
+                    <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center z-50 pointer-events-none">
+                      <motion.div
+                        initial={prefersReducedMotion ? {} : { scale: 0.6, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ type: "spring", stiffness: 400, damping: 20 }}
+                        className="rounded-full bg-[var(--vch-surface-solid)] border border-[var(--vch-border)] px-3.5 py-1.5 text-xs font-bold text-[var(--vch-text)] shadow-2xl whitespace-nowrap flex items-center gap-2"
+                      >
+                        <span>{it.label}</span>
+                        {active && (
+                          <span className="text-[10px] font-extrabold text-[var(--vch-accent)] uppercase">
+                            Active
+                          </span>
+                        )}
+                      </motion.div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* User Profile Bubble */}
+          <div className="relative group flex justify-center">
+            <motion.button
+              whileHover={prefersReducedMotion ? {} : { scale: 1.12 }}
+              onClick={() => setAccountMenuOpen(!accountMenuOpen)}
+              aria-label="Account Options"
+              className="flex h-[48px] w-[48px] items-center justify-center rounded-full border border-[var(--vch-accent)] bg-[var(--vch-accent)] text-white font-bold text-base shadow-xl"
+            >
+              {initial}
+            </motion.button>
+            <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center z-50 pointer-events-none">
+              <div className="rounded-full bg-[var(--vch-surface-solid)] border border-[var(--vch-border)] px-3.5 py-1.5 text-xs font-bold text-[var(--vch-text)] shadow-2xl whitespace-nowrap">
+                {email || "Fleet Admin"}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Panel (Expanded State) */}
+      {expanded && (
+        <aside
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          className={`fixed top-3 bottom-3 left-3 z-50 flex w-[260px] flex-col rounded-[28px] border border-[var(--vch-border)] bg-[var(--vch-surface-solid)] p-3 shadow-2xl backdrop-blur-2xl transition-all duration-300
+            ${mobileOpen ? "translate-x-0" : "translate-x-0"}
+          `}
+        >
+          {/* Edge Pin Toggle Handle */}
+          <button
+            type="button"
+            onClick={onTogglePin}
+            aria-label={isPinned ? "Unpin sidebar (Cmd+B)" : "Pin sidebar open (Cmd+B)"}
+            aria-expanded={expanded}
+            title={isPinned ? "Unpin sidebar (Cmd+B)" : "Pin sidebar open (Cmd+B)"}
+            className="absolute -right-3 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full border border-[var(--vch-border)] bg-[var(--vch-surface-solid)] text-[var(--vch-text-muted)] hover:text-[var(--vch-text)] hover:border-[var(--vch-accent)] shadow-md transition-colors"
+          >
+            {isPinned ? (
+              <PanelLeftClose className="h-4 w-4" />
+            ) : (
+              <PanelLeftOpen className="h-4 w-4 text-[var(--vch-accent)]" />
+            )}
+          </button>
+
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-[var(--vch-border-soft)] px-2 pb-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--vch-border)] bg-[var(--vch-surface-solid)] p-1">
+                <img
+                  src="/brand-logo.png"
+                  alt="Virtual Car Hire Logo"
+                  className="h-full w-full object-contain"
+                />
+              </div>
               <div className="min-w-0 flex-1">
-                <div className="truncate text-xs font-bold leading-tight text-white">
+                <div className="truncate text-xs font-extrabold text-[var(--vch-text)]">
                   Virtual Car Hire
                 </div>
-                <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-[#8B95A8]">
+                <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--vch-text-soft)]">
                   Fleet Tracker
                 </div>
               </div>
-            )}
-          </div>
-
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={onTogglePin}
-              aria-label={isPinned ? "Collapse sidebar (Cmd+B)" : "Pin sidebar open (Cmd+B)"}
-              aria-expanded={expanded}
-              title={isPinned ? "Collapse sidebar (Cmd+B)" : "Pin sidebar open (Cmd+B)"}
-              className="hidden lg:flex items-center justify-center h-8 w-8 rounded-lg border border-white/10 text-[#8B95A8] hover:bg-white/10 hover:text-white transition-colors"
-            >
-              {isPinned ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4 text-[#FF6A00]" />}
-            </button>
+            </div>
 
             <button
               type="button"
               onClick={onClose}
               aria-label="Close navigation"
-              className="rounded-lg p-1.5 text-[#8B95A8] hover:bg-white/10 hover:text-white lg:hidden"
+              className="rounded-full p-1.5 text-[var(--vch-text-muted)] hover:bg-[var(--vch-surface-hover)] hover:text-[var(--vch-text)] lg:hidden"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
-        </div>
 
-        <nav className="flex-1 space-y-4 overflow-y-auto px-2.5 py-3">
-          <div>
-            {expanded ? (
-              <div className="px-3 pb-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-[#7D8799]">
+          {/* Nav Lists */}
+          <nav className="flex-1 space-y-4 overflow-y-auto px-1 py-3">
+            <div>
+              <div className="px-3 pb-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--vch-text-soft)]">
                 Fleet
               </div>
-            ) : (
-              <div className="my-1 border-t border-white/10" />
-            )}
-            <div className="space-y-1">{fleetItems.map(renderNavItem)}</div>
-          </div>
+              <div className="space-y-1">
+                {fleetItems.map((it) => {
+                  const active = view === it.id;
+                  const ItemIcon = it.Icon;
+                  return (
+                    <button
+                      key={it.id}
+                      onClick={() => setView(it.id)}
+                      className={`flex w-full items-center gap-3 rounded-full px-4 py-2.5 text-left text-xs font-semibold transition-all min-h-[42px] ${
+                        active
+                          ? "bg-[var(--vch-accent)] text-white shadow-md font-bold"
+                          : "text-[var(--vch-text-muted)] hover:bg-[var(--vch-surface-hover)] hover:text-[var(--vch-text)]"
+                      }`}
+                    >
+                      <ItemIcon className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{it.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
-          <div className="border-t border-white/10 my-2" />
+            <div className="border-t border-[var(--vch-border-soft)] my-2" />
 
-          <div>
-            {expanded ? (
-              <div className="px-3 pb-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-[#7D8799]">
+            <div>
+              <div className="px-3 pb-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--vch-text-soft)]">
                 Drivers
               </div>
-            ) : null}
-            <div className="space-y-1">{driverItems.map(renderNavItem)}</div>
-          </div>
-        </nav>
+              <div className="space-y-1">
+                {driverItems.map((it) => {
+                  const active = view === it.id;
+                  const ItemIcon = it.Icon;
+                  return (
+                    <button
+                      key={it.id}
+                      onClick={() => setView(it.id)}
+                      className={`flex w-full items-center gap-3 rounded-full px-4 py-2.5 text-left text-xs font-semibold transition-all min-h-[42px] ${
+                        active
+                          ? "bg-[var(--vch-accent)] text-white shadow-md font-bold"
+                          : "text-[var(--vch-text-muted)] hover:bg-[var(--vch-surface-hover)] hover:text-[var(--vch-text)]"
+                      }`}
+                    >
+                      <ItemIcon className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{it.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </nav>
 
-        <div className="border-t border-white/10 p-3 space-y-2">
-          {expanded ? (
+          {/* Footer Actions */}
+          <div className="border-t border-[var(--vch-border-soft)] pt-3 space-y-2">
             <button
               type="button"
               onClick={onOpenApex}
-              className="flex w-full items-center gap-2.5 rounded-xl border border-[#FF6A00]/30 bg-[#FF6A00]/10 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-[#FF6A00]/20"
+              className="flex w-full items-center gap-2.5 rounded-full border border-[var(--vch-accent-soft)] bg-[var(--vch-accent-soft)] px-3.5 py-2 text-xs font-bold text-[var(--vch-accent-text)] shadow-sm transition hover:bg-[var(--vch-accent)] hover:text-white"
             >
-              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#FF6A00] text-white shadow-sm shrink-0">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--vch-accent)] text-white shadow-sm shrink-0">
                 <Sparkles className="h-3.5 w-3.5" />
               </span>
               <span className="truncate">Apex AI Assistant</span>
             </button>
-          ) : (
-            <div className="relative group flex justify-center">
-              <button
-                type="button"
-                onClick={onOpenApex}
-                aria-label="Apex AI Assistant"
-                className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#FF6A00]/30 bg-[#FF6A00]/10 text-[#FF8A3D] hover:bg-[#FF6A00]/20 transition-colors"
-              >
-                <Sparkles className="h-4 w-4" />
-              </button>
-              <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center z-50 pointer-events-none">
-                <div className="rounded-lg bg-[#141B2D] border border-white/15 px-3 py-1.5 text-xs font-semibold text-white shadow-xl whitespace-nowrap">
-                  Apex AI Assistant
+
+            <div className="relative" ref={accountMenuRef}>
+              {accountMenuOpen && (
+                <div className="absolute bottom-full mb-2 left-0 w-full z-50 overflow-hidden rounded-2xl border border-[var(--vch-border)] bg-[var(--vch-surface-solid)] p-1.5 shadow-2xl backdrop-blur-xl">
+                  <div className="px-3 py-2 border-b border-[var(--vch-border-soft)] mb-1">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--vch-text-soft)]">
+                      Account Options
+                    </p>
+                    <p className="truncate text-xs font-bold text-[var(--vch-text)]">
+                      {email || "Fleet Admin"}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAccountMenuOpen(false);
+                      setView("settings");
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-[var(--vch-text)] transition hover:bg-[var(--vch-surface-hover)]"
+                  >
+                    <Settings className="h-4 w-4 text-[var(--vch-accent)]" />
+                    <span>User Settings</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAccountMenuOpen(false);
+                      setView("audit-logs");
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-[var(--vch-text)] transition hover:bg-[var(--vch-surface-hover)]"
+                  >
+                    <ShieldCheck className="h-4 w-4 text-emerald-500" />
+                    <span>Audit Logs</span>
+                  </button>
+
+                  <div className="my-1 border-t border-[var(--vch-border-soft)]" />
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAccountMenuOpen(false);
+                      onSignOut();
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-red-500 transition hover:bg-red-500/10"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    <span>Log out</span>
+                  </button>
                 </div>
-              </div>
-            </div>
-          )}
+              )}
 
-          <div className="relative" ref={accountMenuRef}>
-            {accountMenuOpen && (
-              <div
-                className={`absolute bottom-full mb-2 z-50 overflow-hidden rounded-2xl border border-white/15 bg-[#0D121F] p-1.5 shadow-2xl backdrop-blur-xl ${
-                  expanded ? "left-0 w-full" : "left-full ml-2 w-56"
-                }`}
-              >
-                <div className="px-3 py-2 border-b border-white/10 mb-1">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-[#8B95A8]">Account Options</p>
-                  <p className="truncate text-xs font-semibold text-white">{email || "Fleet Admin"}</p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAccountMenuOpen(false);
-                    setView("settings");
-                  }}
-                  className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-zinc-200 transition hover:bg-white/10 hover:text-white"
-                >
-                  <Settings className="h-4 w-4 text-[#FF6A00]" />
-                  <span>User Settings</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAccountMenuOpen(false);
-                    setView("audit-logs");
-                  }}
-                  className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-zinc-200 transition hover:bg-white/10 hover:text-white"
-                >
-                  <ShieldCheck className="h-4 w-4 text-emerald-400" />
-                  <span>Audit Logs</span>
-                </button>
-
-                <div className="my-1 border-t border-white/10" />
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAccountMenuOpen(false);
-                    onSignOut();
-                  }}
-                  className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-red-400 transition hover:bg-red-500/10 hover:text-red-300"
-                >
-                  <LogOut className="h-4 w-4" />
-                  <span>Log out</span>
-                </button>
-              </div>
-            )}
-
-            {expanded ? (
               <div
                 onClick={() => setAccountMenuOpen(!accountMenuOpen)}
-                className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.04] px-2.5 py-2 transition hover:border-[#FF6A00]/50 hover:bg-white/[0.08]"
+                className="flex cursor-pointer items-center gap-2.5 rounded-full border border-[var(--vch-border)] bg-[var(--vch-surface)] px-3 py-2 transition hover:border-[var(--vch-accent)] hover:bg-[var(--vch-surface-hover)]"
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => {
@@ -2809,37 +2894,22 @@ function Sidebar({
                   }
                 }}
               >
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#FF6A00] text-xs font-bold text-white shadow-sm">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--vch-accent)] text-xs font-bold text-white shadow-sm">
                   {initial}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs font-semibold text-white">
+                  <div className="truncate text-xs font-bold text-[var(--vch-text)]">
                     {email || "Signed in"}
                   </div>
-                  <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-[#8B95A8]">
+                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--vch-text-soft)]">
                     Fleet Admin
                   </div>
                 </div>
               </div>
-            ) : (
-              <div className="relative group flex justify-center">
-                <button
-                  type="button"
-                  onClick={() => setAccountMenuOpen(!accountMenuOpen)}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-[#FF6A00] text-sm font-bold text-white shadow-sm hover:ring-2 hover:ring-[#FF6A00]/50 transition-all"
-                >
-                  {initial}
-                </button>
-                <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center z-50 pointer-events-none">
-                  <div className="rounded-lg bg-[#141B2D] border border-white/15 px-3 py-1.5 text-xs font-semibold text-white shadow-xl whitespace-nowrap">
-                    {email || "Fleet Admin"}
-                  </div>
-                </div>
-              </div>
-            )}
+            </div>
           </div>
-        </div>
-      </aside>
+        </aside>
+      )}
     </>
   );
 }
@@ -4233,7 +4303,7 @@ function VehiclesList({
               >
                 {artwork ? (
                   <div
-                    className="pointer-events-none absolute inset-x-0 bottom-10 top-24 z-0 flex items-end justify-end opacity-50 transition-all duration-200 group-hover:opacity-95 group-hover:brightness-[1.25] group-hover:contrast-125 group-hover:drop-shadow-[0_0_18px_rgba(255,255,255,0.55)]"
+                    className="pointer-events-none absolute inset-x-0 bottom-10 top-24 z-0 flex items-end justify-end opacity-85 transition-all duration-200 group-hover:opacity-100 group-hover:scale-105"
                     aria-hidden="true"
                   >
                     <img
@@ -4264,23 +4334,23 @@ function VehiclesList({
                       onClick={() => onOpen(v)}
                       className="relative z-10 block max-w-[82%] text-left"
                     >
-                      <div className="line-clamp-2 text-lg font-extrabold uppercase leading-[1.08] tracking-tight text-[#f3f5f8] sm:text-xl">
+                      <div className="line-clamp-2 text-lg font-extrabold uppercase leading-[1.08] tracking-tight text-[var(--vch-text)] sm:text-xl">
                         {simp}
                       </div>
                     </button>
                   );
                 })()}
-                <div className="relative z-10 mt-4 grid max-w-[56%] grid-cols-1 gap-2 text-xs text-[#aab3c2] sm:max-w-[46%]">
+                <div className="relative z-10 mt-4 grid max-w-[56%] grid-cols-1 gap-2 text-xs text-[var(--vch-text-muted)] sm:max-w-[46%]">
                   <div
                     className="flex items-center gap-2.5 border-b pb-2.5"
                     style={{ borderColor: T.borderSoft }}
                   >
-                    <Icon.Calendar className="h-6 w-6 shrink-0 text-[#aeb8c9]" />
+                    <Icon.Calendar className="h-6 w-6 shrink-0 text-[var(--vch-text-muted)]" />
                     <span>
-                      <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#7d8799]">
+                      <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--vch-text-soft)]">
                         Year
                       </span>
-                      <span className="text-lg font-semibold text-[#e8ebf0]">{v.year}</span>
+                      <span className="text-lg font-semibold text-[var(--vch-text)]">{v.year}</span>
                     </span>
                   </div>
                   <div
@@ -4305,23 +4375,23 @@ function VehiclesList({
                     className="flex items-center gap-2.5 border-b pb-2.5"
                     style={{ borderColor: T.borderSoft }}
                   >
-                    <Icon.Alert className="h-6 w-6 shrink-0 text-[#aeb8c9]" />
+                    <Icon.Alert className="h-6 w-6 shrink-0 text-[var(--vch-text-muted)]" />
                     <span>
-                      <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#7d8799]">
+                      <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--vch-text-soft)]">
                         PCO
                       </span>
-                      <span className="text-lg font-semibold text-[#e8ebf0]">
+                      <span className="text-lg font-semibold text-[var(--vch-text)]">
                         {v.insurance_expiry ? daysUntil(v.insurance_expiry) : "—"}
                       </span>
                     </span>
                   </div>
                   <div className="flex items-center gap-2.5">
-                    <Icon.Alert className="h-6 w-6 shrink-0 text-[#aeb8c9]" />
+                    <Icon.Alert className="h-6 w-6 shrink-0 text-[var(--vch-text-muted)]" />
                     <span>
-                      <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#7d8799]">
+                      <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--vch-text-soft)]">
                         MOT
                       </span>
-                      <span className="text-lg font-semibold text-[#e8ebf0]">
+                      <span className="text-lg font-semibold text-[var(--vch-text)]">
                         {v.next_mot_date ? daysUntil(v.next_mot_date) : "—"}
                       </span>
                     </span>

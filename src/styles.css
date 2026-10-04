@@ -65,13 +65,27 @@ html.dark select optgroup {
     border-color: var(--vch-border);
   }
 
-  html,
+  html {
+    background: var(--vch-bg) !important;
+    color: var(--vch-text);
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
   body {
-    background: var(--vch-bg);
+    background: var(--vch-bg) !important;
     color: var(--vch-text);
     min-height: 100vh;
     min-height: 100dvh;
     overscroll-behavior-y: none;
+  }
+
+  #root,
+  .vch-app {
+    background: var(--vch-bg) !important;
+    color: var(--vch-text);
+    min-height: 100vh;
+    min-height: 100dvh;
   }
 }
 
