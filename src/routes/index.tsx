@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BrandLogo } from "@/components/brand-logo";
 import { useServerFn } from "@tanstack/react-start";
 import { motion } from "framer-motion";
 import {
@@ -2262,12 +2263,8 @@ export function FleetShell({ view }: { view: View }) {
         style={{ background: T.bg }}
       >
         <div className="flex flex-col items-center text-center">
-          <div className="mb-4 flex h-14 w-14 animate-pulse items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-[#0B0D12] text-white shadow-[0_18px_40px_-12px_rgba(255,106,0,0.7)]">
-            <img
-              src="/brand-logo.png"
-              alt="Virtual Car Hire"
-              className="h-full w-full object-contain p-0.5"
-            />
+          <div className="mb-4 flex items-center justify-center animate-pulse text-white drop-shadow-[0_18px_40px_rgba(255,106,0,0.7)]">
+            <BrandLogo size={120} />
           </div>
           <div className="flex items-center gap-2 text-sm font-semibold text-[#ff8a3d]">
             <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#ff8a3d] border-t-transparent" />
@@ -2617,13 +2614,9 @@ function Sidebar({
                 onClick={onTogglePin}
                 aria-label="Expand Navigation"
                 aria-expanded={false}
-                className="flex h-[56px] w-[56px] items-center justify-center rounded-full border border-[var(--vch-border)] bg-[var(--vch-surface-solid)] shadow-xl backdrop-blur-xl p-1.5 transition-colors hover:border-[var(--vch-accent)]"
+                className="flex h-[56px] w-[56px] items-center justify-center rounded-full border border-[var(--vch-border)] bg-[var(--vch-surface-solid)] shadow-xl backdrop-blur-xl p-1 transition-colors hover:border-[var(--vch-accent)]"
               >
-                <img
-                  src="/brand-logo.png"
-                  alt="Virtual Car Hire"
-                  className="h-full w-full object-contain"
-                />
+                <BrandLogo size={48} />
               </motion.button>
               {/* Pin Toggle indicator on hover */}
               <button
@@ -2733,12 +2726,8 @@ function Sidebar({
           {/* Header */}
           <div className="flex items-center justify-between border-b border-[var(--vch-border-soft)] px-2 pb-3">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--vch-border)] bg-[var(--vch-surface-solid)] p-1">
-                <img
-                  src="/brand-logo.png"
-                  alt="Virtual Car Hire Logo"
-                  className="h-full w-full object-contain"
-                />
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden">
+                <BrandLogo size={48} />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-xs font-extrabold text-[var(--vch-text)]">

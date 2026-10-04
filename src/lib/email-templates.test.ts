@@ -11,7 +11,7 @@ import {
 
 describe("Email Templates Foundation", () => {
   it("uses exact real brand logo and hero image URLs across templates", () => {
-    expect(VCH_LOGO_URL).toBe("https://virtual-carhire.co.uk/vch-logo.png");
+    expect(VCH_LOGO_URL).toBe("https://www.virtual-carhire.co.uk/assets/logo.png");
     expect(HERO_IMAGE_URL).toBe("https://virtual-carhire.co.uk/whatsapp/virtual-car-hire-welcome.jpg");
   });
 

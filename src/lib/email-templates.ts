@@ -1,10 +1,10 @@
 /**
  * Shared Branded HTML Email Templates for Virtual Car Hire
- * Logo URL: https://virtual-carhire.co.uk/vch-logo.png
+ * Logo URL: https://www.virtual-carhire.co.uk/assets/logo.png
  * Hero Image URL: https://virtual-carhire.co.uk/whatsapp/virtual-car-hire-welcome.jpg
  */
 
-export const VCH_LOGO_URL = "https://virtual-carhire.co.uk/vch-logo.png";
+export const VCH_LOGO_URL = "https://www.virtual-carhire.co.uk/assets/logo.png";
 export const HERO_IMAGE_URL = "https://virtual-carhire.co.uk/whatsapp/virtual-car-hire-welcome.jpg";
 
 export interface Template2FAOptions {
@@ -135,7 +135,7 @@ function renderUnifiedEmailLayout({
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td style="background-color: #0B0E17; padding: 18px 24px; border-bottom: 1px solid #1E293B;" align="left">
-                    <img src="${VCH_LOGO_URL}" alt="Virtual Car Hire" width="180" style="width: 180px; max-width: 180px; height: auto; display: block; border: 0;" />
+                    <img src="${VCH_LOGO_URL}" alt="Virtual Car Hire" width="96" height="96" style="width: 96px; height: 96px; max-width: 96px; display: block; border: 0; object-fit: contain;" />
                   </td>
                 </tr>
                 <tr>
@@ -185,7 +185,7 @@ function renderUnifiedEmailLayout({
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td align="left" style="vertical-align: middle;">
-                    <img src="${VCH_LOGO_URL}" alt="Virtual Car Hire" width="130" style="width: 130px; max-width: 130px; height: auto; opacity: 0.85; display: block; border: 0;" />
+                    <img src="${VCH_LOGO_URL}" alt="Virtual Car Hire" width="72" height="72" style="width: 72px; height: 72px; max-width: 72px; opacity: 0.85; display: block; border: 0; object-fit: contain;" />
                   </td>
                   <td align="right" style="vertical-align: middle; color: #94A3B8; font-size: 11px;">
                     <span style="color: #FF6A00; font-weight: bold;">✔</span> Smarter Fleet Management
