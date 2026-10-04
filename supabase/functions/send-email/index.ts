@@ -1,10 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 
-const CRM_BASE_URL = "https://hq.virtual-carhire.co.uk";
-const VCH_LOGO_URL = `${CRM_BASE_URL}/email-logo.png`;
-const EMAIL_LOGO_URL = `${CRM_BASE_URL}/email-logo.png`;
-const HERO_IMAGE_URL = `${CRM_BASE_URL}/whatsapp/virtual-car-hire-welcome.jpg`;
+const VCH_LOGO_URL = "https://virtual-carhire.co.uk/vch-logo.png";
+const HERO_IMAGE_URL = "https://virtual-carhire.co.uk/whatsapp/virtual-car-hire-welcome.jpg";
 
 // --- Email Address Routing ---
 function formatFromAddress(rawAddress: string): string {
@@ -64,14 +62,6 @@ function renderUnifiedEmailLayout({
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${title}</title>
-  <style>
-    @media only screen and (max-width: 480px) {
-      .vch-email-logo {
-        width: 72px !important;
-        height: 72px !important;
-      }
-    }
-  </style>
 </head>
 <body style="margin: 0; padding: 20px 0; background-color: #F4F5F7; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #F4F5F7; width: 100%;">
@@ -79,10 +69,15 @@ function renderUnifiedEmailLayout({
       <td align="center" style="padding: 10px;">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; width: 100%; background-color: #0B0E17; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.12);">
 
-          <!-- Hero Image Header -->
+          <!-- Hero Image & Logo Header -->
           <tr>
             <td style="background-color: #0B0E17; padding: 0; text-align: center; position: relative;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="background-color: #0B0E17; padding: 18px 24px; border-bottom: 1px solid #1E293B;" align="left">
+                    <img src="${VCH_LOGO_URL}" alt="Virtual Car Hire" width="180" style="width: 180px; max-width: 180px; height: auto; display: block; border: 0;" />
+                  </td>
+                </tr>
                 <tr>
                   <td style="padding: 0; background-color: #1E293B;">
                     <img src="${HERO_IMAGE_URL}" alt="Virtual Car Hire Fleet" width="600" height="200" style="width: 100%; max-width: 600px; height: auto; max-height: 200px; object-fit: cover; display: block; border: 0;" />
@@ -95,11 +90,6 @@ function renderUnifiedEmailLayout({
           <!-- Main Content Area -->
           <tr>
             <td style="padding: 28px 24px; background-color: #0B0E17; color: #FFFFFF;">
-              <!-- Brand Logo Above Headline -->
-              <div style="margin-bottom: 16px;">
-                <img src="${EMAIL_LOGO_URL}" alt="Virtual Car Hire" width="96" height="96" class="vch-email-logo" style="width: 96px; height: 96px; max-width: 96px; max-height: 96px; display: block; border: 0; border-radius: 12px;" />
-              </div>
-
               <div style="color: #FF6A00; font-size: 11px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 8px;">
                 ${eyebrow}
               </div>
@@ -130,7 +120,7 @@ function renderUnifiedEmailLayout({
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td align="left" style="vertical-align: middle;">
-                    <img src="${EMAIL_LOGO_URL}" alt="Virtual Car Hire" width="72" height="72" class="vch-email-logo" style="width: 72px; height: 72px; max-width: 72px; max-height: 72px; opacity: 0.85; display: block; border: 0; border-radius: 8px;" />
+                    <img src="${VCH_LOGO_URL}" alt="Virtual Car Hire" width="130" style="width: 130px; max-width: 130px; height: auto; opacity: 0.85; display: block; border: 0;" />
                   </td>
                   <td align="right" style="vertical-align: middle; color: #94A3B8; font-size: 11px;">
                     <span style="color: #FF6A00; font-weight: bold;">✔</span> Smarter Fleet Management

@@ -15,6 +15,7 @@ describe("Driver File Editing & Payload Persistence", () => {
       allowance: 5000,
       excess_rate: 20,
       start_date: "2025-01-01",
+      status: "active",
       weekly_rent: 0,
       rent_due_day: "Monday",
       rent_status: "unpaid",
@@ -60,6 +61,63 @@ describe("Driver File Editing & Payload Persistence", () => {
     expect(updatePayload.reg).toBe("AB12CDE");
   });
 
+  it("converts empty licence expiry date to null in payload", () => {
+    const rawInput = "";
+    const payloadVal = rawInput || null;
+    expect(payloadVal).toBeNull();
+  });
+
+  it("calculates licence expiry chip status correctly for expired, expiring, and valid dates", () => {
+    const now = new Date("2026-03-01T00:00:00Z").getTime();
+
+    function getLicenceStatus(expiryDateStr: string | null) {
+      if (!expiryDateStr) return null;
+      const t = new Date(expiryDateStr).getTime();
+      if (isNaN(t)) return null;
+      const days = Math.ceil((t - now) / 86400000);
+      if (days < 0) return { status: "expired", days, color: "red" };
+      if (days <= 30) return { status: "expiring", days, color: "amber" };
+      return { status: "valid", days, color: "green" };
+    }
+
+    // Expired 5 days ago
+    const expiredRes = getLicenceStatus("2026-02-24");
+    expect(expiredRes?.status).toBe("expired");
+    expect(expiredRes?.color).toBe("red");
+
+    // Expiring in 10 days
+    const expiringRes = getLicenceStatus("2026-03-11");
+    expect(expiringRes?.status).toBe("expiring");
+    expect(expiringRes?.color).toBe("amber");
+
+    // Valid for over a year
+    const validRes = getLicenceStatus("2027-10-15");
+    expect(validRes?.status).toBe("valid");
+    expect(validRes?.color).toBe("green");
+  });
+
+  it("includes both upcoming expiries and already-expired licences in the alert filter", () => {
+    const now = new Date("2026-03-01T00:00:00Z").getTime();
+    const mockDrivers = [
+      { id: "d1", driver_name: "Driver Expired", licence_expiry_date: "2026-02-20" }, // -9 days
+      { id: "d2", driver_name: "Driver Expiring", licence_expiry_date: "2026-03-15" }, // +14 days
+      { id: "d3", driver_name: "Driver Far Future", licence_expiry_date: "2028-05-01" }, // > 30 days
+      { id: "d4", driver_name: "Driver No Licence", licence_expiry_date: null },
+    ];
+
+    const alerts = mockDrivers
+      .filter((d) => d.licence_expiry_date)
+      .flatMap((d) => {
+        const t = new Date(d.licence_expiry_date!).getTime();
+        const days = Math.ceil((t - now) / 86400000);
+        if (days <= 30) return [{ driver: d, days }];
+        return [];
+      });
+
+    expect(alerts.length).toBe(2);
+    expect(alerts.map((a) => a.driver.id)).toEqual(["d1", "d2"]);
+  });
+
   it("updates driver name instantly in optimistic drivers array state", () => {
     const driversList: DriverTrack[] = [
       {
@@ -74,6 +132,7 @@ describe("Driver File Editing & Payload Persistence", () => {
         allowance: 5000,
         excess_rate: 20,
         start_date: "2025-01-01",
+        status: "active",
         weekly_rent: 200,
         rent_due_day: "Monday",
         rent_status: "unpaid",
