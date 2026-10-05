@@ -1,7 +1,7 @@
 /**
  * Shared Branded HTML Email Templates for Virtual Car Hire
- * Logo URL: https://virtual-carhire.co.uk/vch-logo.png
- * Hero Image URL: https://virtual-carhire.co.uk/whatsapp/virtual-car-hire-welcome.jpg
+ * Logo URL: https://www.virtual-carhire.co.uk/assets/logo.png
+ * Hero Image URL: https://hq.virtual-carhire.co.uk/whatsapp/virtual-car-hire-welcome.jpg
  */
 
 export const VCH_LOGO_URL = "https://www.virtual-carhire.co.uk/assets/logo.png";
@@ -107,6 +107,8 @@ function renderUnifiedEmailLayout({
   cardContent,
   ctaUrl,
   ctaText,
+  logoSrc = VCH_LOGO_URL,
+  heroSrc = HERO_IMAGE_URL,
 }: {
   title: string;
   eyebrow: string;
@@ -115,6 +117,8 @@ function renderUnifiedEmailLayout({
   cardContent: string;
   ctaUrl?: string;
   ctaText?: string;
+  logoSrc?: string;
+  heroSrc?: string;
 }): string {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -135,12 +139,12 @@ function renderUnifiedEmailLayout({
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td style="background-color: #0B0E17; padding: 18px 24px; border-bottom: 1px solid #1E293B;" align="left">
-                    <img src="${VCH_LOGO_URL}" alt="Virtual Car Hire" width="180" height="48" style="width: 180px; max-width: 180px; height: 48px; display: block; border: 0; background-color: #0B0E17;" />
+                    <img src="${logoSrc}" alt="Virtual Car Hire" width="180" height="48" style="width: 180px; max-width: 180px; height: 48px; display: block; border: 0; background-color: #0B0E17;" />
                   </td>
                 </tr>
                 <tr>
                   <td style="padding: 0; background-color: #1E293B;">
-                    <img src="${HERO_IMAGE_URL}" alt="Virtual Car Hire Fleet" width="600" height="200" style="width: 100%; max-width: 600px; height: 200px; max-height: 200px; object-fit: cover; display: block; border: 0; background-color: #1E293B;" />
+                    <img src="${heroSrc}" alt="Virtual Car Hire Fleet" width="600" height="200" style="width: 100%; max-width: 600px; height: 200px; max-height: 200px; object-fit: cover; display: block; border: 0; background-color: #1E293B;" />
                   </td>
                 </tr>
               </table>
@@ -160,8 +164,8 @@ function renderUnifiedEmailLayout({
                 ${headline}
               </h1>
 
-              <!-- Short Body Text -->
-              ${bodyText ? `<p style="color: #94A3B8; font-size: 14px; margin: 0 0 20px 0; line-height: 1.5;">${bodyText}</p>` : ""}
+              <!-- Short Body Text / Code Block -->
+              ${bodyText ? `<div style="color: #94A3B8; font-size: 14px; margin: 0 0 20px 0; line-height: 1.5;">${bodyText}</div>` : ""}
 
               <!-- White Card Section -->
               <div style="background-color: #FFFFFF; border-radius: 10px; padding: 20px; color: #14161B; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
@@ -185,7 +189,7 @@ function renderUnifiedEmailLayout({
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td align="left" style="vertical-align: middle;">
-                    <img src="${VCH_LOGO_URL}" alt="Virtual Car Hire" width="130" height="35" style="width: 130px; max-width: 130px; height: 35px; opacity: 0.85; display: block; border: 0; background-color: #070910;" />
+                    <img src="${logoSrc}" alt="Virtual Car Hire" width="130" height="35" style="width: 130px; max-width: 130px; height: 35px; opacity: 0.85; display: block; border: 0; background-color: #070910;" />
                   </td>
                   <td align="right" style="vertical-align: middle; color: #94A3B8; font-size: 11px;">
                     <span style="color: #FF6A00; font-weight: bold;">✔</span> Smarter Fleet Management
