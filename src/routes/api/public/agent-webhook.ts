@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import { getRuntimeEnv } from "@/integrations/supabase/config";
 import { sendWhatsAppText, sendWhatsAppImageButtons, sendWhatsAppImage } from "@/lib/meta-whatsapp.server";
+import { callGeminiProvider, callSecondaryProvider, sanitizeErrorMessage } from "@/lib/ai-providers";
+import { runAgentTurn, type LeadContext, type FleetVehicleItem } from "@/lib/ai-agent";
 import { CRM_BASE_URL, WEBSITE_BASE_URL } from "@/lib/domain-config";
 
 const CRM_BASE = CRM_BASE_URL;
@@ -135,7 +137,26 @@ type AiResult = {
   needs_human: boolean;
   reason: string;
   asks_closure: boolean;
+  updatedContext?: LeadContext;
+  toolCallsExecuted?: any[];
+  providerUsed?: string;
+  modelUsed?: string;
+  latencyMs?: number;
+  validationError?: string;
 };
+
+const processedMessageIds = new Map<string, number>();
+
+function isDuplicateMessage(metaMessageId?: string): boolean {
+  if (!metaMessageId) return false;
+  const now = Date.now();
+  for (const [id, time] of processedMessageIds.entries()) {
+    if (now - time > 10 * 60 * 1000) processedMessageIds.delete(id);
+  }
+  if (processedMessageIds.has(metaMessageId)) return true;
+  processedMessageIds.set(metaMessageId, now);
+  return false;
+}
 
 type BreakdownVerification = {
   status: "verified" | "unclear" | "rejected" | "received_pending_review" | "error";
@@ -291,7 +312,7 @@ export function isMenuReset(text: string): boolean {
     "options", "help", "info", "what can you do", "get started", "hello", "helo", "helloo", "hi", "hiii",
     "hey", "heyy", "heyyy", "hiya", "howdy", "greetings", "welcome", "good morning", "goodmorning",
     "good afternoon", "goodafternoon", "good evening", "goodevening", "good day", "goodday",
-    "morning", "afternoon", "evening", "yo", "hola", "wassup", "whatsup", "sup",
+    "morning", "afternoon", "evening", "yo", "hola", "bonjour", "salut", "buenos dias", "buenas tardes", "wassup", "whatsup", "sup",
     "anyone", "anyone there", "anyone here", "abyone there", "anybody", "someone"
   ];
 
@@ -606,8 +627,8 @@ export function isNegativeConfirmation(text: string): boolean {
     .toLowerCase()
     .replace(/[.,!:]+$/g, "");
   return (
-    /^(?:no|nope|not correct|incorrect|cancel|stop|0|false)$/i.test(normalized) ||
-    /^(?:no|nope)\b/i.test(normalized)
+    /^(?:no|nope|not correct|incorrect|not interested|no thanks|nah|cancel|stop|0|false)$/i.test(normalized) ||
+    /^(?:no|nope|nah)\b/i.test(normalized)
   );
 }
 
@@ -1138,119 +1159,15 @@ async function callSecondaryAiFallback(
   userText: string,
   geminiErrorReason: string,
 ): Promise<AiResult | null> {
-  // Try xAI Grok API first if GROK or XAI keys are set
-  const grokKeyBindings = ["GROK_API_KEY", "XAI_API_KEY", "VITE_GROK_API_KEY", "GROK_API_TOKEN"];
-  const grokKeyBinding = grokKeyBindings.find((b) => Boolean(getRuntimeEnv(b)));
-  const grokKey = grokKeyBinding ? getRuntimeEnv(grokKeyBinding) : undefined;
-
-  if (grokKey) {
-    const grokModel = (getRuntimeEnv("GROK_MODEL") ?? "grok-2-latest").trim();
-    console.info("[agent-webhook] Attempting xAI Grok fallback", {
-      geminiErrorReason,
-      grokModel,
-      grokKeyBinding,
-    });
-    try {
-      const grokRes = await fetch("https://api.x.ai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${grokKey.trim()}`,
-        },
-        body: JSON.stringify({
-          model: grokModel,
-          messages: [
-            { role: "system", content: system },
-            { role: "user", content: userText },
-          ],
-          temperature: 0.2,
-        }),
-      });
-      const grokBody = await grokRes.text();
-      if (grokRes.ok) {
-        const grokData = JSON.parse(grokBody) as { choices?: { message?: { content?: string } }[] };
-        const grokText = grokData.choices?.[0]?.message?.content ?? "";
-        const parsed = parseAiReply(grokText);
-        if (parsed.reply) {
-          console.info("[agent-webhook] xAI Grok fallback succeeded", { geminiErrorReason, grokModel });
-          return { ...parsed, reason: `grok_fallback_used_after_${geminiErrorReason}` };
-        }
-      } else {
-        console.error("[agent-webhook] xAI Grok fallback API error", {
-          status: grokRes.status,
-          statusText: grokRes.statusText,
-          body: grokBody.slice(0, 500),
-          grokModel,
-          geminiErrorReason,
-        });
-      }
-    } catch (grokError) {
-      console.error("[agent-webhook] xAI Grok fallback exception", {
-        error: grokError instanceof Error ? grokError.message : String(grokError),
-        geminiErrorReason,
-      });
+  try {
+    const res = await callSecondaryProvider({ system, userText });
+    const parsed = parseAiReply(res.reply);
+    if (parsed.reply) {
+      return { ...parsed, reason: `${res.provider}_fallback_used_after_${geminiErrorReason}` };
     }
+  } catch (err: any) {
+    console.error(`[agent-webhook] Secondary AI fallback failed after ${geminiErrorReason}:`, err.message || err);
   }
-
-  // Try Groq API next if GROQ keys are set
-  const groqKeyBindings = ["GROQ_API_KEY", "GROQ_API_TOKEN", "VITE_GROQ_API_KEY"];
-  const groqKeyBinding = groqKeyBindings.find((b) => Boolean(getRuntimeEnv(b)));
-  const groqKey = groqKeyBinding ? getRuntimeEnv(groqKeyBinding) : undefined;
-
-  if (groqKey) {
-    const groqModel = (getRuntimeEnv("GROQ_MODEL") ?? "llama-3.3-70b-versatile").trim();
-    console.info("[agent-webhook] Attempting Groq fallback", {
-      geminiErrorReason,
-      groqModel,
-      groqKeyBinding,
-    });
-
-    try {
-      const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${groqKey.trim()}`,
-        },
-        body: JSON.stringify({
-          model: groqModel,
-          messages: [
-            { role: "system", content: system },
-            { role: "user", content: userText },
-          ],
-          response_format: { type: "json_object" },
-          temperature: 0.2,
-        }),
-      });
-      const groqBody = await groqRes.text();
-      if (groqRes.ok) {
-        const groqData = JSON.parse(groqBody) as { choices?: { message?: { content?: string } }[] };
-        const groqText = groqData.choices?.[0]?.message?.content ?? "";
-        const parsed = parseAiReply(groqText);
-        if (parsed.reply) {
-          console.info("[agent-webhook] Groq fallback succeeded", { geminiErrorReason, groqModel });
-          return { ...parsed, reason: `groq_fallback_used_after_${geminiErrorReason}` };
-        }
-      } else {
-        console.error("[agent-webhook] Groq fallback API error", {
-          status: groqRes.status,
-          statusText: groqRes.statusText,
-          body: groqBody.slice(0, 500),
-          groqModel,
-          geminiErrorReason,
-        });
-      }
-    } catch (groqError) {
-      console.error("[agent-webhook] Groq fallback exception", {
-        error: groqError instanceof Error ? groqError.message : String(groqError),
-        geminiErrorReason,
-      });
-    }
-  }
-
-  console.error("[agent-webhook] No working fallback provider (Grok/Groq) available or all failed", {
-    geminiErrorReason,
-  });
   return null;
 }
 
@@ -1268,182 +1185,57 @@ async function generateReply(
   hasMedia: boolean,
   fleet: FleetVehicle[],
   flowContext?: string,
+  leadContext?: LeadContext,
 ): Promise<AiResult> {
-  const fallbackReply = isBreakdownRequest(latest)
-    ? `I’m here to help. If the vehicle is unsafe, move to a safe place and call 999 if anyone is injured or in immediate danger. For recovery, please use your own provider and take the vehicle to ${AUTO_SURGEON_ADDRESS}. Send your registration and location so I can guide you through the next step.`
-    : isAccidentRequest(latest)
-      ? "I’m here to help with the accident report. Please send your full name, the vehicle registration, the accident location, and whether anyone is injured. You can send photos and videos separately."
-      : isCarRequest(latest)
-        ? formatCustomerFleet(fleet)
-        : "I’m here to help. Please tell me what has happened, your vehicle registration, and your current location if this is urgent.";
-  const fallback: AiResult = {
-    reply: fallbackReply,
-    needs_human: false,
-    reason: "ai_fallback_used",
-    asks_closure: false,
-  };
-  const system =
-    "You are the WhatsApp assistant for Virtual Car Hire (VCH), a UK PCO/private-hire car rental company. " +
-    "Reply naturally in UK English. Keep normal replies short: one to four brief lines and normally under 450 characters. Do not repeat the welcome menu or previous answer. Use concise bullet-style lines only when listing cars or contract details. Use £ for prices. " +
-    "Use only the supplied live fleet data: never invent availability, prices, dates, MOT or PCO information. " +
-    (flowContext
-      ? `\n\nACTIVE FLOW CONTEXT: ${flowContext}\nIf the customer asks an off-topic or side question (e.g. 'who is this?', 'what are your hours?'), answer their question directly and politely first, then gently guide them back to the active flow. NEVER ask for details that have already been collected.\n\n`
-      : "") +
-    "Treat only vehicles marked available/active/in stock as available; rented, assigned, in-service and off-road vehicles are unavailable. " +
-    "If the customer asks for a car, wants to hire/rent, asks what is available, or uses any natural wording with the same meaning, treat it as a car enquiry and show all currently available vehicles from the supplied fleet, grouped clearly under Electric, Plug-in-Hybrid, Petrol where possible. If the conversation already contains the complete available-fleet list and the customer names a vehicle, respond with that vehicle's complete details in this order: weekly rent, year, monthly mileage allowance, fuel type, and minimum term, then ask for Yes or No confirmation. If the requested car is unavailable, explicitly say so and suggest alternatives under exactly these headings: Electric, Plug-in-Hybrid, Petrol. Do not repeat the full fleet list when the customer has selected a vehicle. " +
-    "If you cannot safely answer, the AI service fails, or you become stuck, set needs_human true; otherwise keep needs_human false. For an accident report, gather the details for the CRM accident workflow instead of handing off immediately. " +
-    "If the customer asks to negotiate, lower, or change the price, weekly rate, mileage allowance, or contract terms in any way (e.g. 'can I get it cheaper', 'more miles please', 'any discount'), do not agree to or discuss any change yourself. Politely explain that pricing and mileage are not something you're able to adjust and that a member of the team will discuss it with them directly, then ask if they'd still like to confirm their current selection so you can pass it on. " +
-    "If the customer pushes back or objects to any policy, cost, or exclusion (e.g. 'how come you guys don't cover that', 'that's not fair', 'why do I have to pay for that', 'other companies don't charge for this'), do not argue, apologise excessively, or invent a justification. Briefly and calmly acknowledge their concern, explain in one line that this is simply company policy, and offer to have a team member discuss it with them directly if they'd like. Never promise an exception, discount, or change to policy yourself. " +
-    'Respond ONLY as JSON: {"reply": string, "needs_human": boolean, "reason": string, "asks_closure": boolean}. ' +
-    "Set asks_closure true when the reply contains that exact question.\n\n" +
-    formatFleet(fleet);
-  const convo = history
-    .slice(-16)
-    .map((m) => `${m.sender === "ai_agent" ? "Agent" : "Customer"}: ${m.content}`)
-    .join("\n");
-  const userText =
-    (convo ? `Conversation so far:\n${convo}\n\n` : "") +
-    `New customer message: ${latest}` +
-    (hasMedia ? "\nThe customer attached media; acknowledge it if relevant." : "");
+  const fleetItems: FleetVehicleItem[] = (fleet || []).map((v) => ({
+    id: v.id || v.registration || String(Math.random()),
+    make: v.make || "Vehicle",
+    model: v.model || "",
+    year: v.year || 2023,
+    fuel_type: v.fuel_type || "Petrol",
+    weekly_rent: v.weekly_rent || getVehicleWeeklyPrice(`${v.make} ${v.model}`),
+    monthly_mileage_allowance: v.monthly_mileage_allowance || 2500,
+    status: v.status || "available",
+    registration: v.registration,
+    default_deposit: v.default_deposit || getVehicleDefaultDeposit(`${v.make} ${v.model}`),
+  }));
+
+  const lastBotMessage = history
+    .filter((m) => m.sender === "ai_agent" || m.sender === "agent")
+    .pop()?.content;
 
   try {
-    const geminiKeyBindings = [
-      "GEMINI_API_KEY",
-      "GOOGLE_API_KEY",
-      "GOOGLE_GEMINI_API_KEY",
-      "GOOGLE_GENERATIVE_AI_API_KEY",
-      "VITE_GEMINI_API_KEY",
-    ];
-    const geminiKeyBinding = geminiKeyBindings.find((binding) => Boolean(getRuntimeEnv(binding)));
-    const geminiKey = geminiKeyBinding ? getRuntimeEnv(geminiKeyBinding) : undefined;
-    console.info("[agent-webhook] AI generation start", {
-      historyLength: history.length,
-      hasMedia,
-      hasGeminiKey: Boolean(geminiKey),
-      geminiKeyBinding: geminiKeyBinding ?? null,
+    const turnResult = await runAgentTurn({
+      history,
+      latest,
+      context: leadContext || {},
+      fleet: fleetItems,
+      lastBotMessage,
     });
-    if (!geminiKey) {
-      console.error(
-        "[agent-webhook] Gemini API error: missing API key (no supported binding configured)",
-        { supportedBindings: geminiKeyBindings },
-      );
-      await alertAiDegraded("gemini_api_key_missing", "unknown");
-      const fallbackResult = await callSecondaryAiFallback(system, userText, "gemini_api_key_missing");
-      if (fallbackResult) return fallbackResult;
-      console.error(
-        "[agent-webhook] Scripted fallback used as last resort (Gemini key missing, secondary fallback failed)",
-      );
-      return { ...fallback, reason: "gemini_api_key_missing" };
-    }
-    const responseSchema = {
-      type: "OBJECT",
-      properties: {
-        reply: { type: "STRING" },
-        needs_human: { type: "BOOLEAN" },
-        reason: { type: "STRING" },
-        asks_closure: { type: "BOOLEAN" },
-      },
-      required: ["reply", "needs_human", "reason", "asks_closure"],
+
+    return {
+      reply: turnResult.reply,
+      needs_human: turnResult.needs_human,
+      reason: turnResult.reason,
+      asks_closure: turnResult.reply.includes("Yes or No") || turnResult.reply.includes("confirm"),
+      updatedContext: turnResult.updatedContext,
+      toolCallsExecuted: turnResult.toolCallsExecuted,
+      providerUsed: turnResult.providerUsed,
+      modelUsed: turnResult.modelUsed,
+      latencyMs: turnResult.latencyMs,
+      validationError: turnResult.validationError,
     };
-    const requestBody = {
-      systemInstruction: { parts: [{ text: system }] },
-      contents: [{ role: "user", parts: [{ text: userText }] }],
-      generationConfig: { responseMimeType: "application/json", responseSchema, temperature: 0.2 },
+  } catch (err: any) {
+    console.error("[agent-webhook] AI turn execution error:", err.message || err);
+    await alertAiDegraded("all_providers_failed", "gemini/secondary", err.message);
+
+    return {
+      reply: "Thanks, one of our team will reply shortly.",
+      needs_human: true,
+      reason: "all_ai_providers_failed",
+      asks_closure: false,
+      updatedContext: { ...(leadContext || {}), paused_reason: "ai_down" },
     };
-    const requestHeaders = {
-      "Content-Type": "application/json",
-      "x-goog-api-key": geminiKey.trim(),
-    };
-    type GeminiGeneration = { response: Response; body: string; model: string; apiVersion: string };
-    const callModel = async (apiVersion: string, model: string): Promise<GeminiGeneration> => {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent`,
-        {
-          method: "POST",
-          headers: requestHeaders,
-          body: JSON.stringify(requestBody),
-        },
-      );
-      return { response, body: await response.text(), model, apiVersion };
-    };
-
-    const configuredModel = (getRuntimeEnv("GEMINI_MODEL") ?? "gemini-2.5-flash").trim();
-    const geminiModels = [
-      configuredModel,
-      "gemini-2.5-flash",
-      "gemini-2.0-flash",
-      "gemini-1.5-flash",
-    ].filter((m, index, self) => m && self.indexOf(m) === index && !m.includes("3.6"));
-
-    let lastGeminiErrorReason = "gemini_failed";
-    for (const model of geminiModels) {
-      console.info(`[agent-webhook] Attempting Gemini model '${model}'...`);
-      let generation = await callModel("v1beta", model);
-      if (generation.response.status === 503 || generation.response.status === 429) {
-        await new Promise((resolve) => setTimeout(resolve, 300));
-        generation = await callModel("v1beta", model);
-      }
-      if (!generation.response.ok) {
-        lastGeminiErrorReason = `gemini_http_${generation.response.status}`;
-        console.warn(
-          `[agent-webhook] Gemini model '${model}' failed with status ${generation.response.status} (${generation.response.statusText}). Body: ${generation.body.slice(0, 300)}. Downgrading to next model in fallback chain...`,
-        );
-        continue;
-      }
-      const data = JSON.parse(generation.body) as {
-        candidates?: { content?: { parts?: { text?: string }[] } }[];
-        promptFeedback?: { blockReason?: string };
-      };
-      const contentText =
-        data.candidates?.[0]?.content?.parts
-          ?.map((part) => part.text ?? "")
-          .join("")
-          .trim() ?? "";
-      if (!contentText) {
-        lastGeminiErrorReason = data.promptFeedback?.blockReason
-          ? `gemini_blocked_${data.promptFeedback.blockReason}`
-          : "gemini_empty_response";
-        console.warn(
-          `[agent-webhook] Gemini model '${model}' returned empty or blocked response (${lastGeminiErrorReason}). Downgrading to next model in fallback chain...`,
-        );
-        continue;
-      }
-      const parsed = parseAiReply(contentText);
-      if (!parsed.reply) {
-        lastGeminiErrorReason = "gemini_parse_error";
-        console.warn(`[agent-webhook] Gemini model '${model}' returned unparseable reply. Downgrading to next model in fallback chain...`);
-        continue;
-      }
-      console.info(`[agent-webhook] AI generation complete using Gemini model '${model}'`, {
-        replyLength: parsed.reply.length,
-        needsHuman: parsed.needs_human,
-      });
-      return parsed;
-    }
-
-    await alertAiDegraded(lastGeminiErrorReason, geminiModels.join(","));
-    const secondaryResult = await callSecondaryAiFallback(system, userText, lastGeminiErrorReason);
-    if (secondaryResult) return secondaryResult;
-
-    console.error(
-      "[agent-webhook] Scripted fallback used as last resort (all Gemini models failed, Grok/Groq fallback failed)",
-      { lastGeminiErrorReason },
-    );
-    return { ...fallback, reason: lastGeminiErrorReason };
-  } catch (error) {
-    console.error("[agent-webhook] Gemini API exception", error);
-    await alertAiDegraded(
-      "gemini_exception",
-      "unknown",
-      error instanceof Error ? error.message : String(error),
-    );
-    const secondaryResult = await callSecondaryAiFallback(system, userText, "gemini_exception");
-    if (secondaryResult) return secondaryResult;
-
-    console.error(
-      "[agent-webhook] Scripted fallback used as last resort (Gemini exception, Grok/Groq fallback failed)",
-    );
-    return { ...fallback, reason: "gemini_exception" };
   }
 }
 
@@ -1714,6 +1506,11 @@ export async function handleAgentWebhookRequest(request: Request) {
     meta_message_id: metaMessageId = null,
     session_id: suppliedSessionId = null,
   } = parsed.data;
+
+  if (metaMessageId && isDuplicateMessage(metaMessageId)) {
+    console.info("[agent-webhook] Skipping duplicate inbound message:", metaMessageId);
+    return json({ ok: true, skipped: "duplicate_message_id" }, 200);
+  }
   let mediaUrl = incomingMediaUrl;
   const chatId = parsed.data.chat_id ?? null;
   const phone = parsed.data.phone ?? null;
@@ -3705,10 +3502,26 @@ export async function handleAgentWebhookRequest(request: Request) {
       .from("whatsapp_leads")
       .update({
         ai_summary: finalReply,
+        ...(ai.updatedContext ? { car_enquiry_data: ai.updatedContext } : {}),
         ...(needsHuman ? { status: "needs_human", ai_paused: true } : {}),
         last_message_at: new Date().toISOString(),
       } as never)
       .eq("id", leadId);
+
+    try {
+      await db.from("conversation_events").insert({
+        chat_id: phone ?? chatId ?? "unknown",
+        provider: ai.providerUsed || "gemini",
+        model: ai.modelUsed || "gemini-3.6-flash",
+        latency_ms: ai.latencyMs || 0,
+        tool_calls: ai.toolCallsExecuted ? JSON.stringify(ai.toolCallsExecuted) : null,
+        validation_result: ai.validationError ? `failed: ${ai.validationError}` : "ok",
+        error: ai.reason !== "ok" ? ai.reason : null,
+        created_at: new Date().toISOString(),
+      } as never);
+    } catch (logErr) {
+      console.warn("[agent-webhook] conversation_events log insert failed:", logErr);
+    }
   }
   console.info("[agent-webhook] Meta WhatsApp AI dispatch complete", {
     leadId,
