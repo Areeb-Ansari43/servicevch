@@ -1177,6 +1177,124 @@ function PortalAccountsAdminCard({
   );
 }
 
+function JobRunsAdminCard() {
+  const [jobRuns, setJobRuns] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchJobRuns = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/job-runs");
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || "Failed to load job runs");
+      }
+      setJobRuns(data.jobRuns || []);
+    } catch (err: any) {
+      setError(err.message || "Failed to fetch job execution history");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchJobRuns();
+  }, []);
+
+  return (
+    <div className="bg-card text-card-foreground border border-border/80 rounded-2xl p-6 shadow-sm mb-8">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="text-lg font-bold flex items-center gap-2">
+            <span className="text-xl">⏱️</span> Job Execution Log
+          </h3>
+          <p className="text-xs text-muted-foreground mt-1">
+            Last 30 background job executions (expiry scans, notifications, watchdogs)
+          </p>
+        </div>
+        <button
+          onClick={fetchJobRuns}
+          disabled={loading}
+          className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors"
+        >
+          {loading ? "Refreshing..." : "Refresh"}
+        </button>
+      </div>
+
+      {error && (
+        <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-xs mb-4">
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="text-xs text-muted-foreground py-4 text-center">Loading job history...</div>
+      ) : jobRuns.length === 0 ? (
+        <div className="text-xs text-muted-foreground py-4 text-center border border-dashed border-border rounded-xl">
+          No job runs recorded yet.
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-border/80 text-muted-foreground font-semibold">
+                <th className="pb-2">Job Name</th>
+                <th className="pb-2">Started At</th>
+                <th className="pb-2">Status</th>
+                <th className="pb-2">Results / Error</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/40">
+              {jobRuns.map((run) => {
+                const isSuccess = run.status === "success";
+                const isFailed = run.status === "failed";
+                return (
+                  <tr key={run.id} className="hover:bg-muted/30 transition-colors">
+                    <td className="py-2.5 font-bold">{run.job_name}</td>
+                    <td className="py-2.5 text-muted-foreground">
+                      {new Date(run.started_at).toLocaleString("en-GB", {
+                        day: "2-digit",
+                        month: "short",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                      })}
+                    </td>
+                    <td className="py-2.5">
+                      <span
+                        className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                          isSuccess
+                            ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                            : isFailed
+                            ? "bg-red-500/10 text-red-500 border border-red-500/20"
+                            : "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                        }`}
+                      >
+                        {run.status}
+                      </span>
+                    </td>
+                    <td className="py-2.5 text-muted-foreground font-mono text-[11px]">
+                      {run.error_message ? (
+                        <span className="text-red-400 font-sans">{run.error_message}</span>
+                      ) : run.counts ? (
+                        JSON.stringify(run.counts)
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function UserSettingsView({
   account,
   toast,
@@ -1432,6 +1550,7 @@ function UserSettingsView({
       </div>
 
       {/* APPEARANCE CUSTOMISATION CARD */}
+      <JobRunsAdminCard />
       <AppearanceSettingsCard toast={toast} />
 
       {/* PORTAL ACCOUNTS & STRAY CREDENTIALS AUDIT */}

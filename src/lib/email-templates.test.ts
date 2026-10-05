@@ -10,9 +10,9 @@ import {
 } from "./email-templates";
 
 describe("Email Templates Foundation", () => {
-  it("uses exact real brand logo and hero image URLs across templates", () => {
-    expect(VCH_LOGO_URL).toBe("https://www.virtual-carhire.co.uk/assets/logo.png");
-    expect(HERO_IMAGE_URL).toBe("https://virtual-carhire.co.uk/whatsapp/virtual-car-hire-welcome.jpg");
+  it("uses exact real brand logo and hero image URLs on CRM domain across templates", () => {
+    expect(VCH_LOGO_URL).toBe("https://hq.virtual-carhire.co.uk/email/logo.png");
+    expect(HERO_IMAGE_URL).toBe("https://hq.virtual-carhire.co.uk/email/hero.jpg");
   });
 
   describe("Template 1: 2FA Verification Code", () => {

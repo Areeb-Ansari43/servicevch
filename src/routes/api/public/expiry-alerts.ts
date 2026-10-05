@@ -43,6 +43,23 @@ function getLondonTodayISO(): string {
 async function runExpiryScan() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
+  // Log job start in job_runs table
+  let jobRunId: string | null = null;
+  try {
+    const { data: runData } = await supabaseAdmin
+      .from("job_runs")
+      .insert({
+        job_name: "expiry-alerts",
+        status: "running",
+        started_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+    if (runData) jobRunId = runData.id;
+  } catch (err) {
+    console.warn("[ExpiryScan] Could not insert job_runs start log:", err);
+  }
+
   const [vRes, dRes] = await Promise.all([
     supabaseAdmin.from("vehicles").select("*"),
     supabaseAdmin.from("driver_tracks").select("*").neq("active", false).is("deleted_at", null),
@@ -96,8 +113,8 @@ async function runExpiryScan() {
         if (!isNaN(d)) pcoDays = d;
       }
 
-      const motExpiring = motDays !== undefined && motDays <= 7 && motDays >= 0;
-      const pcoExpiring = pcoDays !== undefined && pcoDays <= 10 && pcoDays >= 0;
+      const motExpiring = motDays !== undefined && motDays <= 30;
+      const pcoExpiring = pcoDays !== undefined && pcoDays <= 30;
 
       if (motExpiring || pcoExpiring) {
         const artwork = vehicleArtworkPath(v);
@@ -219,7 +236,7 @@ async function runExpiryScan() {
     try {
       if (d.licence_expiry_date) {
         const days = getDaysDiff(d.licence_expiry_date, now);
-        if (!isNaN(days) && days <= 30 && days >= 0) {
+        if (!isNaN(days) && days <= 30) {
           licenceExpiryItems.push({
             driverId: d.id ? d.id.slice(0, 8) : "DRIVER",
             name: d.driver_name,
@@ -393,14 +410,33 @@ async function runExpiryScan() {
     }
   }
 
+  const resultCounts = {
+    sent: totalSent,
+    skipped: totalSkipped,
+    fleetExpiries: fleetSummaryItems.length,
+    licenceExpiries: licenceExpiryItems.length,
+    rentDueItems: rentDueItems.length,
+  };
+
+  if (jobRunId) {
+    try {
+      await supabaseAdmin
+        .from("job_runs")
+        .update({
+          status: "success",
+          completed_at: new Date().toISOString(),
+          counts: resultCounts,
+        })
+        .eq("id", jobRunId);
+    } catch (err) {
+      console.warn("[ExpiryScan] Could not update job_runs success log:", err);
+    }
+  }
+
   return new Response(
     JSON.stringify({
       ok: true,
-      sent: totalSent,
-      skipped: totalSkipped,
-      fleetExpiries: fleetSummaryItems.length,
-      licenceExpiries: licenceExpiryItems.length,
-      rentDueItems: rentDueItems.length,
+      ...resultCounts,
     }),
     { status: 200, headers: { "Content-Type": "application/json" } },
   );

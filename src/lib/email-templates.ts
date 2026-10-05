@@ -4,8 +4,8 @@
  * Hero Image URL: https://virtual-carhire.co.uk/whatsapp/virtual-car-hire-welcome.jpg
  */
 
-export const VCH_LOGO_URL = "https://www.virtual-carhire.co.uk/assets/logo.png";
-export const HERO_IMAGE_URL = "https://virtual-carhire.co.uk/whatsapp/virtual-car-hire-welcome.jpg";
+export const VCH_LOGO_URL = "https://hq.virtual-carhire.co.uk/email/logo.png";
+export const HERO_IMAGE_URL = "https://hq.virtual-carhire.co.uk/email/hero.jpg";
 
 export interface Template2FAOptions {
   code: string;
@@ -135,12 +135,12 @@ function renderUnifiedEmailLayout({
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td style="background-color: #0B0E17; padding: 18px 24px; border-bottom: 1px solid #1E293B;" align="left">
-                    <img src="${VCH_LOGO_URL}" alt="Virtual Car Hire" width="96" height="96" style="width: 96px; height: 96px; max-width: 96px; display: block; border: 0; object-fit: contain;" />
+                    <img src="cid:logo" alt="Virtual Car Hire" width="96" height="96" style="width: 96px; height: 96px; max-width: 96px; display: block; border: 0; object-fit: contain;" onerror="this.onerror=null;this.src='${VCH_LOGO_URL}';" />
                   </td>
                 </tr>
                 <tr>
                   <td style="padding: 0; background-color: #1E293B;">
-                    <img src="${HERO_IMAGE_URL}" alt="Virtual Car Hire Fleet" width="600" height="200" style="width: 100%; max-width: 600px; height: auto; max-height: 200px; object-fit: cover; display: block; border: 0;" />
+                    <img src="cid:hero" alt="Virtual Car Hire Fleet" width="600" height="200" style="width: 100%; max-width: 600px; height: auto; max-height: 200px; object-fit: cover; display: block; border: 0; background-color: #1E293B;" onerror="this.onerror=null;this.src='${HERO_IMAGE_URL}';" />
                   </td>
                 </tr>
               </table>
@@ -185,7 +185,7 @@ function renderUnifiedEmailLayout({
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td align="left" style="vertical-align: middle;">
-                    <img src="${VCH_LOGO_URL}" alt="Virtual Car Hire" width="72" height="72" style="width: 72px; height: 72px; max-width: 72px; opacity: 0.85; display: block; border: 0; object-fit: contain;" />
+                    <img src="cid:logo" alt="Virtual Car Hire" width="72" height="72" style="width: 72px; height: 72px; max-width: 72px; opacity: 0.85; display: block; border: 0; object-fit: contain;" onerror="this.onerror=null;this.src='${VCH_LOGO_URL}';" />
                   </td>
                   <td align="right" style="vertical-align: middle; color: #94A3B8; font-size: 11px;">
                     <span style="color: #FF6A00; font-weight: bold;">✔</span> Smarter Fleet Management
