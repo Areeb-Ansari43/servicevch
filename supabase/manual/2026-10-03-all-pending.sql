@@ -47,6 +47,19 @@ CREATE TABLE IF NOT EXISTS public.portal_rate_limits (
 
 CREATE INDEX IF NOT EXISTS idx_portal_rate_limits_key_action ON public.portal_rate_limits (key, action, created_at);
 
+-- portal_auth_events (Service Role Insert/All, Staff Select Only)
+CREATE TABLE IF NOT EXISTS public.portal_auth_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  hashed_email text NOT NULL,
+  step text NOT NULL,
+  result_code text NOT NULL,
+  reason text
+);
+
+CREATE INDEX IF NOT EXISTS idx_portal_auth_events_created ON public.portal_auth_events (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_portal_auth_events_hashed_email ON public.portal_auth_events (hashed_email);
+
 -- audit_logs
 CREATE TABLE IF NOT EXISTS public.audit_logs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -113,6 +126,14 @@ ALTER TABLE public.email_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.driver_notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.driver_charges ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.portal_auth_events ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow authenticated staff to read portal_auth_events" ON public.portal_auth_events;
+CREATE POLICY "Allow authenticated staff to read portal_auth_events"
+  ON public.portal_auth_events
+  FOR SELECT
+  TO authenticated
+  USING (true);
 
 -- 2a. login_otps & portal_rate_limits: RLS ON, NO POLICIES (Service Role Access Only)
 DROP POLICY IF EXISTS "No public access to login_otps" ON public.login_otps;

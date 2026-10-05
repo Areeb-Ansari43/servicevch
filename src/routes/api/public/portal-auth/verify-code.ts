@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { getRuntimeEnv } from "@/integrations/supabase/config";
 import { checkDurableRateLimit, hmacSha256 } from "./request-code";
+import { logPortalAuthEvent } from "@/lib/portal-auth-logger";
 
 export const Route = createFileRoute("/api/public/portal-auth/verify-code")({
   server: {
@@ -17,6 +18,7 @@ export async function handleVerifyCode(request: Request): Promise<Response> {
   const reqSecret = request.headers.get("X-Portal-Secret");
 
   if (!portalSecret || !reqSecret || reqSecret !== portalSecret) {
+    await logPortalAuthEvent("unknown", "verify_code", "UNAUTHORIZED", "Invalid X-Portal-Secret");
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers: { "Content-Type": "application/json" },
@@ -42,6 +44,7 @@ export async function handleVerifyCode(request: Request): Promise<Response> {
   );
 
   if (!email || !code || !/^\d{6}$/.test(code) || email === "admin@fa-ibi.co.uk") {
+    await logPortalAuthEvent(email || "unknown", "verify_code", "INVALID_INPUT", "Email or 6-digit code format invalid");
     return genericInvalidError;
   }
 
@@ -52,6 +55,7 @@ export async function handleVerifyCode(request: Request): Promise<Response> {
   const emailAllowed = await checkDurableRateLimit(`email:${email}`, "verify_code", 10, 15);
 
   if (!ipAllowed || !emailAllowed) {
+    await logPortalAuthEvent(email, "verify_code", "RATE_LIMITED", `Verification rate limit exceeded (IP: ${clientIp})`);
     return new Response(
       JSON.stringify({ error: "Too many failed attempts. Please try again later." }),
       { status: 429, headers: { "Content-Type": "application/json" } }
@@ -60,44 +64,55 @@ export async function handleVerifyCode(request: Request): Promise<Response> {
 
   const codeHash = await hmacSha256(`${code}:${email}`);
 
-  // Query active unconsumed OTP for this email
+  // Query active unconsumed OTP for this email (checking both consumed and used)
   const { data: rows, error } = await supabaseAdmin
     .from("login_otps")
-    .select("id, expires_at, consumed, attempts_count, otp_hash")
+    .select("id, expires_at, consumed, used, attempts_count, otp_hash")
     .eq("email", email)
-    .eq("consumed", false)
+    .or("consumed.eq.false,used.eq.false")
     .order("created_at", { ascending: false })
     .limit(1);
 
   if (error || !rows || rows.length === 0) {
+    await logPortalAuthEvent(email, "verify_code", "NO_ACTIVE_CODE", "No unconsumed OTP row found");
     return genericInvalidError;
   }
 
   const row = rows[0];
 
+  if ((row as any).consumed || (row as any).used) {
+    await logPortalAuthEvent(email, "verify_code", "ALREADY_CONSUMED", "OTP code was already used");
+    return genericInvalidError;
+  }
+
   // Expiry check (10 minutes)
   if (new Date(row.expires_at).getTime() < Date.now()) {
-    await supabaseAdmin.from("login_otps").update({ consumed: true }).eq("id", row.id);
+    await supabaseAdmin.from("login_otps").update({ consumed: true, used: true } as any).eq("id", row.id);
+    await logPortalAuthEvent(email, "verify_code", "EXPIRED_CODE", "OTP expired (> 10 mins)");
     return genericInvalidError;
   }
 
   // Maximum failed attempts check (limit 5)
   const currentAttempts = Number(row.attempts_count || 0);
   if (currentAttempts >= 5) {
-    await supabaseAdmin.from("login_otps").update({ consumed: true }).eq("id", row.id);
+    await supabaseAdmin.from("login_otps").update({ consumed: true, used: true } as any).eq("id", row.id);
+    await logPortalAuthEvent(email, "verify_code", "MAX_ATTEMPTS", "5 failed attempts limit reached");
     return genericInvalidError;
   }
 
   // Check code HMAC hash match
   if (row.otp_hash !== codeHash) {
     const nextAttempts = currentAttempts + 1;
+    const isNowConsumed = nextAttempts >= 5;
     await supabaseAdmin
       .from("login_otps")
       .update({
         attempts_count: nextAttempts,
-        consumed: nextAttempts >= 5,
-      })
+        consumed: isNowConsumed,
+        used: isNowConsumed,
+      } as any)
       .eq("id", row.id);
+    await logPortalAuthEvent(email, "verify_code", "INVALID_CODE", `Code mismatch (attempt ${nextAttempts}/5)`);
     return genericInvalidError;
   }
 
@@ -110,11 +125,12 @@ export async function handleVerifyCode(request: Request): Promise<Response> {
     .maybeSingle();
 
   if (driverMatch && (driverMatch.active === false || driverMatch.deleted_at)) {
+    await logPortalAuthEvent(email, "verify_code", "ACCOUNT_DISABLED", "Driver profile missing or inactive");
     return genericInvalidError;
   }
 
-  // Mark code as single-use consumed
-  await supabaseAdmin.from("login_otps").update({ consumed: true }).eq("id", row.id);
+  // Mark code as single-use consumed (updating both consumed and used)
+  await supabaseAdmin.from("login_otps").update({ consumed: true, used: true } as any).eq("id", row.id);
 
   // Mint magiclink link
   const { data: link, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
@@ -123,6 +139,7 @@ export async function handleVerifyCode(request: Request): Promise<Response> {
   });
 
   if (linkErr || !link?.properties?.hashed_token) {
+    await logPortalAuthEvent(email, "verify_code", "SYSTEM_ERROR", linkErr?.message || "Failed generateLink magiclink");
     return new Response(JSON.stringify({ error: "Failed to mint login session." }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
@@ -136,11 +153,14 @@ export async function handleVerifyCode(request: Request): Promise<Response> {
   });
 
   if (sessionErr || !sessionRes.session) {
+    await logPortalAuthEvent(email, "verify_code", "SYSTEM_ERROR", sessionErr?.message || "Failed verifyOtp session mint");
     return new Response(JSON.stringify({ error: "Failed to establish login session." }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
     });
   }
+
+  await logPortalAuthEvent(email, "verify_code", "SUCCESS", "Session established successfully");
 
   return new Response(
     JSON.stringify({

@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getRuntimeEnv } from "@/integrations/supabase/config";
 import { sendWhatsAppText } from "@/lib/meta-whatsapp.server";
+import { logPortalAuthEvent } from "@/lib/portal-auth-logger";
 
 const ALLOWED_EMAIL = "admin@fa-ibi.co.uk";
 const ALLOWED_PASSWORD = "Pakistan1!";
@@ -135,6 +136,7 @@ export const requestLoginCode = createServerFn({ method: "POST" })
       });
 
       if (authErr || !authRes.user) {
+        await logPortalAuthEvent(email, "request_code", "INVALID_CREDENTIALS", authErr?.message || "Invalid password");
         await new Promise((r) => setTimeout(r, 400));
         throw new Error("Invalid credentials");
       }
@@ -147,6 +149,7 @@ export const requestLoginCode = createServerFn({ method: "POST" })
 
       if (driverMatch) {
         if (driverMatch.active === false || driverMatch.deleted_at) {
+          await logPortalAuthEvent(email, "request_code", "ACCOUNT_DISABLED", "Driver profile inactive or deleted");
           throw new Error("Account disabled or inactive. Please contact staff.");
         }
         driverPhone = driverMatch.phone ?? authRes.user.phone ?? null;
@@ -163,6 +166,7 @@ export const requestLoginCode = createServerFn({ method: "POST" })
       .gte("created_at", thirtySecsAgo);
 
     if (recentOtps && recentOtps.length > 0) {
+      await logPortalAuthEvent(email, "request_code", "RATE_LIMITED", "30s resend cooldown active");
       throw new Error("Please wait 30 seconds before requesting another code.");
     }
 
@@ -172,20 +176,25 @@ export const requestLoginCode = createServerFn({ method: "POST" })
 
     await supabaseAdmin
       .from("login_otps")
-      .update({ consumed: true })
+      .update({ consumed: true, used: true } as any)
       .eq("email", email)
-      .eq("consumed", false);
+      .or("consumed.eq.false,used.eq.false");
 
     const { error } = await supabaseAdmin.from("login_otps").insert({
       email,
       otp_hash: codeHash,
       expires_at: expiresAt,
       consumed: false,
+      used: false,
       attempts_count: 0,
     } as any);
 
-    if (error) throw new Error(error.message);
+    if (error) {
+      await logPortalAuthEvent(email, "request_code", "SYSTEM_ERROR", error.message);
+      throw new Error(error.message);
+    }
 
+    let deliveryChannel = "email";
     if (email) {
       try {
         await sendOtpEmail(email, code);
@@ -195,10 +204,14 @@ export const requestLoginCode = createServerFn({ method: "POST" })
             phone: driverPhone,
             text: `${code} is your Virtual Car Hire portal 2FA verification code. Expires in 10 minutes.`,
           });
-          if (!waRes.sent) {
+          if (waRes.sent) {
+            deliveryChannel = "whatsapp";
+          } else {
+            await logPortalAuthEvent(email, "request_code", "DELIVERY_FAILED", "Email and WhatsApp delivery failed");
             throw new Error(`Failed to deliver 2FA code: ${err?.message || "Email and WhatsApp delivery failed"}`);
           }
         } else {
+          await logPortalAuthEvent(email, "request_code", "DELIVERY_FAILED", err?.message || "Email send failed");
           throw err;
         }
       }
@@ -207,48 +220,61 @@ export const requestLoginCode = createServerFn({ method: "POST" })
         phone: driverPhone,
         text: `${code} is your Virtual Car Hire portal 2FA verification code. Expires in 10 minutes.`,
       });
-      if (!waRes.sent) {
+      if (waRes.sent) {
+        deliveryChannel = "whatsapp";
+      } else {
+        await logPortalAuthEvent(email, "request_code", "DELIVERY_FAILED", "No email on file & WhatsApp failed");
         throw new Error("No email on file. Please contact staff to update your profile.");
       }
     } else {
+      await logPortalAuthEvent(email, "request_code", "DELIVERY_FAILED", "No email or phone on file");
       throw new Error("No email on file. Please contact staff to update your profile.");
     }
+
+    await logPortalAuthEvent(email, "request_code", "SUCCESS", `Code issued via ${deliveryChannel}`);
 
     return { ok: true, email };
   });
 
 export const verifyLoginCode = createServerFn({ method: "POST" })
   .inputValidator((d) =>
-    z.object({ email: z.string().email().optional(), code: z.string().regex(/^\d{6}$/) }).parse(d),
+    z.object({ email: z.string().email().optional(), code: z.string().min(1) }).parse(d),
   )
   .handler(async ({ data }) => {
     const email = (data.email || ALLOWED_EMAIL).trim().toLowerCase();
-    const codeHash = await hmacSha256(`${data.code}:${email}`);
+    const code = data.code.trim();
+    if (!/^\d{6}$/.test(code)) {
+      throw new Error("Invalid verification code format.");
+    }
+    const codeHash = await hmacSha256(`${code}:${email}`);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     const { data: rows, error } = await supabaseAdmin
       .from("login_otps")
-      .select("id, expires_at, consumed, attempts_count, otp_hash")
+      .select("id, expires_at, consumed, used, attempts_count, otp_hash")
       .eq("email", email)
-      .eq("consumed", false)
+      .or("consumed.eq.false,used.eq.false")
       .order("created_at", { ascending: false })
       .limit(1);
 
     if (error) throw new Error(error.message);
     const row = rows?.[0];
 
-    if (!row) {
+    if (!row || (row as any).consumed || (row as any).used) {
+      await logPortalAuthEvent(email, "verify_code", "NO_ACTIVE_CODE", "No unconsumed OTP row found");
       throw new Error("Invalid or expired verification code.");
     }
 
     if (new Date(row.expires_at).getTime() < Date.now()) {
-      await supabaseAdmin.from("login_otps").update({ consumed: true }).eq("id", row.id);
+      await supabaseAdmin.from("login_otps").update({ consumed: true, used: true } as any).eq("id", row.id);
+      await logPortalAuthEvent(email, "verify_code", "EXPIRED_CODE", "OTP expired (> 10 mins)");
       throw new Error("Verification code expired. Please request a new code.");
     }
 
     const currentAttempts = Number(row.attempts_count || 0);
     if (currentAttempts >= 5) {
-      await supabaseAdmin.from("login_otps").update({ consumed: true }).eq("id", row.id);
+      await supabaseAdmin.from("login_otps").update({ consumed: true, used: true } as any).eq("id", row.id);
+      await logPortalAuthEvent(email, "verify_code", "MAX_ATTEMPTS", "5 failed attempts limit reached");
       throw new Error("Too many failed attempts. Please request a new verification code.");
     }
 
@@ -257,19 +283,21 @@ export const verifyLoginCode = createServerFn({ method: "POST" })
       if (nextAttempts >= 5) {
         await supabaseAdmin
           .from("login_otps")
-          .update({ attempts_count: nextAttempts, consumed: true })
+          .update({ attempts_count: nextAttempts, consumed: true, used: true } as any)
           .eq("id", row.id);
+        await logPortalAuthEvent(email, "verify_code", "MAX_ATTEMPTS", "5 failed attempts limit reached");
         throw new Error("Too many failed attempts. Please request a new verification code.");
       } else {
         await supabaseAdmin
           .from("login_otps")
           .update({ attempts_count: nextAttempts })
           .eq("id", row.id);
+        await logPortalAuthEvent(email, "verify_code", "INVALID_CODE", `Code mismatch (attempt ${nextAttempts}/5)`);
         throw new Error("Invalid verification code.");
       }
     }
 
-    await supabaseAdmin.from("login_otps").update({ consumed: true }).eq("id", row.id);
+    await supabaseAdmin.from("login_otps").update({ consumed: true, used: true } as any).eq("id", row.id);
 
     const sessionEmail = email === ALLOWED_EMAIL ? SESSION_USER_EMAIL : email;
     const { data: link, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
@@ -278,8 +306,11 @@ export const verifyLoginCode = createServerFn({ method: "POST" })
     });
 
     if (linkErr || !link?.properties?.hashed_token) {
+      await logPortalAuthEvent(email, "verify_code", "SYSTEM_ERROR", linkErr?.message || "Failed generateLink magiclink");
       throw new Error(linkErr?.message || "Failed to mint login session");
     }
+
+    await logPortalAuthEvent(email, "verify_code", "SUCCESS", "Session established successfully");
 
     return {
       ok: true as const,
