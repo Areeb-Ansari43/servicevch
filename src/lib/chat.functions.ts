@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { getRuntimeEnv } from "@/integrations/supabase/config";
+import { testAiProvidersDiagnostic } from "@/lib/ai-providers";
 import { z } from "zod";
 
 const replySchema = z.object({
@@ -28,6 +29,18 @@ type ConversationMessage = {
   meta_message_id?: string | null;
 };
 
+export type ConversationEvent = {
+  id: string;
+  chat_id: string;
+  provider: string;
+  model: string;
+  latency_ms: number;
+  tool_calls: string | null;
+  validation_result: string | null;
+  error: string | null;
+  created_at: string;
+};
+
 function isMissingColumn(error: unknown, column: string): boolean {
   const text = error instanceof Error ? error.message : JSON.stringify(error);
   return new RegExp(`${column}["']?\\s+column|column\\s+["']?${column}|schema cache`, "i").test(
@@ -47,6 +60,32 @@ async function insertMessageWithCompatibility(supabase: any, row: Record<string,
   }
   return result;
 }
+
+/** Test all configured AI Providers (Gemini, Groq, xAI Grok) */
+export const testAiProviders = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async () => {
+    const results = await testAiProvidersDiagnostic();
+    return { results };
+  });
+
+/** Fetch the last 100 conversation_events for Settings log viewer */
+export const getConversationEvents = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data, error } = await context.supabase
+      .from("conversation_events")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    if (error) {
+      console.warn("[getConversationEvents] Table query warning:", error.message);
+      return { events: [] };
+    }
+
+    return { events: (data ?? []) as ConversationEvent[] };
+  });
 
 /** Load the complete locally persisted Meta WhatsApp CRM history. */
 export const getLeadConversation = createServerFn({ method: "GET" })
@@ -177,7 +216,7 @@ Return ONLY the reworded message text.`;
 
     if (geminiKey) {
       try {
-        const model = (getRuntimeEnv("GEMINI_MODEL") ?? "gemini-2.5-flash").trim();
+        const model = (getRuntimeEnv("GEMINI_MODEL") ?? "gemini-3.6-flash").trim();
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
         const res = await fetch(url, {
           method: "POST",
