@@ -52,6 +52,7 @@ import {
   type PortalAuthUser,
 } from "@/lib/portal.functions";
 import { AppearanceSettingsCard } from "@/components/appearance-settings-card";
+import { PortalAuthEventsAdminCard } from "@/components/portal-auth-events-card";
 import { TestAiProvidersCard } from "@/components/test-ai-card";
 import { ConversationEventsCard } from "@/components/conversation-events-card";
 
@@ -1443,6 +1444,9 @@ function UserSettingsView({
 
       {/* PORTAL ACCOUNTS & STRAY CREDENTIALS AUDIT */}
       <PortalAccountsAdminCard toast={toast} />
+
+      {/* PORTAL 2FA & AUTH EVENTS LOG */}
+      <PortalAuthEventsAdminCard toast={toast} />
 
       {/* EMAIL TEMPLATE PREVIEWS */}
       <div

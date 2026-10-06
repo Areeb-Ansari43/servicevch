@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { getRuntimeEnv } from "@/integrations/supabase/config";
 import { sendWhatsAppText } from "@/lib/meta-whatsapp.server";
+import { logPortalAuthEvent } from "@/lib/portal-auth-logger";
 
 export async function checkDurableRateLimit(
   key: string,
@@ -149,6 +150,7 @@ export async function handleRequestCode(request: Request): Promise<Response> {
   const reqSecret = request.headers.get("X-Portal-Secret");
 
   if (!portalSecret || !reqSecret || reqSecret !== portalSecret) {
+    await logPortalAuthEvent("unknown", "request_code", "UNAUTHORIZED", "Invalid X-Portal-Secret");
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers: { "Content-Type": "application/json" },
@@ -170,6 +172,7 @@ export async function handleRequestCode(request: Request): Promise<Response> {
   const password = typeof body.password === "string" ? body.password : "";
 
   if (!email || !password || email === "admin@fa-ibi.co.uk") {
+    await logPortalAuthEvent(email || "unknown", "request_code", "INVALID_INPUT", "Email or password missing or forbidden email");
     return new Response(JSON.stringify({ error: "Invalid email or password" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
@@ -183,6 +186,7 @@ export async function handleRequestCode(request: Request): Promise<Response> {
   const emailAllowed = await checkDurableRateLimit(`email:${email}`, "request_code", 5, 15);
 
   if (!ipAllowed || !emailAllowed) {
+    await logPortalAuthEvent(email, "request_code", "RATE_LIMITED", `IP or email rate limit exceeded (IP: ${clientIp})`);
     return new Response(JSON.stringify({ error: "Too many requests. Please try again later." }), {
       status: 429,
       headers: { "Content-Type": "application/json" },
@@ -201,6 +205,7 @@ export async function handleRequestCode(request: Request): Promise<Response> {
   });
 
   if (authErr || !authRes.user) {
+    await logPortalAuthEvent(email, "request_code", "INVALID_CREDENTIALS", authErr?.message || "Invalid password");
     return genericAuthError;
   }
 
@@ -212,6 +217,7 @@ export async function handleRequestCode(request: Request): Promise<Response> {
     .maybeSingle();
 
   if (!driverMatch || driverMatch.active === false || driverMatch.deleted_at) {
+    await logPortalAuthEvent(email, "request_code", "ACCOUNT_DISABLED", "Driver profile missing, inactive, or soft-deleted");
     return genericAuthError;
   }
 
@@ -224,6 +230,7 @@ export async function handleRequestCode(request: Request): Promise<Response> {
     .gte("created_at", thirtySecsAgo);
 
   if (recentOtps && recentOtps.length > 0) {
+    await logPortalAuthEvent(email, "request_code", "RATE_LIMITED", "30-second resend cooldown active");
     return new Response(
       JSON.stringify({ error: "Please wait 30 seconds before requesting another code." }),
       { status: 429, headers: { "Content-Type": "application/json" } }
@@ -234,22 +241,24 @@ export async function handleRequestCode(request: Request): Promise<Response> {
   const codeHash = await hmacSha256(`${code}:${email}`);
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
-  // Invalidate all earlier unconsumed codes for this email
+  // Invalidate all earlier unconsumed codes for this email (updating both consumed and used for DB compatibility)
   await supabaseAdmin
     .from("login_otps")
-    .update({ consumed: true })
+    .update({ consumed: true, used: true } as any)
     .eq("email", email)
-    .eq("consumed", false);
+    .or("consumed.eq.false,used.eq.false");
 
   const { error: insertErr } = await supabaseAdmin.from("login_otps").insert({
     email,
     otp_hash: codeHash,
     expires_at: expiresAt,
     consumed: false,
+    used: false,
     attempts_count: 0,
   } as any);
 
   if (insertErr) {
+    await logPortalAuthEvent(email, "request_code", "SYSTEM_ERROR", insertErr.message);
     return new Response(JSON.stringify({ error: "Failed to issue verification code" }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
@@ -276,6 +285,8 @@ export async function handleRequestCode(request: Request): Promise<Response> {
       deliveryMethod = "unsupported";
     }
   }
+
+  await logPortalAuthEvent(email, "request_code", "SUCCESS", `Code issued via ${deliveryMethod}`);
 
   return new Response(
     JSON.stringify({
