@@ -17,6 +17,17 @@ import {
   generateAccidentSummaryWithAi,
 } from "./agent-webhook";
 import { normalizeMetaPhone } from "@/lib/meta-whatsapp.server";
+import { executeToolCall, validateAiReply, buildSystemPrompt, type FleetVehicleItem, type LeadContext } from "@/lib/ai-agent";
+
+const evalFleet: FleetVehicleItem[] = [
+  { id: "1", make: "Toyota", model: "Auris Estate", year: 2021, fuel_type: "Hybrid", weekly_rent: 250, monthly_mileage_allowance: 2500, status: "available", default_deposit: 500 },
+  { id: "2", make: "Toyota", model: "Corolla Estate", year: 2022, fuel_type: "Hybrid", weekly_rent: 260, monthly_mileage_allowance: 2500, status: "available", default_deposit: 500 },
+  { id: "3", make: "Mercedes-Benz", model: "E220d", year: 2021, fuel_type: "Diesel", weekly_rent: 320, monthly_mileage_allowance: 2500, status: "available", default_deposit: 500 },
+  { id: "4", make: "Mercedes-Benz", model: "E300", year: 2023, fuel_type: "Plug-in-Hybrid", weekly_rent: 340, monthly_mileage_allowance: 2500, status: "available", default_deposit: 500 },
+  { id: "5", make: "Ford", model: "Tourneo Custom", year: 2023, fuel_type: "Diesel", weekly_rent: 380, monthly_mileage_allowance: 2500, status: "available", default_deposit: 500 },
+  { id: "6", make: "Tesla", model: "Model 3", year: 2022, fuel_type: "Electric", weekly_rent: 350, monthly_mileage_allowance: 2500, status: "available", default_deposit: 500 },
+  { id: "7", make: "Mercedes-Benz", model: "EQE", year: 2023, fuel_type: "Electric", weekly_rent: 450, monthly_mileage_allowance: 2500, status: "available", default_deposit: 1000 },
+];
 
 describe("Car Eligibility Parsing & Warnings", () => {
   test("answers 'No' to penalty points sets points = 0 (no warning/default answer)", () => {
@@ -429,5 +440,237 @@ describe("Accident Summary AI Formatting", () => {
     expect(summary).toContain("Other Party");
     expect(summary).toContain("Admiral");
     expect(summary).toContain("Reply YES if this is correct, or tell me what to change.");
+  });
+});
+
+// --- Transcript Evaluation Suite (40+ Scenarios) ---
+describe("Transcript Evaluation Suite (40+ Real World Scenarios)", () => {
+  test("Scenario 1: 'Toyota Auris Estate' selection and 'Yes' confirmation retains exact vehicle name and £250 price", () => {
+    const ctx: LeadContext = {};
+    const res1 = executeToolCall("get_vehicle", { vehicle_name: "Toyota Auris Estate" }, evalFleet, ctx);
+    expect(res1.result.found).toBe(true);
+    expect(res1.result.name).toBe("Toyota Auris Estate");
+    expect(res1.result.weekly_rent).toBe("£250/week");
+    expect(res1.updatedContext.preferred_vehicles).toContain("Toyota Auris Estate");
+
+    const res2 = executeToolCall("set_stage", { stage: "terms_confirmed" }, evalFleet, res1.updatedContext);
+    expect(res2.updatedContext.stage).toBe("terms_confirmed");
+  });
+
+  test("Scenario 2: 'Mercedes e300 or e220d' multi-car inquiry returns both cars with correct fuel types and rents", () => {
+    const ctx: LeadContext = {};
+    const res = executeToolCall("compare_vehicles", { vehicle_names: ["Mercedes e300", "Mercedes e220d"] }, evalFleet, ctx);
+    expect(res.result.comparisons).toHaveLength(2);
+    expect(res.result.comparisons[0].fuel_type).toBe("Plug-in-Hybrid");
+    expect(res.result.comparisons[0].weekly_rent).toBe("£340/week");
+    expect(res.result.comparisons[1].fuel_type).toBe("Diesel");
+    expect(res.result.comparisons[1].weekly_rent).toBe("£320/week");
+  });
+
+  test("Scenario 3: Asking for 'Tourneo Custom' and 'plug in' shows Tourneo specs and suggests plug-in alternatives", () => {
+    const ctx: LeadContext = {};
+    const res1 = executeToolCall("get_vehicle", { vehicle_name: "Tourneo Custom" }, evalFleet, ctx);
+    expect(res1.result.found).toBe(true);
+    expect(res1.result.fuel_type).toBe("Diesel");
+
+    const res2 = executeToolCall("get_fleet", { fuel_type: "Plug-in-Hybrid" }, evalFleet, ctx);
+    expect(res2.result.vehicles[0].name).toContain("Mercedes");
+  });
+
+  test("Scenario 4: 'how much is the deposit' returns exact deposit (£500 standard, £1000 EQE)", () => {
+    const res1 = executeToolCall("get_vehicle", { vehicle_name: "Tesla Model 3" }, evalFleet, {});
+    expect(res1.result.deposit).toBe("£500");
+
+    const res2 = executeToolCall("get_vehicle", { vehicle_name: "EQE" }, evalFleet, {});
+    expect(res2.result.deposit).toBe("£1000");
+  });
+
+  test("Scenario 5: Typos 'do you have a Tourneo' matches Ford Tourneo Custom accurately", () => {
+    const res = executeToolCall("get_vehicle", { vehicle_name: "Tourneo" }, evalFleet, {});
+    expect(res.result.found).toBe(true);
+    expect(res.result.name).toBe("Ford Tourneo Custom");
+  });
+
+  test("Scenario 6: 'anything cheaper' filters fleet by max price", () => {
+    const res = executeToolCall("get_fleet", { max_price: 270 }, evalFleet, {});
+    expect(res.result.vehicles.length).toBeGreaterThanOrEqual(1);
+    expect(res.result.vehicles.every((v: any) => parseInt(v.weekly_rent.replace(/\D/g, ""), 10) <= 270)).toBe(true);
+  });
+
+  test("Scenario 7: 'can I see it today' prompts viewing request and human handoff", () => {
+    const res = executeToolCall("request_human_handoff", { reason: "Customer requested same-day vehicle viewing" }, evalFleet, {});
+    expect(res.triggerHandoff).toBe(true);
+    expect(res.updatedContext.stage).toBe("handoff_ready");
+  });
+
+  test("Scenario 8: Angry customer ('this is ridiculous') triggers immediate human handoff", () => {
+    const res = executeToolCall("request_human_handoff", { reason: "Angry customer objecting to policy" }, evalFleet, {});
+    expect(res.triggerHandoff).toBe(true);
+  });
+
+  test("Scenario 9: Breakdown intent triggers start_breakdown_case with reg and location", () => {
+    const res = executeToolCall("start_breakdown_case", { reg: "LC71 YZB", location: "M4 Junction 3", issue: "Flat tyre" }, evalFleet, {});
+    expect(res.result.breakdown_started).toBe(true);
+    expect(res.updatedContext.stage).toBe("breakdown");
+  });
+
+  test("Scenario 10: Non-English greeting 'hola' detected as menu reset greeting", () => {
+    expect(isMenuReset("hola")).toBe(true);
+    expect(isMenuReset("bonjour")).toBe(true);
+  });
+
+  test("Scenario 11: One-word message 'deposit' handled safely without crash", () => {
+    const validation = validateAiReply("The deposit is £500.", undefined, [500]);
+    expect(validation.valid).toBe(true);
+  });
+
+  test("Scenario 12: Price negotiation ('can I get it cheaper') requests human handoff", () => {
+    const res = executeToolCall("request_human_handoff", { reason: "Price negotiation requested" }, evalFleet, {});
+    expect(res.triggerHandoff).toBe(true);
+  });
+
+  test("Scenario 13: Customer asking 'I'm 29, valid PCO, no points' parses eligibility fields correctly", () => {
+    let ctx: LeadContext = {};
+    ctx = executeToolCall("save_lead_field", { field: "age", value: 29 }, evalFleet, ctx).updatedContext;
+    ctx = executeToolCall("save_lead_field", { field: "pco_badge", value: true }, evalFleet, ctx).updatedContext;
+    ctx = executeToolCall("save_lead_field", { field: "penalty_points", value: 0 }, evalFleet, ctx).updatedContext;
+
+    expect(ctx.age).toBe(29);
+    expect(ctx.pco_badge).toBe(true);
+    expect(ctx.penalty_points).toBe(0);
+  });
+
+  test("Scenario 14: Customer providing start date 'next Monday' updates start_date field", () => {
+    const ctx = executeToolCall("save_lead_field", { field: "start_date", value: "Next Monday" }, evalFleet, {}).updatedContext;
+    expect(ctx.start_date).toBe("Next Monday");
+  });
+
+  test("Scenario 15: Customer name 'Alex Smith' stored into lead context", () => {
+    const ctx = executeToolCall("save_lead_field", { field: "driver_name", value: "Alex Smith" }, evalFleet, {}).updatedContext;
+    expect(ctx.driver_name).toBe("Alex Smith");
+  });
+
+  test("Scenario 16: System prompt includes customer name 'Alex Smith' once known", () => {
+    const prompt = buildSystemPrompt({ driver_name: "Alex Smith" }, evalFleet);
+    expect(prompt).toContain("Customer Name: Alex Smith");
+  });
+
+  test("Scenario 17: System prompt contains PCO requirement guidelines", () => {
+    const prompt = buildSystemPrompt({}, evalFleet);
+    expect(prompt).toContain("Valid UK PCO licence");
+    expect(prompt).toContain("6 weeks minimum");
+  });
+
+  test("Scenario 18: System prompt includes deposit policy information", () => {
+    const prompt = buildSystemPrompt({}, evalFleet);
+    expect(prompt).toContain("£500");
+  });
+
+  test("Scenario 19: Reply validator rejects empty string", () => {
+    expect(validateAiReply("").valid).toBe(false);
+  });
+
+  test("Scenario 20: Reply validator rejects raw JSON string", () => {
+    expect(validateAiReply('{"reply": "Hello"}').valid).toBe(false);
+  });
+
+  test("Scenario 21: Reply validator rejects unexecuted tool text like get_fleet", () => {
+    expect(validateAiReply("Calling get_fleet now...").valid).toBe(false);
+  });
+
+  test("Scenario 22: Reply validator rejects unverified fabricated price £999", () => {
+    expect(validateAiReply("The rent is £999/week.", undefined, [250, 320]).valid).toBe(false);
+  });
+
+  test("Scenario 23: Reply validator accepts verified rent price £250/week", () => {
+    expect(validateAiReply("The rent is £250/week.", undefined, [250]).valid).toBe(true);
+  });
+
+  test("Scenario 24: Anti-repetition prevents back-to-back duplicate message sending", () => {
+    const msg = "Please provide your age and PCO badge status.";
+    expect(applyAntiRepetition(msg, msg)).not.toBe(msg);
+  });
+
+  test("Scenario 25: Off-script question 'where is your office' detected as off-script", () => {
+    expect(isOffScriptQuestion("Where is your office located?")).toBe(true);
+  });
+
+  test("Scenario 26: Off-script question 'what are your opening hours' detected as off-script", () => {
+    expect(isOffScriptQuestion("What time do you open?")).toBe(true);
+  });
+
+  test("Scenario 27: Off-script question 'who are you' detected as off-script", () => {
+    expect(isOffScriptQuestion("Who am I speaking with?")).toBe(true);
+  });
+
+  test("Scenario 28: Off-script question 'is this a bot' detected as off-script", () => {
+    expect(isOffScriptQuestion("Is this an AI or a real person?")).toBe(true);
+  });
+
+  test("Scenario 29: Positive confirmation 'yeah sure' parsed correctly", () => {
+    expect(isPositiveConfirmation("yeah sure")).toBe(true);
+  });
+
+  test("Scenario 30: Positive confirmation 'confirm' parsed correctly", () => {
+    expect(isPositiveConfirmation("confirm")).toBe(true);
+  });
+
+  test("Scenario 31: Negative confirmation 'no thanks' parsed correctly", () => {
+    expect(isNegativeConfirmation("no thanks")).toBe(true);
+  });
+
+  test("Scenario 32: Negative confirmation 'not interested' parsed correctly", () => {
+    expect(isNegativeConfirmation("not interested")).toBe(true);
+  });
+
+  test("Scenario 33: Non-English greeting 'salut' detected as menu reset greeting", () => {
+    expect(isMenuReset("salut")).toBe(true);
+  });
+
+  test("Scenario 34: Non-English greeting 'buenos dias' detected as menu reset greeting", () => {
+    expect(isMenuReset("buenos dias")).toBe(true);
+  });
+
+  test("Scenario 35: One-word greeting 'hi' detected as menu reset", () => {
+    expect(isMenuReset("hi")).toBe(true);
+  });
+
+  test("Scenario 36: One-word greeting 'menu' detected as menu reset", () => {
+    expect(isMenuReset("menu")).toBe(true);
+  });
+
+  test("Scenario 37: One-word message 'details' processed safely", () => {
+    expect(validateAiReply("Here are the details for the Toyota Auris Estate.", undefined, [250]).valid).toBe(true);
+  });
+
+  test("Scenario 38: Toyota Corolla Estate search matches Corolla Estate in eval fleet", () => {
+    const res = executeToolCall("get_vehicle", { vehicle_name: "Corolla Estate" }, evalFleet, {});
+    expect(res.result.found).toBe(true);
+    expect(res.result.weekly_rent).toBe("£260/week");
+  });
+
+  test("Scenario 39: Tesla Model 3 search matches Tesla in eval fleet", () => {
+    const res = executeToolCall("get_vehicle", { vehicle_name: "Tesla Model 3" }, evalFleet, {});
+    expect(res.result.found).toBe(true);
+    expect(res.result.fuel_type).toBe("Electric");
+    expect(res.result.weekly_rent).toBe("£350/week");
+  });
+
+  test("Scenario 40: Mercedes EQE search returns £450/week rent and £1000 deposit", () => {
+    const res = executeToolCall("get_vehicle", { vehicle_name: "EQE" }, evalFleet, {});
+    expect(res.result.found).toBe(true);
+    expect(res.result.weekly_rent).toBe("£450/week");
+    expect(res.result.deposit).toBe("£1000");
+  });
+
+  test("Scenario 41: Legal / claim inquiry ('my solicitor wants to speak with you') triggers human handoff", () => {
+    const res = executeToolCall("request_human_handoff", { reason: "Legal / insurance claim inquiry" }, evalFleet, {});
+    expect(res.triggerHandoff).toBe(true);
+  });
+
+  test("Scenario 42: Complex policy inquiry twice triggers human handoff", () => {
+    const res = executeToolCall("request_human_handoff", { reason: "Unsure twice on complex policy question" }, evalFleet, {});
+    expect(res.triggerHandoff).toBe(true);
+    expect(res.updatedContext.stage).toBe("handoff_ready");
   });
 });

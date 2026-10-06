@@ -53,6 +53,8 @@ import {
 } from "@/lib/portal.functions";
 import { AppearanceSettingsCard } from "@/components/appearance-settings-card";
 import { PortalAuthEventsAdminCard } from "@/components/portal-auth-events-card";
+import { TestAiProvidersCard } from "@/components/test-ai-card";
+import { ConversationEventsCard } from "@/components/conversation-events-card";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -1430,6 +1432,12 @@ function UserSettingsView({
           </button>
         </div>
       </div>
+
+      {/* AI ASSISTANT DIAGNOSTIC TESTS */}
+      <TestAiProvidersCard toast={toast} />
+
+      {/* CONVERSATION EVENTS LOG CARD */}
+      <ConversationEventsCard />
 
       {/* APPEARANCE CUSTOMISATION CARD */}
       <AppearanceSettingsCard toast={toast} />
