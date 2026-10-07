@@ -180,9 +180,9 @@ function LoginPage() {
     submittedRef.current = true;
     setError(null);
     setLoading(true);
-    console.info("[Login] Verifying OTP code...");
+    console.info("[Login] Verifying OTP code for:", email.trim());
     try {
-      const res = await verifyLoginCode({ data: { code } });
+      const res = await verifyLoginCode({ data: { email: email.trim(), code: code.trim() } });
       console.info("[Login] OTP code verified by server, minting session token...");
       const { error: vErr } = await supabase.auth.verifyOtp({
         token_hash: res.token_hash,

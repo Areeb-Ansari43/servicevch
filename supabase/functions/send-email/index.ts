@@ -1,8 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 
-const VCH_LOGO_URL = "https://hq.virtual-carhire.co.uk/email/logo.png";
-const HERO_IMAGE_URL = "https://hq.virtual-carhire.co.uk/email/hero.jpg";
+const VCH_LOGO_URL = "https://www.virtual-carhire.co.uk/assets/logo.png";
+const HERO_IMAGE_URL = "https://hq.virtual-carhire.co.uk/whatsapp/virtual-car-hire-welcome.jpg";
 
 // --- Email Address Routing ---
 function formatFromAddress(rawAddress: string): string {
@@ -47,6 +47,8 @@ function renderUnifiedEmailLayout({
   cardContent,
   ctaUrl,
   ctaText,
+  logoSrc = VCH_LOGO_URL,
+  heroSrc = HERO_IMAGE_URL,
 }: {
   title: string;
   eyebrow: string;
@@ -55,6 +57,8 @@ function renderUnifiedEmailLayout({
   cardContent: string;
   ctaUrl?: string;
   ctaText?: string;
+  logoSrc?: string;
+  heroSrc?: string;
 }): string {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -75,12 +79,12 @@ function renderUnifiedEmailLayout({
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td style="background-color: #0B0E17; padding: 18px 24px; border-bottom: 1px solid #1E293B;" align="left">
-                    <img src="cid:logo" alt="Virtual Car Hire" width="96" height="96" style="width: 96px; height: 96px; max-width: 96px; display: block; border: 0; object-fit: contain;" onerror="this.onerror=null;this.src='${VCH_LOGO_URL}';" />
+                    <img src="${logoSrc}" alt="Virtual Car Hire" width="96" height="96" style="width: 96px; height: 96px; max-width: 96px; display: block; border: 0; object-fit: contain; background-color: #0B0E17;" />
                   </td>
                 </tr>
                 <tr>
                   <td style="padding: 0; background-color: #1E293B;">
-                    <img src="cid:hero" alt="Virtual Car Hire Fleet" width="600" height="200" style="width: 100%; max-width: 600px; height: auto; max-height: 200px; object-fit: cover; display: block; border: 0; background-color: #1E293B;" onerror="this.onerror=null;this.src='${HERO_IMAGE_URL}';" />
+                    <img src="${heroSrc}" alt="Virtual Car Hire Fleet" width="600" height="200" style="width: 100%; max-width: 600px; height: 200px; max-height: 200px; object-fit: cover; display: block; border: 0; background-color: #1E293B;" />
                   </td>
                 </tr>
               </table>
@@ -98,7 +102,7 @@ function renderUnifiedEmailLayout({
                 ${headline}
               </h1>
 
-              ${bodyText ? `<p style="color: #94A3B8; font-size: 14px; margin: 0 0 20px 0; line-height: 1.5;">${bodyText}</p>` : ""}
+              ${bodyText ? `<div style="color: #94A3B8; font-size: 14px; margin: 0 0 20px 0; line-height: 1.5;">${bodyText}</div>` : ""}
 
               <div style="background-color: #FFFFFF; border-radius: 10px; padding: 20px; color: #14161B; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
                 ${cardContent}
@@ -120,7 +124,7 @@ function renderUnifiedEmailLayout({
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td align="left" style="vertical-align: middle;">
-                    <img src="cid:logo" alt="Virtual Car Hire" width="72" height="72" style="width: 72px; height: 72px; max-width: 72px; opacity: 0.85; display: block; border: 0; object-fit: contain;" onerror="this.onerror=null;this.src='${VCH_LOGO_URL}';" />
+                    <img src="${logoSrc}" alt="Virtual Car Hire" width="72" height="72" style="width: 72px; height: 72px; max-width: 72px; opacity: 0.85; display: block; border: 0; object-fit: contain; background-color: #070910;" />
                   </td>
                   <td align="right" style="vertical-align: middle; color: #94A3B8; font-size: 11px;">
                     <span style="color: #FF6A00; font-weight: bold;">✔</span> Smarter Fleet Management
@@ -146,26 +150,38 @@ function render2FATemplate(options: Record<string, any>): string {
   const expiresIn = options.expiresInMinutes || 10;
   const name = options.recipientName || "there";
 
-  const cardContent = `
-    <div style="text-align: center; padding: 10px 0;">
-      <div style="font-size: 12px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px;">
-        Your Security Code
+  const topCodeBlock = `
+    <div style="text-align: center; margin: 16px 0 20px 0; background-color: #FFFFFF; border-radius: 12px; padding: 24px 16px; border: 2px solid #FF6A00; box-shadow: 0 4px 14px rgba(255,106,0,0.18);">
+      <div style="font-size: 11px; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: 0.14em; margin-bottom: 8px;">
+        YOUR 6-DIGIT VERIFICATION CODE
       </div>
-      <div style="font-family: 'Courier New', Courier, monospace; font-size: 36px; font-weight: 800; letter-spacing: 0.25em; color: #FF6A00; background-color: #F8FAFC; border: 2px dashed #E2E8F0; border-radius: 8px; padding: 16px; margin-bottom: 14px;">
+      <div style="font-family: 'Courier New', Courier, monospace; font-size: 42px; font-weight: 900; letter-spacing: 0.28em; color: #FF6A00; background-color: #FFF7ED; border: 2px dashed #FF6A00; border-radius: 10px; padding: 18px; margin-bottom: 12px;">
         ${code}
       </div>
-      <div style="font-size: 13px; color: #64748B;">
-        ⏱️ Expires in <strong>${expiresIn} minutes</strong>
+      <div style="font-size: 13px; font-weight: 700; color: #475569;">
+        ⏱️ Code expires in <span style="color: #FF6A00;">${expiresIn} minutes</span>
+      </div>
+    </div>
+  `;
+
+  const cardContent = `
+    <div style="font-size: 14px; color: #334155; line-height: 1.6;">
+      <p style="margin: 0 0 10px 0; font-weight: 600; color: #0F172A;">Hi ${name},</p>
+      <p style="margin: 0 0 12px 0;">Use the 6-digit verification code above to sign in securely to your Virtual Car Hire portal account.</p>
+      <div style="background-color: #F8FAFC; border-left: 4px solid #3B82F6; border-radius: 4px; padding: 12px 14px; font-size: 12px; color: #475569; line-height: 1.5;">
+        <strong>IMPORTANT NOTICE:</strong> If you did not request this login code, please secure your account immediately or contact our support team at <a href="mailto:support@fa-ibi.co.uk" style="color: #FF6A00; text-decoration: none; font-weight: 700;">support@fa-ibi.co.uk</a>.
       </div>
     </div>
   `;
 
   return renderUnifiedEmailLayout({
-    title: "Your Verification Code — Virtual Car Hire",
+    title: `${code} is your Virtual Car Hire verification code`,
     eyebrow: "SECURITY VERIFICATION",
-    headline: "Here's your login code",
-    bodyText: `Hi ${name}, enter this 6-digit verification code to log in securely to Virtual Car Hire Fleet Tracker.`,
+    headline: "Your Security Verification Code",
+    bodyText: topCodeBlock,
     cardContent,
+    logoSrc: options.logoSrc,
+    heroSrc: options.heroSrc,
   });
 }
 
@@ -241,6 +257,8 @@ function renderRentDueTomorrowTemplate(options: Record<string, any>): string {
     cardContent,
     ctaUrl: options.actionUrl || "https://virtual-carhire.co.uk/portal/dashboard",
     ctaText: options.actionText || "View Drivers",
+    logoSrc: options.logoSrc,
+    heroSrc: options.heroSrc,
   });
 }
 
@@ -312,6 +330,8 @@ function renderDriverAlertTemplate(options: Record<string, any>): string {
     cardContent,
     ctaUrl: options.actionUrl || "https://virtual-carhire.co.uk/portal/dashboard",
     ctaText: options.actionText || "View Details in Portal",
+    logoSrc: options.logoSrc,
+    heroSrc: options.heroSrc,
   });
 }
 
@@ -370,6 +390,8 @@ function renderFleetSummaryTemplate(options: Record<string, any>): string {
     cardContent,
     ctaUrl: options.manageUrl || "https://hq.virtual-carhire.co.uk/vehicles",
     ctaText: "Manage Fleet Expiries",
+    logoSrc: options.logoSrc,
+    heroSrc: options.heroSrc,
   });
 }
 
@@ -432,6 +454,8 @@ function renderDriverLicenceSummaryTemplate(options: Record<string, any>): strin
     cardContent,
     ctaUrl: options.helpUrl || "https://hq.virtual-carhire.co.uk/drivers",
     ctaText: "Review All Licences",
+    logoSrc: options.logoSrc,
+    heroSrc: options.heroSrc,
   });
 }
 
@@ -505,28 +529,33 @@ serve(async (req) => {
   const emailFromAddress = formatFromAddress(rawFrom);
   const resendApiKey = Deno.env.get("RESEND_API_KEY");
 
+  // Determine CID vs URL fallback for logo and hero
+  let logoSrc = "cid:logo";
+  let heroSrc = "cid:hero";
+
   let html = payload.html || "";
   if (!html) {
+    const renderOptions = { ...templateData, logoSrc, heroSrc };
     switch (templateType) {
       case "2fa":
       case "2fa_code":
-        html = render2FATemplate(templateData);
+        html = render2FATemplate(renderOptions);
         break;
       case "rent_due":
       case "rent_due_tomorrow":
-        html = renderRentDueTomorrowTemplate(templateData);
+        html = renderRentDueTomorrowTemplate(renderOptions);
         break;
       case "fleet_summary":
-        html = renderFleetSummaryTemplate(templateData);
+        html = renderFleetSummaryTemplate(renderOptions);
         break;
       case "driver_licence_summary":
-        html = renderDriverLicenceSummaryTemplate(templateData);
+        html = renderDriverLicenceSummaryTemplate(renderOptions);
         break;
       case "driver_alert":
       case "driver_notice":
       case "custom_message":
       default:
-        html = renderDriverAlertTemplate({ ...templateData, headline: templateData.headline || subject });
+        html = renderDriverAlertTemplate({ ...renderOptions, headline: renderOptions.headline || subject });
         break;
     }
   }
@@ -573,6 +602,10 @@ serve(async (req) => {
     },
   ];
 
+  const plainText = payload.text || payload.plain_text || (templateType === "2fa" || templateType === "2fa_code"
+    ? `Your Virtual Car Hire 2FA verification code is: ${templateData.code || "000000"}. Expires in 10 minutes.`
+    : undefined);
+
   try {
     const resendRes = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -585,6 +618,7 @@ serve(async (req) => {
         to: [recipient],
         subject,
         html,
+        text: plainText,
         headers: emailHeaders,
         attachments: emailAttachments,
       }),
