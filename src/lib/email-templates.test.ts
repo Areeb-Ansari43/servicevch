@@ -16,7 +16,7 @@ describe("Email Templates Foundation", () => {
   });
 
   describe("Template 1: 2FA Verification Code", () => {
-    it("renders verification code, expiry note, hero image, and 180px PNG logo", () => {
+    it("renders verification code, expiry note, hero image, and 96x96 PNG logo", () => {
       const html = render2FATemplate({ code: "849201", recipientName: "John" });
       expect(html).toContain("849201");
       expect(html).toContain("Hi John");

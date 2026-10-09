@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BrandLogo } from "@/components/brand-logo";
 import { useServerFn } from "@tanstack/react-start";
 import { motion } from "framer-motion";
 import {
@@ -1179,6 +1180,124 @@ function PortalAccountsAdminCard({
   );
 }
 
+function JobRunsAdminCard() {
+  const [jobRuns, setJobRuns] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchJobRuns = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/job-runs");
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || "Failed to load job runs");
+      }
+      setJobRuns(data.jobRuns || []);
+    } catch (err: any) {
+      setError(err.message || "Failed to fetch job execution history");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchJobRuns();
+  }, []);
+
+  return (
+    <div className="bg-card text-card-foreground border border-border/80 rounded-2xl p-6 shadow-sm mb-8">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="text-lg font-bold flex items-center gap-2">
+            <span className="text-xl">⏱️</span> Job Execution Log
+          </h3>
+          <p className="text-xs text-muted-foreground mt-1">
+            Last 30 background job executions (expiry scans, notifications, watchdogs)
+          </p>
+        </div>
+        <button
+          onClick={fetchJobRuns}
+          disabled={loading}
+          className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors"
+        >
+          {loading ? "Refreshing..." : "Refresh"}
+        </button>
+      </div>
+
+      {error && (
+        <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-xs mb-4">
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="text-xs text-muted-foreground py-4 text-center">Loading job history...</div>
+      ) : jobRuns.length === 0 ? (
+        <div className="text-xs text-muted-foreground py-4 text-center border border-dashed border-border rounded-xl">
+          No job runs recorded yet.
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-border/80 text-muted-foreground font-semibold">
+                <th className="pb-2">Job Name</th>
+                <th className="pb-2">Started At</th>
+                <th className="pb-2">Status</th>
+                <th className="pb-2">Results / Error</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/40">
+              {jobRuns.map((run) => {
+                const isSuccess = run.status === "success";
+                const isFailed = run.status === "failed";
+                return (
+                  <tr key={run.id} className="hover:bg-muted/30 transition-colors">
+                    <td className="py-2.5 font-bold">{run.job_name}</td>
+                    <td className="py-2.5 text-muted-foreground">
+                      {new Date(run.started_at).toLocaleString("en-GB", {
+                        day: "2-digit",
+                        month: "short",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                      })}
+                    </td>
+                    <td className="py-2.5">
+                      <span
+                        className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                          isSuccess
+                            ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                            : isFailed
+                            ? "bg-red-500/10 text-red-500 border border-red-500/20"
+                            : "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                        }`}
+                      >
+                        {run.status}
+                      </span>
+                    </td>
+                    <td className="py-2.5 text-muted-foreground font-mono text-[11px]">
+                      {run.error_message ? (
+                        <span className="text-red-400 font-sans">{run.error_message}</span>
+                      ) : run.counts ? (
+                        JSON.stringify(run.counts)
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function UserSettingsView({
   account,
   toast,
@@ -1440,6 +1559,7 @@ function UserSettingsView({
       <ConversationEventsCard />
 
       {/* APPEARANCE CUSTOMISATION CARD */}
+      <JobRunsAdminCard />
       <AppearanceSettingsCard toast={toast} />
 
       {/* PORTAL ACCOUNTS & STRAY CREDENTIALS AUDIT */}
@@ -2274,12 +2394,8 @@ export function FleetShell({ view }: { view: View }) {
         style={{ background: T.bg }}
       >
         <div className="flex flex-col items-center text-center">
-          <div className="mb-4 flex h-14 w-14 animate-pulse items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-[#0B0D12] text-white shadow-[0_18px_40px_-12px_rgba(255,106,0,0.7)]">
-            <img
-              src="/brand-logo.png"
-              alt="Virtual Car Hire"
-              className="h-full w-full object-contain p-0.5"
-            />
+          <div className="mb-4 flex items-center justify-center animate-pulse text-white drop-shadow-[0_18px_40px_rgba(255,106,0,0.7)]">
+            <BrandLogo size={120} />
           </div>
           <div className="flex items-center gap-2 text-sm font-semibold text-[#ff8a3d]">
             <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#ff8a3d] border-t-transparent" />
@@ -2629,13 +2745,9 @@ function Sidebar({
                 onClick={onTogglePin}
                 aria-label="Expand Navigation"
                 aria-expanded={false}
-                className="flex h-[56px] w-[56px] items-center justify-center rounded-full border border-[var(--vch-border)] bg-[var(--vch-surface-solid)] shadow-xl backdrop-blur-xl p-1.5 transition-colors hover:border-[var(--vch-accent)]"
+                className="flex h-[56px] w-[56px] items-center justify-center rounded-full border border-[var(--vch-border)] bg-[var(--vch-surface-solid)] shadow-xl backdrop-blur-xl p-1 transition-colors hover:border-[var(--vch-accent)]"
               >
-                <img
-                  src="/brand-logo.png"
-                  alt="Virtual Car Hire"
-                  className="h-full w-full object-contain"
-                />
+                <BrandLogo size={48} />
               </motion.button>
               {/* Pin Toggle indicator on hover */}
               <button
@@ -2745,12 +2857,8 @@ function Sidebar({
           {/* Header */}
           <div className="flex items-center justify-between border-b border-[var(--vch-border-soft)] px-2 pb-3">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--vch-border)] bg-[var(--vch-surface-solid)] p-1">
-                <img
-                  src="/brand-logo.png"
-                  alt="Virtual Car Hire Logo"
-                  className="h-full w-full object-contain"
-                />
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden">
+                <BrandLogo size={48} />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-xs font-extrabold text-[var(--vch-text)]">

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { requestLoginCode, verifyLoginCode } from "@/lib/auth-otp.functions";
 import { RouteErrorBoundary } from "@/components/error-boundary";
-// BrandLogo import removed per PR comment
+import { BrandLogo } from "@/components/brand-logo";
 import {
   Mail,
   Lock,
@@ -326,7 +326,7 @@ function LoginPage() {
           }`}
         >
           <div className="relative flex flex-col items-center gap-4">
-            <img src="/vch-logo.png" alt="Virtual Car Hire" className="h-16 w-auto animate-pulse" />
+            <BrandLogo size={120} className="animate-pulse" />
             <div
               className={`flex flex-col items-center text-center transition-all duration-500 ${
                 splashPhase === "logo" ? "opacity-0 translate-y-2" : "opacity-100 translate-y-0"
@@ -359,7 +359,7 @@ function LoginPage() {
       {/* Top Header Bar */}
       <header className="relative z-10 shrink-0 flex items-center justify-between px-6 py-[1.5vh] lg:px-12">
         <div className="flex items-center gap-3">
-          <img src="/vch-logo.png" alt="Virtual Car Hire" className="h-[clamp(28px,3.5vh,36px)] w-auto" />
+          <BrandLogo size={56} />
         </div>
         <div className="flex items-center gap-2">
           <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -399,7 +399,7 @@ function LoginPage() {
           >
             {/* Logo Mark and Title inside Card */}
             <div className="flex flex-col items-center text-center space-y-[0.5vh]">
-              <img src="/vch-logo.png" alt="Virtual Car Hire" className="h-[clamp(44px,6vh,72px)] w-auto mx-auto" />
+              <BrandLogo size={96} className="mx-auto" />
               <h2 className="text-[clamp(22px,3vh,30px)] font-bold text-white tracking-tight leading-tight pt-1">
                 Virtual Car Hire
               </h2>

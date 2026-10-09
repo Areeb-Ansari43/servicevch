@@ -139,7 +139,7 @@ function renderUnifiedEmailLayout({
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td style="background-color: #0B0E17; padding: 18px 24px; border-bottom: 1px solid #1E293B;" align="left">
-                    <img src="${logoSrc}" alt="Virtual Car Hire" width="180" height="48" style="width: 180px; max-width: 180px; height: 48px; display: block; border: 0; background-color: #0B0E17;" />
+                    <img src="${logoSrc}" alt="Virtual Car Hire" width="96" height="96" style="width: 96px; height: 96px; max-width: 96px; display: block; border: 0; object-fit: contain; background-color: #0B0E17;" />
                   </td>
                 </tr>
                 <tr>
@@ -189,7 +189,7 @@ function renderUnifiedEmailLayout({
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td align="left" style="vertical-align: middle;">
-                    <img src="${logoSrc}" alt="Virtual Car Hire" width="130" height="35" style="width: 130px; max-width: 130px; height: 35px; opacity: 0.85; display: block; border: 0; background-color: #070910;" />
+                    <img src="${logoSrc}" alt="Virtual Car Hire" width="72" height="72" style="width: 72px; height: 72px; max-width: 72px; opacity: 0.85; display: block; border: 0; object-fit: contain; background-color: #070910;" />
                   </td>
                   <td align="right" style="vertical-align: middle; color: #94A3B8; font-size: 11px;">
                     <span style="color: #FF6A00; font-weight: bold;">✔</span> Smarter Fleet Management
@@ -213,7 +213,7 @@ function renderUnifiedEmailLayout({
 /**
  * TEMPLATE 1: 2FA Verification Code
  */
-export function render2FATemplate(options: Template2FAOptions): string {
+export function render2FATemplate(options: Template2FAOptions & { logoSrc?: string; heroSrc?: string }): string {
   const code = options.code || "000000";
   const expiresIn = options.expiresInMinutes || 10;
   const name = options.recipientName || "there";
@@ -249,13 +249,15 @@ export function render2FATemplate(options: Template2FAOptions): string {
     headline: "Your Security Verification Code",
     bodyText: topCodeBlock,
     cardContent,
+    logoSrc: options.logoSrc,
+    heroSrc: options.heroSrc,
   });
 }
 
 /**
  * TEMPLATE 2: Rent Due Tomorrow (Driver & Staff Digest)
  */
-export function renderRentDueTomorrowTemplate(options: TemplateRentDueTomorrowOptions): string {
+export function renderRentDueTomorrowTemplate(options: TemplateRentDueTomorrowOptions & { logoSrc?: string; heroSrc?: string }): string {
   const name = options.recipientName || "Operations Team";
   const headline = options.headline || "Rent due tomorrow";
   const subtext = options.subtext || options.introLine || "The following active drivers have weekly rent due tomorrow:";
@@ -328,13 +330,15 @@ export function renderRentDueTomorrowTemplate(options: TemplateRentDueTomorrowOp
     cardContent,
     ctaUrl: options.actionUrl || "https://virtual-carhire.co.uk/portal/dashboard",
     ctaText: options.actionText || "View Drivers",
+    logoSrc: options.logoSrc,
+    heroSrc: options.heroSrc,
   });
 }
 
 /**
  * TEMPLATE 3: Driver Alert / Single Vehicle Notice
  */
-export function renderDriverAlertTemplate(options: TemplateDriverAlertOptions): string {
+export function renderDriverAlertTemplate(options: TemplateDriverAlertOptions & { logoSrc?: string; heroSrc?: string }): string {
   const headerLabel = options.headerLabel || "IMPORTANT NOTICE";
   const headline = options.headline;
   const subtext = options.subtext || options.introLine || "Please review the details below regarding your vehicle account:";
@@ -402,13 +406,15 @@ export function renderDriverAlertTemplate(options: TemplateDriverAlertOptions): 
     cardContent,
     ctaUrl: options.actionUrl || "https://virtual-carhire.co.uk/portal/dashboard",
     ctaText: options.actionText || "View Details in Portal",
+    logoSrc: options.logoSrc,
+    heroSrc: options.heroSrc,
   });
 }
 
 /**
  * TEMPLATE 4: Fleet Expiry Summary (Staff-Facing)
  */
-export function renderFleetSummaryTemplate(options: TemplateFleetSummaryOptions): string {
+export function renderFleetSummaryTemplate(options: TemplateFleetSummaryOptions & { logoSrc?: string; heroSrc?: string }): string {
   const headerLabel = options.headerLabel || "FLEET COMPLIANCE";
   const headline = options.headline || "Multiple vehicles have upcoming MOT & PCO expiries";
   const subtext = options.subtext || "Ensure your fleet remains road-legal, compliant, and ready for work.";
@@ -463,13 +469,15 @@ export function renderFleetSummaryTemplate(options: TemplateFleetSummaryOptions)
     cardContent,
     ctaUrl: options.manageUrl || "https://hq.virtual-carhire.co.uk/vehicles",
     ctaText: "Manage Fleet Expiries",
+    logoSrc: options.logoSrc,
+    heroSrc: options.heroSrc,
   });
 }
 
 /**
  * TEMPLATE 5: Driver Licence Expiry Summary (Staff-Facing)
  */
-export function renderDriverLicenceSummaryTemplate(options: TemplateDriverLicenceSummaryOptions): string {
+export function renderDriverLicenceSummaryTemplate(options: TemplateDriverLicenceSummaryOptions & { logoSrc?: string; heroSrc?: string }): string {
   const headerLabel = options.headerLabel || "LICENCE COMPLIANCE";
   const headline = options.headline || "Driver Licences Expiring Soon";
   const subtext = options.subtext || options.introLine || "Review driver licence expiry dates across your team and take required action:";
@@ -528,5 +536,7 @@ export function renderDriverLicenceSummaryTemplate(options: TemplateDriverLicenc
     cardContent,
     ctaUrl: options.helpUrl || "https://hq.virtual-carhire.co.uk/drivers",
     ctaText: "Review All Licences",
+    logoSrc: options.logoSrc,
+    heroSrc: options.heroSrc,
   });
 }

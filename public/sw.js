@@ -1,11 +1,11 @@
-const CACHE_NAME = "vch-fleet-v1";
+const CACHE_NAME = "vch-fleet-v3";
 const ASSETS_TO_CACHE = [
   "/",
   "/manifest.json",
   "/favicon.ico",
   "/favicon-32.png",
   "/apple-touch-icon.png",
-  "/vch-logo.png",
+  "/logo.png",
   "/vch-logo-192.png",
   "/vch-logo-512.png"
 ];

@@ -1,0 +1,19 @@
+name: Daily Expiry Alerts Schedule
+
+on:
+  schedule:
+    # 09:00 UTC daily (09:00 Europe/London)
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+
+jobs:
+  run-expiry-alerts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Daily Expiry Scan Endpoint
+        run: |
+          curl -X GET "https://hq.virtual-carhire.co.uk/api/public/expiry-alerts" \
+            --fail \
+            --show-error \
+            --silent \
+            --header "Content-Type: application/json"

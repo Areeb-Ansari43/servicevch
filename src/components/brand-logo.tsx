@@ -5,16 +5,24 @@ export interface BrandLogoProps extends React.ImgHTMLAttributes<HTMLImageElement
   className?: string;
 }
 
-export function BrandLogo({ size = 40, className = "", alt = "Virtual Car Hire Logo", ...props }: BrandLogoProps) {
+export function BrandLogo({
+  size = 40,
+  className = "",
+  alt = "Virtual Car Hire",
+  style,
+  ...props
+}: BrandLogoProps) {
   const dimension = typeof size === "number" ? `${size}px` : size;
+  const numSize = typeof size === "number" ? size : undefined;
+
   return (
     <img
-      src="/brand-logo.png"
+      src="/logo.png"
       alt={alt}
-      width={typeof size === "number" ? size : undefined}
-      height={typeof size === "number" ? size : undefined}
-      style={{ width: dimension, height: dimension }}
-      className={`object-contain rounded-xl ${className}`}
+      width={numSize}
+      height={numSize}
+      style={{ width: dimension, height: dimension, ...style }}
+      className={`object-contain ${className}`}
       {...props}
     />
   );

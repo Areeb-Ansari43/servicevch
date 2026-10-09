@@ -33,8 +33,8 @@ describe("2FA Full Flow & Image Assets Verification", () => {
     // Check image attributes: width, height, alt, background-color fallback
     expect(html).toContain(`src="${VCH_LOGO_URL}"`);
     expect(html).toContain('alt="Virtual Car Hire"');
-    expect(html).toContain('width="180"');
-    expect(html).toContain('height="48"');
+    expect(html).toContain('width="96"');
+    expect(html).toContain('height="96"');
     expect(html).toContain("background-color: #0B0E17");
 
     expect(html).toContain(`src="${HERO_IMAGE_URL}"`);

@@ -47,6 +47,8 @@ function renderUnifiedEmailLayout({
   cardContent,
   ctaUrl,
   ctaText,
+  logoSrc = VCH_LOGO_URL,
+  heroSrc = HERO_IMAGE_URL,
 }: {
   title: string;
   eyebrow: string;
@@ -55,6 +57,8 @@ function renderUnifiedEmailLayout({
   cardContent: string;
   ctaUrl?: string;
   ctaText?: string;
+  logoSrc?: string;
+  heroSrc?: string;
 }): string {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -75,12 +79,12 @@ function renderUnifiedEmailLayout({
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td style="background-color: #0B0E17; padding: 18px 24px; border-bottom: 1px solid #1E293B;" align="left">
-                    <img src="${VCH_LOGO_URL}" alt="Virtual Car Hire" width="180" height="48" style="width: 180px; max-width: 180px; height: 48px; display: block; border: 0; background-color: #0B0E17;" />
+                    <img src="${logoSrc}" alt="Virtual Car Hire" width="96" height="96" style="width: 96px; height: 96px; max-width: 96px; display: block; border: 0; object-fit: contain; background-color: #0B0E17;" />
                   </td>
                 </tr>
                 <tr>
                   <td style="padding: 0; background-color: #1E293B;">
-                    <img src="${HERO_IMAGE_URL}" alt="Virtual Car Hire Fleet" width="600" height="200" style="width: 100%; max-width: 600px; height: 200px; max-height: 200px; object-fit: cover; display: block; border: 0; background-color: #1E293B;" />
+                    <img src="${heroSrc}" alt="Virtual Car Hire Fleet" width="600" height="200" style="width: 100%; max-width: 600px; height: 200px; max-height: 200px; object-fit: cover; display: block; border: 0; background-color: #1E293B;" />
                   </td>
                 </tr>
               </table>
@@ -98,7 +102,7 @@ function renderUnifiedEmailLayout({
                 ${headline}
               </h1>
 
-              ${bodyText ? `<p style="color: #94A3B8; font-size: 14px; margin: 0 0 20px 0; line-height: 1.5;">${bodyText}</p>` : ""}
+              ${bodyText ? `<div style="color: #94A3B8; font-size: 14px; margin: 0 0 20px 0; line-height: 1.5;">${bodyText}</div>` : ""}
 
               <div style="background-color: #FFFFFF; border-radius: 10px; padding: 20px; color: #14161B; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
                 ${cardContent}
@@ -120,7 +124,7 @@ function renderUnifiedEmailLayout({
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td align="left" style="vertical-align: middle;">
-                    <img src="${VCH_LOGO_URL}" alt="Virtual Car Hire" width="130" height="35" style="width: 130px; max-width: 130px; height: 35px; opacity: 0.85; display: block; border: 0; background-color: #070910;" />
+                    <img src="${logoSrc}" alt="Virtual Car Hire" width="72" height="72" style="width: 72px; height: 72px; max-width: 72px; opacity: 0.85; display: block; border: 0; object-fit: contain; background-color: #070910;" />
                   </td>
                   <td align="right" style="vertical-align: middle; color: #94A3B8; font-size: 11px;">
                     <span style="color: #FF6A00; font-weight: bold;">✔</span> Smarter Fleet Management
@@ -176,6 +180,8 @@ function render2FATemplate(options: Record<string, any>): string {
     headline: "Your Security Verification Code",
     bodyText: topCodeBlock,
     cardContent,
+    logoSrc: options.logoSrc,
+    heroSrc: options.heroSrc,
   });
 }
 
@@ -251,6 +257,8 @@ function renderRentDueTomorrowTemplate(options: Record<string, any>): string {
     cardContent,
     ctaUrl: options.actionUrl || "https://virtual-carhire.co.uk/portal/dashboard",
     ctaText: options.actionText || "View Drivers",
+    logoSrc: options.logoSrc,
+    heroSrc: options.heroSrc,
   });
 }
 
@@ -322,6 +330,8 @@ function renderDriverAlertTemplate(options: Record<string, any>): string {
     cardContent,
     ctaUrl: options.actionUrl || "https://virtual-carhire.co.uk/portal/dashboard",
     ctaText: options.actionText || "View Details in Portal",
+    logoSrc: options.logoSrc,
+    heroSrc: options.heroSrc,
   });
 }
 
@@ -380,6 +390,8 @@ function renderFleetSummaryTemplate(options: Record<string, any>): string {
     cardContent,
     ctaUrl: options.manageUrl || "https://hq.virtual-carhire.co.uk/vehicles",
     ctaText: "Manage Fleet Expiries",
+    logoSrc: options.logoSrc,
+    heroSrc: options.heroSrc,
   });
 }
 
@@ -442,6 +454,8 @@ function renderDriverLicenceSummaryTemplate(options: Record<string, any>): strin
     cardContent,
     ctaUrl: options.helpUrl || "https://hq.virtual-carhire.co.uk/drivers",
     ctaText: "Review All Licences",
+    logoSrc: options.logoSrc,
+    heroSrc: options.heroSrc,
   });
 }
 
@@ -515,28 +529,33 @@ serve(async (req) => {
   const emailFromAddress = formatFromAddress(rawFrom);
   const resendApiKey = Deno.env.get("RESEND_API_KEY");
 
+  // Determine CID vs URL fallback for logo and hero
+  let logoSrc = "cid:logo";
+  let heroSrc = "cid:hero";
+
   let html = payload.html || "";
   if (!html) {
+    const renderOptions = { ...templateData, logoSrc, heroSrc };
     switch (templateType) {
       case "2fa":
       case "2fa_code":
-        html = render2FATemplate(templateData);
+        html = render2FATemplate(renderOptions);
         break;
       case "rent_due":
       case "rent_due_tomorrow":
-        html = renderRentDueTomorrowTemplate(templateData);
+        html = renderRentDueTomorrowTemplate(renderOptions);
         break;
       case "fleet_summary":
-        html = renderFleetSummaryTemplate(templateData);
+        html = renderFleetSummaryTemplate(renderOptions);
         break;
       case "driver_licence_summary":
-        html = renderDriverLicenceSummaryTemplate(templateData);
+        html = renderDriverLicenceSummaryTemplate(renderOptions);
         break;
       case "driver_alert":
       case "driver_notice":
       case "custom_message":
       default:
-        html = renderDriverAlertTemplate({ ...templateData, headline: templateData.headline || subject });
+        html = renderDriverAlertTemplate({ ...renderOptions, headline: renderOptions.headline || subject });
         break;
     }
   }
@@ -561,6 +580,32 @@ serve(async (req) => {
     );
   }
 
+  const isStaffAlert = templateType !== "2fa" && templateType !== "2fa_code";
+  const emailHeaders = isStaffAlert
+    ? {
+        Importance: "high",
+        "X-Priority": "1",
+        "X-MSMail-Priority": "High",
+      }
+    : undefined;
+
+  const emailAttachments = [
+    {
+      filename: "logo.png",
+      path: VCH_LOGO_URL,
+      content_id: "logo",
+    },
+    {
+      filename: "hero.jpg",
+      path: HERO_IMAGE_URL,
+      content_id: "hero",
+    },
+  ];
+
+  const plainText = payload.text || payload.plain_text || (templateType === "2fa" || templateType === "2fa_code"
+    ? `Your Virtual Car Hire 2FA verification code is: ${templateData.code || "000000"}. Expires in 10 minutes.`
+    : undefined);
+
   try {
     const resendRes = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -573,7 +618,9 @@ serve(async (req) => {
         to: [recipient],
         subject,
         html,
-        text: payload.text || payload.plain_text || `Your Virtual Car Hire 2FA verification code is: ${templateData.code || "000000"}. Expires in 10 minutes.`,
+        text: plainText,
+        headers: emailHeaders,
+        attachments: emailAttachments,
       }),
     });
 

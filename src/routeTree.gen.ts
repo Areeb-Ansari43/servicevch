@@ -29,7 +29,9 @@ import { Route as ApiPublicOcrOdometerRouteImport } from './routes/api/public/oc
 import { Route as ApiPublicExpiryAlertsRouteImport } from './routes/api/public/expiry-alerts'
 import { Route as ApiPublicAiIntakeRouteImport } from './routes/api/public/ai-intake'
 import { Route as ApiPublicAgentWebhookRouteImport } from './routes/api/public/agent-webhook'
+import { Route as ApiJobsWatchdogRouteImport } from './routes/api/jobs/watchdog'
 import { Route as ApiJobsInactivityRouteImport } from './routes/api/jobs/inactivity'
+import { Route as ApiAdminJobRunsRouteImport } from './routes/api/admin/job-runs'
 import { Route as ApiPublicPortalAuthVerifyCodeRouteImport } from './routes/api/public/portal-auth/verify-code'
 import { Route as ApiPublicPortalAuthRequestCodeRouteImport } from './routes/api/public/portal-auth/request-code'
 
@@ -133,9 +135,19 @@ const ApiPublicAgentWebhookRoute = ApiPublicAgentWebhookRouteImport.update({
   path: '/api/public/agent-webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiJobsWatchdogRoute = ApiJobsWatchdogRouteImport.update({
+  id: '/api/jobs/watchdog',
+  path: '/api/jobs/watchdog',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiJobsInactivityRoute = ApiJobsInactivityRouteImport.update({
   id: '/api/jobs/inactivity',
   path: '/api/jobs/inactivity',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAdminJobRunsRoute = ApiAdminJobRunsRouteImport.update({
+  id: '/api/admin/job-runs',
+  path: '/api/admin/job-runs',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicPortalAuthVerifyCodeRoute =
@@ -167,7 +179,9 @@ export interface FileRoutesByFullPath {
   '/vehicles/$reg': typeof VehiclesRegRoute
   '/service-history/': typeof ServiceHistoryIndexRoute
   '/vehicles/': typeof VehiclesIndexRoute
+  '/api/admin/job-runs': typeof ApiAdminJobRunsRoute
   '/api/jobs/inactivity': typeof ApiJobsInactivityRoute
+  '/api/jobs/watchdog': typeof ApiJobsWatchdogRoute
   '/api/public/agent-webhook': typeof ApiPublicAgentWebhookRoute
   '/api/public/ai-intake': typeof ApiPublicAiIntakeRoute
   '/api/public/expiry-alerts': typeof ApiPublicExpiryAlertsRoute
@@ -192,7 +206,9 @@ export interface FileRoutesByTo {
   '/vehicles/$reg': typeof VehiclesRegRoute
   '/service-history': typeof ServiceHistoryIndexRoute
   '/vehicles': typeof VehiclesIndexRoute
+  '/api/admin/job-runs': typeof ApiAdminJobRunsRoute
   '/api/jobs/inactivity': typeof ApiJobsInactivityRoute
+  '/api/jobs/watchdog': typeof ApiJobsWatchdogRoute
   '/api/public/agent-webhook': typeof ApiPublicAgentWebhookRoute
   '/api/public/ai-intake': typeof ApiPublicAiIntakeRoute
   '/api/public/expiry-alerts': typeof ApiPublicExpiryAlertsRoute
@@ -218,7 +234,9 @@ export interface FileRoutesById {
   '/vehicles/$reg': typeof VehiclesRegRoute
   '/service-history/': typeof ServiceHistoryIndexRoute
   '/vehicles/': typeof VehiclesIndexRoute
+  '/api/admin/job-runs': typeof ApiAdminJobRunsRoute
   '/api/jobs/inactivity': typeof ApiJobsInactivityRoute
+  '/api/jobs/watchdog': typeof ApiJobsWatchdogRoute
   '/api/public/agent-webhook': typeof ApiPublicAgentWebhookRoute
   '/api/public/ai-intake': typeof ApiPublicAiIntakeRoute
   '/api/public/expiry-alerts': typeof ApiPublicExpiryAlertsRoute
@@ -245,7 +263,9 @@ export interface FileRouteTypes {
     | '/vehicles/$reg'
     | '/service-history/'
     | '/vehicles/'
+    | '/api/admin/job-runs'
     | '/api/jobs/inactivity'
+    | '/api/jobs/watchdog'
     | '/api/public/agent-webhook'
     | '/api/public/ai-intake'
     | '/api/public/expiry-alerts'
@@ -270,7 +290,9 @@ export interface FileRouteTypes {
     | '/vehicles/$reg'
     | '/service-history'
     | '/vehicles'
+    | '/api/admin/job-runs'
     | '/api/jobs/inactivity'
+    | '/api/jobs/watchdog'
     | '/api/public/agent-webhook'
     | '/api/public/ai-intake'
     | '/api/public/expiry-alerts'
@@ -295,7 +317,9 @@ export interface FileRouteTypes {
     | '/vehicles/$reg'
     | '/service-history/'
     | '/vehicles/'
+    | '/api/admin/job-runs'
     | '/api/jobs/inactivity'
+    | '/api/jobs/watchdog'
     | '/api/public/agent-webhook'
     | '/api/public/ai-intake'
     | '/api/public/expiry-alerts'
@@ -321,7 +345,9 @@ export interface RootRouteChildren {
   VehiclesRegRoute: typeof VehiclesRegRoute
   ServiceHistoryIndexRoute: typeof ServiceHistoryIndexRoute
   VehiclesIndexRoute: typeof VehiclesIndexRoute
+  ApiAdminJobRunsRoute: typeof ApiAdminJobRunsRoute
   ApiJobsInactivityRoute: typeof ApiJobsInactivityRoute
+  ApiJobsWatchdogRoute: typeof ApiJobsWatchdogRoute
   ApiPublicAgentWebhookRoute: typeof ApiPublicAgentWebhookRoute
   ApiPublicAiIntakeRoute: typeof ApiPublicAiIntakeRoute
   ApiPublicExpiryAlertsRoute: typeof ApiPublicExpiryAlertsRoute
@@ -473,11 +499,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicAgentWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/jobs/watchdog': {
+      id: '/api/jobs/watchdog'
+      path: '/api/jobs/watchdog'
+      fullPath: '/api/jobs/watchdog'
+      preLoaderRoute: typeof ApiJobsWatchdogRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/jobs/inactivity': {
       id: '/api/jobs/inactivity'
       path: '/api/jobs/inactivity'
       fullPath: '/api/jobs/inactivity'
       preLoaderRoute: typeof ApiJobsInactivityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/job-runs': {
+      id: '/api/admin/job-runs'
+      path: '/api/admin/job-runs'
+      fullPath: '/api/admin/job-runs'
+      preLoaderRoute: typeof ApiAdminJobRunsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/portal-auth/verify-code': {
@@ -513,7 +553,9 @@ const rootRouteChildren: RootRouteChildren = {
   VehiclesRegRoute: VehiclesRegRoute,
   ServiceHistoryIndexRoute: ServiceHistoryIndexRoute,
   VehiclesIndexRoute: VehiclesIndexRoute,
+  ApiAdminJobRunsRoute: ApiAdminJobRunsRoute,
   ApiJobsInactivityRoute: ApiJobsInactivityRoute,
+  ApiJobsWatchdogRoute: ApiJobsWatchdogRoute,
   ApiPublicAgentWebhookRoute: ApiPublicAgentWebhookRoute,
   ApiPublicAiIntakeRoute: ApiPublicAiIntakeRoute,
   ApiPublicExpiryAlertsRoute: ApiPublicExpiryAlertsRoute,
