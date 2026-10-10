@@ -24,7 +24,8 @@ describe("Portal 2FA Endpoints & Email Content", () => {
       expect(capturedBody.subject).toContain("849201");
       expect(capturedBody.html).toContain("849201");
       expect(capturedBody.html).toContain("Virtual Car Hire");
-      expect(capturedBody.html).toContain("Portal Access");
+      expect(capturedBody.html).toContain("Your verification code");
+      expect(capturedBody.html).toContain("This code expires in 10 minutes");
     } finally {
       globalThis.fetch = originalFetch;
     }
