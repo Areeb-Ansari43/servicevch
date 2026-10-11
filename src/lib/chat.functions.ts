@@ -38,6 +38,12 @@ export type ConversationEvent = {
   tool_calls: string | null;
   validation_result: string | null;
   error: string | null;
+  webhook_received_at?: string | null;
+  message_saved_at?: string | null;
+  ai_started_at?: string | null;
+  first_provider_response_at?: string | null;
+  reply_sent_at?: string | null;
+  crm_visible_at?: string | null;
   created_at: string;
 };
 
