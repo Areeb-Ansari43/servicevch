@@ -5,27 +5,28 @@ import {
   renderDriverAlertTemplate,
   renderFleetSummaryTemplate,
   renderDriverLicenceSummaryTemplate,
-  VCH_LOGO_URL,
-  HERO_IMAGE_URL,
+  VCH_HEADER_LOGO_URL,
+  VCH_FOOTER_LOGO_URL,
 } from "./email-templates";
 
 describe("Email Templates Foundation", () => {
-  it("uses exact real brand logo and hero image URLs across templates", () => {
-    expect(VCH_LOGO_URL).toBe("https://www.virtual-carhire.co.uk/assets/logo.png");
-    expect(HERO_IMAGE_URL).toBe("https://hq.virtual-carhire.co.uk/whatsapp/virtual-car-hire-welcome.jpg");
+  it("uses logo-header.png and logo-footer.png URLs across templates", () => {
+    expect(VCH_HEADER_LOGO_URL).toBe("https://hq.virtual-carhire.co.uk/email/logo-header.png");
+    expect(VCH_FOOTER_LOGO_URL).toBe("https://hq.virtual-carhire.co.uk/email/logo-footer.png");
   });
 
   describe("Template 1: 2FA Verification Code", () => {
-    it("renders verification code, expiry note, hero image, and 96x96 PNG logo", () => {
+    it("renders verification code, expiry note, warning line, and logo header/footer without hero image or generic driver text", () => {
       const html = render2FATemplate({ code: "849201", recipientName: "John" });
       expect(html).toContain("849201");
-      expect(html).toContain("Hi John");
-      expect(html).toContain("SECURITY VERIFICATION");
-      expect(html).toContain("Your Security Verification Code");
-      expect(html).toContain("Code expires in");
-      expect(html).toContain(VCH_LOGO_URL);
-      expect(html).toContain(HERO_IMAGE_URL);
-      expect(html).toContain("Smarter Fleet Management");
+      expect(html).toContain("Your verification code");
+      expect(html).toContain("This code expires in 10 minutes");
+      expect(html).toContain("If you didn't request this, ignore this email. Never share this code.");
+      expect(html).toContain(VCH_HEADER_LOGO_URL);
+      expect(html).toContain(VCH_FOOTER_LOGO_URL);
+      expect(html).not.toContain("hero.jpg");
+      expect(html).not.toContain("whatsapp/virtual-car-hire-welcome.jpg");
+      expect(html).not.toContain("Important Requirement");
     });
   });
 
@@ -46,7 +47,7 @@ describe("Email Templates Foundation", () => {
           },
         ],
         actionUrl: "https://virtual-carhire.co.uk/portal/dashboard",
-        actionText: "View Drivers",
+        actionText: "View Details",
       });
 
       expect(html).toContain("RENT REMINDER");
@@ -55,9 +56,10 @@ describe("Email Templates Foundation", () => {
       expect(html).toContain("KN73XLB");
       expect(html).toContain("£260.00");
       expect(html).toContain("UNPAID");
-      expect(html).toContain("View Drivers");
-      expect(html).toContain(VCH_LOGO_URL);
-      expect(html).toContain(HERO_IMAGE_URL);
+      expect(html).toContain("View Details");
+      expect(html).toContain(VCH_HEADER_LOGO_URL);
+      expect(html).toContain(VCH_FOOTER_LOGO_URL);
+      expect(html).not.toContain("hero.jpg");
     });
   });
 
@@ -85,8 +87,9 @@ describe("Email Templates Foundation", () => {
       expect(html).toContain("BD73 XKP");
       expect(html).toContain("Expiring in 5 days");
       expect(html).toContain("⚠️ Important Requirement");
-      expect(html).toContain(VCH_LOGO_URL);
-      expect(html).toContain(HERO_IMAGE_URL);
+      expect(html).toContain(VCH_HEADER_LOGO_URL);
+      expect(html).toContain(VCH_FOOTER_LOGO_URL);
+      expect(html).not.toContain("hero.jpg");
     });
 
     it("renders simplified single message body when no cards are provided", () => {
@@ -127,6 +130,8 @@ describe("Email Templates Foundation", () => {
       expect(html).toContain("Mercedes-Benz EQE");
       expect(html).toContain(photoUrl);
       expect(html).toContain("Manage Fleet Expiries");
+      expect(html).toContain(VCH_HEADER_LOGO_URL);
+      expect(html).toContain(VCH_FOOTER_LOGO_URL);
     });
   });
 
@@ -153,45 +158,8 @@ describe("Email Templates Foundation", () => {
       expect(html).toContain("in 12d");
       expect(html).toContain("DM");
       expect(html).toContain("Review All Licences");
-    });
-  });
-
-  describe("Send Test Email Edge Function Helper", () => {
-    it("parses success and error feedback correctly", async () => {
-      const processFeedback = (
-        data: any,
-        error: any
-      ): { success: boolean; message: string } => {
-        if (error) {
-          let detailedError = error.message || "Invoke failed";
-          if (data && typeof data === "object") {
-            if (data.error) detailedError = data.error;
-            else if (data.message) detailedError = data.message;
-          }
-          return { success: false, message: `Failed to send test email: ${detailedError}` };
-        }
-        if (data && typeof data === "object") {
-          if (data.success === false || data.status === "failed") {
-            const msg = data.error || data.message || "Unknown error";
-            return { success: false, message: `Failed to send test email: ${msg}` };
-          }
-        }
-        return { success: true, message: "Test email sent to admin@virtualcarhire.com" };
-      };
-
-      const res1 = processFeedback(
-        { success: false, status: "failed", error: "RESEND_API_KEY environment variable is missing." },
-        { message: "Edge Function returned 500" }
-      );
-      expect(res1.success).toBe(false);
-      expect(res1.message).toContain("RESEND_API_KEY environment variable is missing.");
-
-      const res2 = processFeedback(
-        { success: true, status: "sent", id: "resend_123" },
-        null
-      );
-      expect(res2.success).toBe(true);
-      expect(res2.message).toBe("Test email sent to admin@virtualcarhire.com");
+      expect(html).toContain(VCH_HEADER_LOGO_URL);
+      expect(html).toContain(VCH_FOOTER_LOGO_URL);
     });
   });
 });

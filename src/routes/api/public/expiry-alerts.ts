@@ -4,9 +4,14 @@ import { getNextMotDate, getPcoExpiryDate } from "@/lib/vehicle-date-fields";
 import { calculateNextPaymentDueDate } from "@/lib/fleet-data";
 import { vehicleArtworkPath } from "@/lib/vehicle-display";
 import { CRM_BASE_URL, DRIVER_PORTAL_URL } from "@/lib/domain-config";
+import {
+  renderDriverAlertTemplate,
+  renderFleetSummaryTemplate,
+  renderDriverLicenceSummaryTemplate,
+  renderRentDueTomorrowTemplate,
+} from "@/lib/email-templates";
 
-const STAFF_ALERT_EMAIL = "notifications@fa-ibi.co.uk";
-const STAFF_RENT_ADMIN_EMAIL = "admin@fa-ibi.co.uk";
+export const STAFF_ALERT_RECIPIENTS = "admin@fa-ibi.co.uk";
 
 export const Route = createFileRoute("/api/public/expiry-alerts")({
   server: {
@@ -157,6 +162,16 @@ async function runExpiryScan() {
           }
 
           const driverEmail = assignedDriver.email?.trim() || null;
+          const templateData = {
+            recipientName: assignedDriver.driver_name,
+            headline: `Vehicle Expiry Notice — ${v.reg}`,
+            subtext: "Please review the details below and schedule an inspection.",
+            cards,
+            actionUrl: DRIVER_PORTAL_URL,
+            actionText: "View Details in Portal",
+          };
+          const html = renderDriverAlertTemplate(templateData);
+
           const driverRes = await supabaseAdmin.functions.invoke("send-email", {
             body: {
               recipient: driverEmail || "none",
@@ -164,14 +179,8 @@ async function runExpiryScan() {
               skip_reason: `Driver ${assignedDriver.driver_name} has no email on file`,
               subject: `Important Notice: Upcoming Vehicle Expiry for ${v.reg}`,
               template_type: "driver_alert",
-              template_data: {
-                recipientName: assignedDriver.driver_name,
-                headline: `Vehicle Expiry Notice — ${v.reg}`,
-                subtext: "Please review the details below and schedule an inspection.",
-                cards,
-                actionUrl: DRIVER_PORTAL_URL,
-                actionText: "View Details in Portal",
-              },
+              html,
+              template_data: templateData,
               metadata: { vehicle_reg: v.reg, driver_id: assignedDriver.id },
             },
           });
@@ -193,18 +202,22 @@ async function runExpiryScan() {
   // Send Fleet Summary digest to staff if vehicles have upcoming expiries
   if (fleetSummaryItems.length > 0) {
     try {
+      const templateData = {
+        headerLabel: "FLEET COMPLIANCE",
+        headline: `Multiple vehicles have upcoming MOT & PCO expiries (${fleetSummaryItems.length})`,
+        subtext: "Ensure your fleet remains road-legal, compliant, and ready for work.",
+        vehicles: fleetSummaryItems,
+        manageUrl: `${CRM_BASE_URL}/`,
+      };
+      const html = renderFleetSummaryTemplate(templateData);
+
       const staffFleetRes = await supabaseAdmin.functions.invoke("send-email", {
         body: {
-          recipient: STAFF_ALERT_EMAIL,
+          recipient: STAFF_ALERT_RECIPIENTS,
           subject: `Fleet MOT & PCO Expiry Summary — ${fleetSummaryItems.length} vehicle(s)`,
           template_type: "fleet_summary",
-          template_data: {
-            headerLabel: "FLEET COMPLIANCE",
-            headline: `Multiple vehicles have upcoming MOT & PCO expiries (${fleetSummaryItems.length})`,
-            subtext: "Ensure your fleet remains road-legal, compliant, and ready for work.",
-            vehicles: fleetSummaryItems,
-            manageUrl: `${CRM_BASE_URL}/`,
-          },
+          html,
+          template_data: templateData,
         },
       });
 
@@ -253,19 +266,23 @@ async function runExpiryScan() {
 
   if (licenceExpiryItems.length > 0) {
     try {
+      const templateData = {
+        headerLabel: "LICENCE COMPLIANCE",
+        headline: "Driver Licences Expiring Soon",
+        subtext: "Review driver licence expiry dates across your team and take required action.",
+        introLine: "Hi there,\nHere are the upcoming driver licence expiry dates for your team:",
+        drivers: licenceExpiryItems,
+        helpUrl: `${CRM_BASE_URL}/drivers`,
+      };
+      const html = renderDriverLicenceSummaryTemplate(templateData);
+
       const staffLicenceRes = await supabaseAdmin.functions.invoke("send-email", {
         body: {
-          recipient: STAFF_ALERT_EMAIL,
+          recipient: STAFF_ALERT_RECIPIENTS,
           subject: `Driver Licence Expiry Summary — ${licenceExpiryItems.length} driver(s)`,
           template_type: "driver_licence_summary",
-          template_data: {
-            headerLabel: "LICENCE COMPLIANCE",
-            headline: "Driver Licences Expiring Soon",
-            subtext: "Review driver licence expiry dates across your team and take required action.",
-            introLine: "Hi there,\nHere are the upcoming driver licence expiry dates for your team:",
-            drivers: licenceExpiryItems,
-            helpUrl: `${CRM_BASE_URL}/drivers`,
-          },
+          html,
+          template_data: templateData,
         },
       });
 
@@ -328,27 +345,31 @@ async function runExpiryScan() {
 
             // Send driver-facing rent reminder email if driver has email on file
             if (driverEmail) {
+              const templateData = {
+                recipientName: d.driver_name,
+                headline: "Rent due tomorrow",
+                subtext: `Hi ${d.driver_name}, your weekly rent of £${Number(d.weekly_rent).toFixed(2)} for ${d.reg || d.registration || "your vehicle"} is due tomorrow (${dueStr}).`,
+                drivers: [
+                  {
+                    driverName: d.driver_name,
+                    reg: d.reg || d.registration || "N/A",
+                    weeklyRent: Number(d.weekly_rent),
+                    dueDate: dueStr,
+                    rentStatus: d.rent_status || "unpaid",
+                  },
+                ],
+                actionUrl: DRIVER_PORTAL_URL,
+                actionText: "View Details",
+              };
+              const html = renderRentDueTomorrowTemplate(templateData);
+
               const rentEmailRes = await supabaseAdmin.functions.invoke("send-email", {
                 body: {
                   recipient: driverEmail,
                   subject: `Reminder: Your rent is due tomorrow — Virtual Car Hire`,
                   template_type: "rent_due_tomorrow",
-                  template_data: {
-                    recipientName: d.driver_name,
-                    headline: "Rent due tomorrow",
-                    subtext: `Hi ${d.driver_name}, your weekly rent of £${Number(d.weekly_rent).toFixed(2)} for ${d.reg || d.registration || "your vehicle"} is due tomorrow (${dueStr}).`,
-                    drivers: [
-                      {
-                        driverName: d.driver_name,
-                        reg: d.reg || d.registration || "N/A",
-                        weeklyRent: Number(d.weekly_rent),
-                        dueDate: dueStr,
-                        rentStatus: d.rent_status || "unpaid",
-                      },
-                    ],
-                    actionUrl: DRIVER_PORTAL_URL,
-                    actionText: "View Drivers",
-                  },
+                  html,
+                  template_data: templateData,
                   metadata: { driver_id: d.id, weekly_rent: d.weekly_rent, due_date: dueStr },
                 },
               });
@@ -378,25 +399,29 @@ async function runExpiryScan() {
   // Send staff rent-due-tomorrow summary digest to admin@fa-ibi.co.uk for active drivers
   if (rentDueItems.length > 0) {
     try {
+      const templateData = {
+        recipientName: "Operations Team",
+        headline: "Rent due tomorrow",
+        subtext: `The following ${rentDueItems.length} active driver(s) have weekly rent due tomorrow:`,
+        drivers: rentDueItems.map((item) => ({
+          driverName: item.driverName,
+          reg: item.reg,
+          weeklyRent: item.weeklyRent,
+          dueDate: item.dueDate,
+          rentStatus: item.rentStatus,
+        })),
+        actionUrl: `${CRM_BASE_URL}/drivers`,
+        actionText: "View Drivers",
+      };
+      const html = renderRentDueTomorrowTemplate(templateData);
+
       const staffRentRes = await supabaseAdmin.functions.invoke("send-email", {
         body: {
-          recipient: STAFF_RENT_ADMIN_EMAIL,
+          recipient: STAFF_ALERT_RECIPIENTS,
           subject: `Rent Due Tomorrow Summary — ${rentDueItems.length} active driver(s)`,
           template_type: "rent_due_tomorrow",
-          template_data: {
-            recipientName: "Operations Team",
-            headline: "Rent due tomorrow",
-            subtext: `The following ${rentDueItems.length} active driver(s) have weekly rent due tomorrow:`,
-            drivers: rentDueItems.map((item) => ({
-              driverName: item.driverName,
-              reg: item.reg,
-              weeklyRent: item.weeklyRent,
-              dueDate: item.dueDate,
-              rentStatus: item.rentStatus,
-            })),
-            actionUrl: `${CRM_BASE_URL}/drivers`,
-            actionText: "View Drivers",
-          },
+          html,
+          template_data: templateData,
         },
       });
 

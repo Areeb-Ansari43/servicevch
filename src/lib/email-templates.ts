@@ -1,16 +1,19 @@
 /**
  * Shared Branded HTML Email Templates for Virtual Car Hire
- * Logo URL: https://www.virtual-carhire.co.uk/assets/logo.png
- * Hero Image URL: https://hq.virtual-carhire.co.uk/whatsapp/virtual-car-hire-welcome.jpg
+ * Single source of truth for email template rendering across the application.
  */
 
-export const VCH_LOGO_URL = "https://www.virtual-carhire.co.uk/assets/logo.png";
-export const HERO_IMAGE_URL = "https://hq.virtual-carhire.co.uk/whatsapp/virtual-car-hire-welcome.jpg";
+export const VCH_HEADER_LOGO_URL = "https://hq.virtual-carhire.co.uk/email/logo-header.png";
+export const VCH_FOOTER_LOGO_URL = "https://hq.virtual-carhire.co.uk/email/logo-footer.png";
+// Legacy export fallback
+export const VCH_LOGO_URL = VCH_HEADER_LOGO_URL;
 
 export interface Template2FAOptions {
   code: string;
   recipientName?: string;
   expiresInMinutes?: number;
+  logoHeaderSrc?: string;
+  logoFooterSrc?: string;
 }
 
 export interface RentDueDriverItem {
@@ -31,6 +34,9 @@ export interface TemplateRentDueTomorrowOptions {
   cards?: any[];
   actionUrl?: string;
   actionText?: string;
+  headerLabel?: string;
+  logoHeaderSrc?: string;
+  logoFooterSrc?: string;
 }
 
 export interface AlertCardItem {
@@ -54,6 +60,8 @@ export interface TemplateDriverAlertOptions {
   warningNote?: string;
   actionUrl?: string;
   actionText?: string;
+  logoHeaderSrc?: string;
+  logoFooterSrc?: string;
 }
 
 export interface FleetVehicleExpiryItem {
@@ -75,6 +83,8 @@ export interface TemplateFleetSummaryOptions {
   pcoCount?: number;
   vehicles?: FleetVehicleExpiryItem[];
   manageUrl?: string;
+  logoHeaderSrc?: string;
+  logoFooterSrc?: string;
 }
 
 export interface DriverLicenceExpiryItem {
@@ -94,6 +104,8 @@ export interface TemplateDriverLicenceSummaryOptions {
   introLine?: string;
   drivers?: DriverLicenceExpiryItem[];
   helpUrl?: string;
+  logoHeaderSrc?: string;
+  logoFooterSrc?: string;
 }
 
 /**
@@ -107,18 +119,18 @@ function renderUnifiedEmailLayout({
   cardContent,
   ctaUrl,
   ctaText,
-  logoSrc = VCH_LOGO_URL,
-  heroSrc = HERO_IMAGE_URL,
+  logoHeaderSrc = VCH_HEADER_LOGO_URL,
+  logoFooterSrc = VCH_FOOTER_LOGO_URL,
 }: {
   title: string;
-  eyebrow: string;
+  eyebrow?: string;
   headline: string;
   bodyText?: string;
   cardContent: string;
   ctaUrl?: string;
   ctaText?: string;
-  logoSrc?: string;
-  heroSrc?: string;
+  logoHeaderSrc?: string;
+  logoFooterSrc?: string;
 }): string {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -127,55 +139,50 @@ function renderUnifiedEmailLayout({
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${title}</title>
 </head>
-<body style="margin: 0; padding: 20px 0; background-color: #F4F5F7; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #F4F5F7; width: 100%;">
+<body style="margin: 0; padding: 24px 0; background-color: #0b0f19; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #0b0f19; width: 100%;">
     <tr>
-      <td align="center" style="padding: 10px;">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; width: 100%; background-color: #0B0E17; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.12);">
+      <td align="center" style="padding: 12px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; width: 100%; background-color: #0f172a; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.35); border: 1px solid #1e293b;">
 
-          <!-- Hero Image & Logo Header -->
+          <!-- Centered Header Logo -->
           <tr>
-            <td style="background-color: #0B0E17; padding: 0; text-align: center; position: relative;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                <tr>
-                  <td style="background-color: #0B0E17; padding: 18px 24px; border-bottom: 1px solid #1E293B;" align="left">
-                    <img src="${logoSrc}" alt="Virtual Car Hire" width="96" height="96" style="width: 96px; height: 96px; max-width: 96px; display: block; border: 0; object-fit: contain; background-color: #0B0E17;" />
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding: 0; background-color: #1E293B;">
-                    <img src="${heroSrc}" alt="Virtual Car Hire Fleet" width="600" height="200" style="width: 100%; max-width: 600px; height: 200px; max-height: 200px; object-fit: cover; display: block; border: 0; background-color: #1E293B;" />
-                  </td>
-                </tr>
-              </table>
+            <td style="padding: 32px 24px 16px 24px; text-align: center; background-color: #0f172a;">
+              <a href="https://virtual-carhire.co.uk" target="_blank" style="text-decoration: none; display: inline-block;">
+                <img src="${logoHeaderSrc}" alt="Virtual Car Hire" width="220" height="66" style="width: 220px; height: 66px; max-width: 220px; display: block; margin: 0 auto; border: 0; object-fit: contain;" />
+              </a>
             </td>
           </tr>
 
           <!-- Main Content Area -->
           <tr>
-            <td style="padding: 28px 24px; background-color: #0B0E17; color: #FFFFFF;">
-              <!-- Eyebrow Label -->
-              <div style="color: #FF6A00; font-size: 11px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 8px;">
-                ${eyebrow}
-              </div>
+            <td style="padding: 12px 28px 32px 28px; background-color: #0f172a; color: #ffffff; text-align: center;">
 
-              <!-- Bold Headline -->
-              <h1 style="color: #FFFFFF; font-size: 22px; font-weight: 800; margin: 0 0 10px 0; line-height: 1.3;">
+              ${eyebrow ? `
+                <div style="margin-bottom: 14px;">
+                  <span style="display: inline-block; background-color: #f97316; color: #ffffff; font-size: 11px; font-weight: 800; padding: 5px 14px; border-radius: 9999px; text-transform: uppercase; letter-spacing: 0.1em; box-shadow: 0 2px 6px rgba(249,115,22,0.3);">
+                    ${eyebrow}
+                  </span>
+                </div>
+              ` : ""}
+
+              <!-- Centered Headline -->
+              <h1 style="color: #ffffff; font-size: 22px; font-weight: 800; margin: 0 0 12px 0; line-height: 1.35; text-align: center;">
                 ${headline}
               </h1>
 
-              <!-- Short Body Text / Code Block -->
-              ${bodyText ? `<div style="color: #94A3B8; font-size: 14px; margin: 0 0 20px 0; line-height: 1.5;">${bodyText}</div>` : ""}
+              <!-- Centered Subtext / Intro -->
+              ${bodyText ? `<div style="color: #94a3b8; font-size: 14px; margin: 0 0 24px 0; line-height: 1.5; text-align: center;">${bodyText}</div>` : ""}
 
-              <!-- White Card Section -->
-              <div style="background-color: #FFFFFF; border-radius: 10px; padding: 20px; color: #14161B; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+              <!-- White Content Card with Dark Text -->
+              <div style="background-color: #ffffff; border-radius: 12px; padding: 22px; color: #0f172a; margin-bottom: 24px; text-align: left; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
                 ${cardContent}
               </div>
 
-              <!-- CTA Button -->
+              <!-- Orange CTA Button -->
               ${ctaUrl ? `
-                <div style="text-align: center; margin-top: 20px; margin-bottom: 8px;">
-                  <a href="${ctaUrl}" target="_blank" style="display: inline-block; background-color: #FF6A00; color: #FFFFFF; font-size: 14px; font-weight: 700; text-decoration: none; padding: 12px 28px; border-radius: 8px; text-align: center; box-shadow: 0 2px 6px rgba(255,106,0,0.3);">
+                <div style="text-align: center; margin-top: 24px; margin-bottom: 8px;">
+                  <a href="${ctaUrl}" target="_blank" style="display: inline-block; background-color: #f97316; color: #ffffff; font-size: 14px; font-weight: 700; text-decoration: none; padding: 13px 32px; border-radius: 8px; text-align: center; box-shadow: 0 4px 12px rgba(249,115,22,0.35);">
                     ${ctaText || "View Details"}
                   </a>
                 </div>
@@ -185,19 +192,12 @@ function renderUnifiedEmailLayout({
 
           <!-- Dark Footer -->
           <tr>
-            <td style="background-color: #070910; padding: 20px 24px; text-align: center; border-top: 1px solid #1E293B;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                <tr>
-                  <td align="left" style="vertical-align: middle;">
-                    <img src="${logoSrc}" alt="Virtual Car Hire" width="72" height="72" style="width: 72px; height: 72px; max-width: 72px; opacity: 0.85; display: block; border: 0; object-fit: contain; background-color: #070910;" />
-                  </td>
-                  <td align="right" style="vertical-align: middle; color: #94A3B8; font-size: 11px;">
-                    <span style="color: #FF6A00; font-weight: bold;">✔</span> Smarter Fleet Management
-                  </td>
-                </tr>
-              </table>
-              <p style="color: #64748B; font-size: 11px; margin: 12px 0 0 0;">
-                © ${new Date().getFullYear()} Virtual Car Hire Ltd. All rights reserved.
+            <td style="background-color: #070910; padding: 28px 24px; text-align: center; border-top: 1px solid #1e293b;">
+              <a href="https://virtual-carhire.co.uk" target="_blank" style="text-decoration: none; display: inline-block; margin-bottom: 14px;">
+                <img src="${logoFooterSrc}" alt="Virtual Car Hire" width="140" height="42" style="width: 140px; height: 42px; max-width: 140px; opacity: 0.9; display: block; margin: 0 auto; border: 0; object-fit: contain;" />
+              </a>
+              <p style="color: #64748b; font-size: 11px; line-height: 1.6; margin: 0; max-width: 520px; margin-left: auto; margin-right: auto;">
+                Virtual Car Hire (FA-IBI LTD) | The Vista Centre, 50 Salisbury Rd, Cranford, Hounslow TW4 6JQ, Phone: <a href="tel:+442072946756" style="color: #94a3b8; text-decoration: none;">+44 20 7294 6756</a> | Email: <a href="mailto:info@fa-ibi.co.uk" style="color: #94a3b8; text-decoration: none;">info@fa-ibi.co.uk</a> | <a href="https://virtual-carhire.co.uk" style="color: #f97316; text-decoration: none; font-weight: 600;">Visit Website</a>
               </p>
             </td>
           </tr>
@@ -212,57 +212,96 @@ function renderUnifiedEmailLayout({
 
 /**
  * TEMPLATE 1: 2FA Verification Code
+ * Dedicated design per requirements: dark header, centred logo, headline "Your verification code",
+ * ONE large code block (6 digits, letter-spaced monospace, high contrast),
+ * "This code expires in 10 minutes", "If you didn't request this, ignore this email. Never share this code."
+ * Nothing else (no label, no vehicle text, no button, no hero).
  */
-export function render2FATemplate(options: Template2FAOptions & { logoSrc?: string; heroSrc?: string }): string {
+export function render2FATemplate(options: Template2FAOptions): string {
   const code = options.code || "000000";
-  const expiresIn = options.expiresInMinutes || 10;
-  const name = options.recipientName || "there";
+  const logoHeaderSrc = options.logoHeaderSrc || VCH_HEADER_LOGO_URL;
+  const logoFooterSrc = options.logoFooterSrc || VCH_FOOTER_LOGO_URL;
 
-  // Prominent 6-digit verification code block placed directly at the TOP under the headline
-  const topCodeBlock = `
-    <div style="text-align: center; margin: 16px 0 20px 0; background-color: #FFFFFF; border-radius: 12px; padding: 24px 16px; border: 2px solid #FF6A00; box-shadow: 0 4px 14px rgba(255,106,0,0.18);">
-      <div style="font-size: 11px; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: 0.14em; margin-bottom: 8px;">
-        YOUR 6-DIGIT VERIFICATION CODE
-      </div>
-      <div style="font-family: 'Courier New', Courier, monospace; font-size: 42px; font-weight: 900; letter-spacing: 0.28em; color: #FF6A00; background-color: #FFF7ED; border: 2px dashed #FF6A00; border-radius: 10px; padding: 18px; margin-bottom: 12px;">
-        ${code}
-      </div>
-      <div style="font-size: 13px; font-weight: 700; color: #475569;">
-        ⏱️ Code expires in <span style="color: #FF6A00;">${expiresIn} minutes</span>
-      </div>
-    </div>
-  `;
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your Virtual Car Hire verification code: ${code}</title>
+</head>
+<body style="margin: 0; padding: 24px 0; background-color: #0b0f19; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #0b0f19; width: 100%;">
+    <tr>
+      <td align="center" style="padding: 12px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; width: 100%; background-color: #0f172a; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.35); border: 1px solid #1e293b;">
 
-  const cardContent = `
-    <div style="font-size: 14px; color: #334155; line-height: 1.6;">
-      <p style="margin: 0 0 10px 0; font-weight: 600; color: #0F172A;">Hi ${name},</p>
-      <p style="margin: 0 0 12px 0;">Use the 6-digit verification code above to sign in securely to your Virtual Car Hire portal account.</p>
-      <div style="background-color: #F8FAFC; border-left: 4px solid #3B82F6; border-radius: 4px; padding: 12px 14px; font-size: 12px; color: #475569; line-height: 1.5;">
-        <strong>IMPORTANT NOTICE:</strong> If you did not request this login code, please secure your account immediately or contact our support team at <a href="mailto:support@fa-ibi.co.uk" style="color: #FF6A00; text-decoration: none; font-weight: 700;">support@fa-ibi.co.uk</a>.
-      </div>
-    </div>
-  `;
+          <!-- Header Centered Logo -->
+          <tr>
+            <td style="padding: 32px 24px 16px 24px; text-align: center; background-color: #0f172a;">
+              <a href="https://virtual-carhire.co.uk" target="_blank" style="text-decoration: none; display: inline-block;">
+                <img src="${logoHeaderSrc}" alt="Virtual Car Hire" width="220" height="66" style="width: 220px; height: 66px; max-width: 220px; display: block; margin: 0 auto; border: 0; object-fit: contain;" />
+              </a>
+            </td>
+          </tr>
 
-  return renderUnifiedEmailLayout({
-    title: `${code} is your Virtual Car Hire verification code`,
-    eyebrow: "SECURITY VERIFICATION",
-    headline: "Your Security Verification Code",
-    bodyText: topCodeBlock,
-    cardContent,
-    logoSrc: options.logoSrc,
-    heroSrc: options.heroSrc,
-  });
+          <!-- Main Content Area -->
+          <tr>
+            <td style="padding: 12px 28px 32px 28px; background-color: #0f172a; color: #ffffff; text-align: center;">
+
+              <!-- Headline -->
+              <h1 style="color: #ffffff; font-size: 22px; font-weight: 800; margin: 0 0 20px 0; line-height: 1.35; text-align: center;">
+                Your verification code
+              </h1>
+
+              <!-- Large Code Block -->
+              <div style="background-color: #ffffff; border-radius: 12px; padding: 24px; color: #0f172a; margin-bottom: 20px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+                <div style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 40px; font-weight: 900; letter-spacing: 0.35em; color: #f97316; padding-left: 0.35em; text-align: center;">
+                  ${code}
+                </div>
+              </div>
+
+              <!-- Expiry Line -->
+              <div style="color: #94a3b8; font-size: 14px; font-weight: 600; margin-bottom: 12px; text-align: center;">
+                This code expires in 10 minutes
+              </div>
+
+              <!-- Warning Line -->
+              <div style="color: #64748b; font-size: 13px; line-height: 1.5; text-align: center;">
+                If you didn't request this, ignore this email. Never share this code.
+              </div>
+
+            </td>
+          </tr>
+
+          <!-- Dark Footer -->
+          <tr>
+            <td style="background-color: #070910; padding: 28px 24px; text-align: center; border-top: 1px solid #1e293b;">
+              <a href="https://virtual-carhire.co.uk" target="_blank" style="text-decoration: none; display: inline-block; margin-bottom: 14px;">
+                <img src="${logoFooterSrc}" alt="Virtual Car Hire" width="140" height="42" style="width: 140px; height: 42px; max-width: 140px; opacity: 0.9; display: block; margin: 0 auto; border: 0; object-fit: contain;" />
+              </a>
+              <p style="color: #64748b; font-size: 11px; line-height: 1.6; margin: 0; max-width: 520px; margin-left: auto; margin-right: auto;">
+                Virtual Car Hire (FA-IBI LTD) | The Vista Centre, 50 Salisbury Rd, Cranford, Hounslow TW4 6JQ, Phone: <a href="tel:+442072946756" style="color: #94a3b8; text-decoration: none;">+44 20 7294 6756</a> | Email: <a href="mailto:info@fa-ibi.co.uk" style="color: #94a3b8; text-decoration: none;">info@fa-ibi.co.uk</a> | <a href="https://virtual-carhire.co.uk" style="color: #f97316; text-decoration: none; font-weight: 600;">Visit Website</a>
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
 }
 
 /**
  * TEMPLATE 2: Rent Due Tomorrow (Driver & Staff Digest)
  */
-export function renderRentDueTomorrowTemplate(options: TemplateRentDueTomorrowOptions & { logoSrc?: string; heroSrc?: string }): string {
+export function renderRentDueTomorrowTemplate(options: TemplateRentDueTomorrowOptions): string {
   const name = options.recipientName || "Operations Team";
   const headline = options.headline || "Rent due tomorrow";
-  const subtext = options.subtext || options.introLine || "The following active drivers have weekly rent due tomorrow:";
+  const subtext = options.subtext || options.introLine || `The following active driver(s) have weekly rent due tomorrow:`;
+  const headerLabel = options.headerLabel || "RENT REMINDER";
 
-  // Extract driver items from options.drivers or fallback from options.cards
   let driversList: RentDueDriverItem[] = options.drivers || [];
   if (driversList.length === 0 && options.cards && options.cards.length > 0) {
     driversList = options.cards.map((c: any) => ({
@@ -277,20 +316,20 @@ export function renderRentDueTomorrowTemplate(options: TemplateRentDueTomorrowOp
 
   const driverRows = driversList.map((d) => {
     const isPaid = (d.rentStatus || "").toLowerCase() === "paid";
-    const statusBg = isPaid ? "#DEF7EC" : "#FFEDD5";
-    const statusColor = isPaid ? "#03543F" : "#C2410C";
+    const statusBg = isPaid ? "#dcfce7" : "#ffedd5";
+    const statusColor = isPaid ? "#15803d" : "#c2410c";
     const statusText = isPaid ? "PAID" : "UNPAID";
 
     return `
-      <tr style="border-bottom: 1px solid #E2E8F0;">
+      <tr style="border-bottom: 1px solid #e2e8f0;">
         <td style="padding: 12px 8px; vertical-align: middle;">
-          <div style="font-size: 14px; font-weight: 700; color: #14161B;">${d.driverName}</div>
+          <div style="font-size: 14px; font-weight: 700; color: #0f172a;">${d.driverName}</div>
         </td>
         <td style="padding: 12px 8px; vertical-align: middle;">
           <div style="font-size: 13px; font-weight: 600; color: #334155;">${d.reg}</div>
-          ${d.vehicleModel ? `<div style="font-size: 11px; color: #64748B;">${d.vehicleModel}</div>` : ""}
+          ${d.vehicleModel ? `<div style="font-size: 11px; color: #64748b;">${d.vehicleModel}</div>` : ""}
         </td>
-        <td align="right" style="padding: 12px 8px; vertical-align: middle; font-size: 14px; font-weight: 700; color: #14161B;">
+        <td align="right" style="padding: 12px 8px; vertical-align: middle; font-size: 14px; font-weight: 700; color: #0f172a;">
           £${Number(d.weeklyRent || 0).toFixed(2)}
         </td>
         <td align="center" style="padding: 12px 8px; vertical-align: middle; font-size: 13px; color: #475569; font-weight: 600;">
@@ -308,12 +347,12 @@ export function renderRentDueTomorrowTemplate(options: TemplateRentDueTomorrowOp
   const cardContent = `
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse: collapse;">
       <thead>
-        <tr style="border-bottom: 2px solid #CBD5E1;">
-          <th align="left" style="padding: 8px 8px; font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase;">Driver</th>
-          <th align="left" style="padding: 8px 8px; font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase;">Vehicle</th>
-          <th align="right" style="padding: 8px 8px; font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase;">Weekly</th>
-          <th align="center" style="padding: 8px 8px; font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase;">Due Date</th>
-          <th align="right" style="padding: 8px 8px; font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase;">Status</th>
+        <tr style="border-bottom: 2px solid #cbd5e1;">
+          <th align="left" style="padding: 8px 8px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Driver</th>
+          <th align="left" style="padding: 8px 8px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Vehicle</th>
+          <th align="right" style="padding: 8px 8px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Weekly</th>
+          <th align="center" style="padding: 8px 8px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Due Date</th>
+          <th align="right" style="padding: 8px 8px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Status</th>
         </tr>
       </thead>
       <tbody>
@@ -324,21 +363,21 @@ export function renderRentDueTomorrowTemplate(options: TemplateRentDueTomorrowOp
 
   return renderUnifiedEmailLayout({
     title: "Rent Due Tomorrow — Virtual Car Hire",
-    eyebrow: "RENT REMINDER",
+    eyebrow: headerLabel,
     headline,
     bodyText: subtext,
     cardContent,
     ctaUrl: options.actionUrl || "https://virtual-carhire.co.uk/portal/dashboard",
-    ctaText: options.actionText || "View Drivers",
-    logoSrc: options.logoSrc,
-    heroSrc: options.heroSrc,
+    ctaText: options.actionText || "View Details",
+    logoHeaderSrc: options.logoHeaderSrc,
+    logoFooterSrc: options.logoFooterSrc,
   });
 }
 
 /**
  * TEMPLATE 3: Driver Alert / Single Vehicle Notice
  */
-export function renderDriverAlertTemplate(options: TemplateDriverAlertOptions & { logoSrc?: string; heroSrc?: string }): string {
+export function renderDriverAlertTemplate(options: TemplateDriverAlertOptions): string {
   const headerLabel = options.headerLabel || "IMPORTANT NOTICE";
   const headline = options.headline;
   const subtext = options.subtext || options.introLine || "Please review the details below regarding your vehicle account:";
@@ -351,24 +390,24 @@ export function renderDriverAlertTemplate(options: TemplateDriverAlertOptions & 
         : null;
 
       return `
-        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 14px; margin-bottom: 12px;">
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; margin-bottom: 12px;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
             <tr>
               ${card.photoUrl ? `
                 <td width="72" style="vertical-align: middle; padding-right: 12px;">
-                  <img src="${card.photoUrl}" alt="${card.vehicleReg || "Vehicle"}" style="width: 72px; height: 52px; object-fit: contain; background-color: #FFFFFF; border-radius: 6px; border: 1px solid #E2E8F0; display: block;" />
+                  <img src="${card.photoUrl}" alt="${card.vehicleReg || "Vehicle"}" style="width: 72px; height: 52px; object-fit: contain; background-color: #ffffff; border-radius: 6px; border: 1px solid #e2e8f0; display: block;" />
                 </td>
               ` : ""}
               <td style="vertical-align: middle;">
-                <div style="font-size: 15px; font-weight: 700; color: #14161B; margin-bottom: 2px;">
+                <div style="font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 2px;">
                   ${card.title}
                 </div>
-                ${card.dateStr ? `<div style="font-size: 13px; font-weight: 600; color: #FF6A00;">Due / Expiry: ${card.dateStr}</div>` : ""}
-                ${card.vehicleReg || card.vehicleModel ? `<div style="font-size: 12px; color: #64748B;">Vehicle: ${card.vehicleReg || ""} ${card.vehicleModel ? `(${card.vehicleModel})` : ""}</div>` : ""}
+                ${card.dateStr ? `<div style="font-size: 13px; font-weight: 600; color: #f97316;">Due / Expiry: ${card.dateStr}</div>` : ""}
+                ${card.vehicleReg || card.vehicleModel ? `<div style="font-size: 12px; color: #64748b;">Vehicle: ${card.vehicleReg || ""} ${card.vehicleModel ? `(${card.vehicleModel})` : ""}</div>` : ""}
               </td>
               ${daysText ? `
                 <td align="right" style="vertical-align: middle; padding-left: 10px;">
-                  <span style="display: inline-block; background-color: #FFEDD5; color: #C2410C; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 12px; white-space: nowrap;">
+                  <span style="display: inline-block; background-color: #ffedd5; color: #c2410c; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 12px; white-space: nowrap;">
                     ${daysText}
                   </span>
                 </td>
@@ -381,17 +420,17 @@ export function renderDriverAlertTemplate(options: TemplateDriverAlertOptions & 
     .join("");
 
   const cardContent = `
-    <div style="font-size: 14px; color: #14161B; line-height: 1.5;">
+    <div style="font-size: 14px; color: #0f172a; line-height: 1.5;">
       <p style="margin: 0 0 12px 0; font-weight: 600;">Hi ${name},</p>
       ${options.cards && options.cards.length > 0 ? cardsHtml : ""}
       ${options.singleMessageBody ? `
-        <div style="background-color: #F8FAFC; border-left: 4px solid #FF6A00; border-radius: 4px; padding: 12px 14px; margin-bottom: 12px; font-size: 13px; color: #334155;">
+        <div style="background-color: #f8fafc; border-left: 4px solid #f97316; border-radius: 4px; padding: 12px 14px; margin-bottom: 12px; font-size: 13px; color: #334155;">
           ${options.singleMessageBody}
         </div>
       ` : ""}
-      <div style="background-color: #FEF2F2; border-left: 3px solid #EF4444; border-radius: 4px; padding: 10px 12px; margin-top: 12px;">
-        <div style="font-size: 12px; font-weight: 700; color: #991B1B; margin-bottom: 2px;">⚠️ Important Requirement</div>
-        <div style="font-size: 12px; color: #7F1D1D; line-height: 1.4;">
+      <div style="background-color: #fef2f2; border-left: 3px solid #ef4444; border-radius: 4px; padding: 10px 12px; margin-top: 12px;">
+        <div style="font-size: 12px; font-weight: 700; color: #991b1b; margin-bottom: 2px;">⚠️ Important Requirement</div>
+        <div style="font-size: 12px; color: #7f1d1d; line-height: 1.4;">
           ${options.warningNote || "Driving an unroadworthy or unlicenced vehicle is against the law and your hire terms. Please contact our support team immediately if you need assistance."}
         </div>
       </div>
@@ -406,15 +445,15 @@ export function renderDriverAlertTemplate(options: TemplateDriverAlertOptions & 
     cardContent,
     ctaUrl: options.actionUrl || "https://virtual-carhire.co.uk/portal/dashboard",
     ctaText: options.actionText || "View Details in Portal",
-    logoSrc: options.logoSrc,
-    heroSrc: options.heroSrc,
+    logoHeaderSrc: options.logoHeaderSrc,
+    logoFooterSrc: options.logoFooterSrc,
   });
 }
 
 /**
  * TEMPLATE 4: Fleet Expiry Summary (Staff-Facing)
  */
-export function renderFleetSummaryTemplate(options: TemplateFleetSummaryOptions & { logoSrc?: string; heroSrc?: string }): string {
+export function renderFleetSummaryTemplate(options: TemplateFleetSummaryOptions): string {
   const headerLabel = options.headerLabel || "FLEET COMPLIANCE";
   const headline = options.headline || "Multiple vehicles have upcoming MOT & PCO expiries";
   const subtext = options.subtext || "Ensure your fleet remains road-legal, compliant, and ready for work.";
@@ -425,22 +464,22 @@ export function renderFleetSummaryTemplate(options: TemplateFleetSummaryOptions 
     const pcoText = v.pcoDaysRemaining !== undefined ? `${v.pcoExpiry || "Soon"} (${v.pcoDaysRemaining}d)` : v.pcoExpiry || "N/A";
 
     return `
-      <tr style="border-bottom: 1px solid #E2E8F0;">
+      <tr style="border-bottom: 1px solid #e2e8f0;">
         <td width="60" style="padding: 10px 6px; vertical-align: middle;">
-          ${v.photoUrl ? `<img src="${v.photoUrl}" alt="${v.registration}" style="width: 56px; height: 40px; object-fit: contain; background-color: #F8FAFC; border-radius: 4px; border: 1px solid #E2E8F0; display: block;" />` : `<div style="width: 56px; height: 40px; background: #F1F5F9; border-radius: 4px; text-align: center; line-height: 40px; font-size: 16px; color: #64748B;">🚘</div>`}
+          ${v.photoUrl ? `<img src="${v.photoUrl}" alt="${v.registration}" style="width: 56px; height: 40px; object-fit: contain; background-color: #f8fafc; border-radius: 4px; border: 1px solid #e2e8f0; display: block;" />` : `<div style="width: 56px; height: 40px; background: #f1f5f9; border-radius: 4px; text-align: center; line-height: 40px; font-size: 16px; color: #64748b;">🚘</div>`}
         </td>
         <td style="padding: 10px 6px; vertical-align: middle;">
-          <div style="font-size: 13px; font-weight: 700; color: #14161B;">${v.registration}</div>
-          <div style="font-size: 11px; color: #64748B;">${v.model}</div>
+          <div style="font-size: 13px; font-weight: 700; color: #0f172a;">${v.registration}</div>
+          <div style="font-size: 11px; color: #64748b;">${v.model}</div>
         </td>
         <td style="padding: 10px 6px; vertical-align: middle; font-size: 11px;">
-          ${v.motExpiry ? `<span style="background: #FEF3C7; color: #92400E; padding: 2px 6px; border-radius: 4px; font-weight: 600; display: inline-block;">MOT: ${motText}</span>` : `<span style="color: #94A3B8;">MOT: OK</span>`}
+          ${v.motExpiry ? `<span style="background: #fef3c7; color: #92400e; padding: 2px 6px; border-radius: 4px; font-weight: 600; display: inline-block;">MOT: ${motText}</span>` : `<span style="color: #94a3b8;">MOT: OK</span>`}
           <div style="margin-top: 3px;">
-            ${v.pcoExpiry ? `<span style="background: #FFEDD5; color: #C2410C; padding: 2px 6px; border-radius: 4px; font-weight: 600; display: inline-block;">PCO: ${pcoText}</span>` : `<span style="color: #94A3B8;">PCO: OK</span>`}
+            ${v.pcoExpiry ? `<span style="background: #ffedd5; color: #c2410c; padding: 2px 6px; border-radius: 4px; font-weight: 600; display: inline-block;">PCO: ${pcoText}</span>` : `<span style="color: #94a3b8;">PCO: OK</span>`}
           </div>
         </td>
         <td align="right" style="padding: 10px 6px; vertical-align: middle;">
-          <a href="${v.detailsUrl || options.manageUrl || "#"}" style="font-size: 11px; color: #FF6A00; text-decoration: none; font-weight: 700; white-space: nowrap;">View →</a>
+          <a href="${v.detailsUrl || options.manageUrl || "#"}" style="font-size: 11px; color: #f97316; text-decoration: none; font-weight: 700; white-space: nowrap;">View →</a>
         </td>
       </tr>
     `;
@@ -449,10 +488,10 @@ export function renderFleetSummaryTemplate(options: TemplateFleetSummaryOptions 
   const cardContent = `
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse: collapse;">
       <thead>
-        <tr style="border-bottom: 2px solid #CBD5E1;">
-          <th align="left" style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase;" colspan="2">Vehicle</th>
-          <th align="left" style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase;">Expiries</th>
-          <th align="right" style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase;">Action</th>
+        <tr style="border-bottom: 2px solid #cbd5e1;">
+          <th align="left" style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;" colspan="2">Vehicle</th>
+          <th align="left" style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Expiries</th>
+          <th align="right" style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Action</th>
         </tr>
       </thead>
       <tbody>
@@ -469,15 +508,15 @@ export function renderFleetSummaryTemplate(options: TemplateFleetSummaryOptions 
     cardContent,
     ctaUrl: options.manageUrl || "https://hq.virtual-carhire.co.uk/vehicles",
     ctaText: "Manage Fleet Expiries",
-    logoSrc: options.logoSrc,
-    heroSrc: options.heroSrc,
+    logoHeaderSrc: options.logoHeaderSrc,
+    logoFooterSrc: options.logoFooterSrc,
   });
 }
 
 /**
  * TEMPLATE 5: Driver Licence Expiry Summary (Staff-Facing)
  */
-export function renderDriverLicenceSummaryTemplate(options: TemplateDriverLicenceSummaryOptions & { logoSrc?: string; heroSrc?: string }): string {
+export function renderDriverLicenceSummaryTemplate(options: TemplateDriverLicenceSummaryOptions): string {
   const headerLabel = options.headerLabel || "LICENCE COMPLIANCE";
   const headline = options.headline || "Driver Licences Expiring Soon";
   const subtext = options.subtext || options.introLine || "Review driver licence expiry dates across your team and take required action:";
@@ -488,24 +527,24 @@ export function renderDriverLicenceSummaryTemplate(options: TemplateDriverLicenc
     const daysText = d.daysRemaining <= 0 ? "Expired" : `in ${d.daysRemaining}d`;
 
     return `
-      <tr style="border-bottom: 1px solid #E2E8F0;">
+      <tr style="border-bottom: 1px solid #e2e8f0;">
         <td width="36" style="padding: 10px 6px; vertical-align: middle;">
-          <div style="width: 32px; height: 32px; border-radius: 50%; background-color: #FF6A00; color: #FFFFFF; font-size: 12px; font-weight: 700; text-align: center; line-height: 32px;">
+          <div style="width: 32px; height: 32px; border-radius: 50%; background-color: #f97316; color: #ffffff; font-size: 12px; font-weight: 700; text-align: center; line-height: 32px;">
             ${initials}
           </div>
         </td>
         <td style="padding: 10px 6px; vertical-align: middle;">
-          <div style="font-size: 13px; font-weight: 700; color: #14161B;">${d.name}</div>
-          <div style="font-size: 11px; color: #64748B;">ID: ${d.driverId} • ${d.licenceType || "Full Licence"}</div>
+          <div style="font-size: 13px; font-weight: 700; color: #0f172a;">${d.name}</div>
+          <div style="font-size: 11px; color: #64748b;">ID: ${d.driverId} • ${d.licenceType || "Full Licence"}</div>
         </td>
         <td style="padding: 10px 6px; vertical-align: middle;">
-          <div style="font-size: 12px; color: #14161B; font-weight: 600;">${d.expiryDate}</div>
-          <span style="display: inline-block; background-color: #FFEDD5; color: #C2410C; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 8px; margin-top: 2px;">
+          <div style="font-size: 12px; color: #0f172a; font-weight: 600;">${d.expiryDate}</div>
+          <span style="display: inline-block; background-color: #ffedd5; color: #c2410c; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 8px; margin-top: 2px;">
             ${daysText}
           </span>
         </td>
         <td align="right" style="padding: 10px 6px; vertical-align: middle;">
-          <a href="${d.reviewUrl || options.helpUrl || "#"}" style="font-size: 11px; background-color: #F1F5F9; color: #14161B; text-decoration: none; font-weight: 700; padding: 5px 10px; border-radius: 4px; display: inline-block;">
+          <a href="${d.reviewUrl || options.helpUrl || "#"}" style="font-size: 11px; background-color: #f1f5f9; color: #0f172a; text-decoration: none; font-weight: 700; padding: 5px 10px; border-radius: 4px; display: inline-block;">
             Review
           </a>
         </td>
@@ -516,10 +555,10 @@ export function renderDriverLicenceSummaryTemplate(options: TemplateDriverLicenc
   const cardContent = `
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse: collapse;">
       <thead>
-        <tr style="border-bottom: 2px solid #CBD5E1;">
-          <th align="left" style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase;" colspan="2">Driver</th>
-          <th align="left" style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase;">Expiry Date</th>
-          <th align="right" style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase;">Action</th>
+        <tr style="border-bottom: 2px solid #cbd5e1;">
+          <th align="left" style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;" colspan="2">Driver</th>
+          <th align="left" style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Expiry Date</th>
+          <th align="right" style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Action</th>
         </tr>
       </thead>
       <tbody>
@@ -536,7 +575,7 @@ export function renderDriverLicenceSummaryTemplate(options: TemplateDriverLicenc
     cardContent,
     ctaUrl: options.helpUrl || "https://hq.virtual-carhire.co.uk/drivers",
     ctaText: "Review All Licences",
-    logoSrc: options.logoSrc,
-    heroSrc: options.heroSrc,
+    logoHeaderSrc: options.logoHeaderSrc,
+    logoFooterSrc: options.logoFooterSrc,
   });
 }
