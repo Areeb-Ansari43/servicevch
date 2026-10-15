@@ -10,6 +10,7 @@ import {
   renderDriverLicenceSummaryTemplate,
   renderRentDueTomorrowTemplate,
 } from "@/lib/email-templates";
+import { sendEmailDirect } from "@/lib/email-sender.server";
 
 export const STAFF_ALERT_RECIPIENTS = "admin@fa-ibi.co.uk";
 
@@ -48,7 +49,7 @@ function getLondonTodayISO(): string {
 async function runExpiryScan() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-  // Log job start in job_runs table
+  // Log job start in job_runs table (safely wrapped if table is missing)
   let jobRunId: string | null = null;
   try {
     const { data: runData } = await supabaseAdmin
@@ -62,7 +63,7 @@ async function runExpiryScan() {
       .single();
     if (runData) jobRunId = runData.id;
   } catch (err) {
-    console.warn("[ExpiryScan] Could not insert job_runs start log:", err);
+    console.warn("[ExpiryScan] Could not insert job_runs start log (table may not exist yet):", err);
   }
 
   const [vRes, dRes] = await Promise.all([
@@ -172,24 +173,19 @@ async function runExpiryScan() {
           };
           const html = renderDriverAlertTemplate(templateData);
 
-          const driverRes = await supabaseAdmin.functions.invoke("send-email", {
-            body: {
-              recipient: driverEmail || "none",
-              skip: !driverEmail,
-              skip_reason: `Driver ${assignedDriver.driver_name} has no email on file`,
-              subject: `Important Notice: Upcoming Vehicle Expiry for ${v.reg}`,
-              template_type: "driver_alert",
-              html,
-              template_data: templateData,
-              metadata: { vehicle_reg: v.reg, driver_id: assignedDriver.id },
-            },
+          const driverRes = await sendEmailDirect({
+            recipient: driverEmail || "none",
+            skip: !driverEmail,
+            skipReason: `Driver ${assignedDriver.driver_name} has no email on file`,
+            subject: `Important Notice: Upcoming Vehicle Expiry for ${v.reg}`,
+            emailType: "driver_alert",
+            html,
+            metadata: { vehicle_reg: v.reg, driver_id: assignedDriver.id },
           });
 
-          if (driverRes.error) {
-            console.error(`[ExpiryScan] Error sending driver alert email for ${assignedDriver.id}:`, driverRes.error);
-          } else if (driverRes.data?.status === "sent") {
+          if (driverRes.status === "sent") {
             totalSent++;
-          } else if (driverRes.data?.status === "skipped") {
+          } else if (driverRes.status === "skipped") {
             totalSkipped++;
           }
         }
@@ -211,19 +207,14 @@ async function runExpiryScan() {
       };
       const html = renderFleetSummaryTemplate(templateData);
 
-      const staffFleetRes = await supabaseAdmin.functions.invoke("send-email", {
-        body: {
-          recipient: STAFF_ALERT_RECIPIENTS,
-          subject: `Fleet MOT & PCO Expiry Summary — ${fleetSummaryItems.length} vehicle(s)`,
-          template_type: "fleet_summary",
-          html,
-          template_data: templateData,
-        },
+      const staffFleetRes = await sendEmailDirect({
+        recipient: STAFF_ALERT_RECIPIENTS,
+        subject: `Fleet MOT & PCO Expiry Summary — ${fleetSummaryItems.length} vehicle(s)`,
+        emailType: "fleet_summary",
+        html,
       });
 
-      if (staffFleetRes.error) {
-        console.error("[ExpiryScan] Error sending staff fleet summary:", staffFleetRes.error);
-      } else if (staffFleetRes.data?.status === "sent") {
+      if (staffFleetRes.status === "sent") {
         totalSent++;
       }
     } catch (err: any) {
@@ -276,19 +267,14 @@ async function runExpiryScan() {
       };
       const html = renderDriverLicenceSummaryTemplate(templateData);
 
-      const staffLicenceRes = await supabaseAdmin.functions.invoke("send-email", {
-        body: {
-          recipient: STAFF_ALERT_RECIPIENTS,
-          subject: `Driver Licence Expiry Summary — ${licenceExpiryItems.length} driver(s)`,
-          template_type: "driver_licence_summary",
-          html,
-          template_data: templateData,
-        },
+      const staffLicenceRes = await sendEmailDirect({
+        recipient: STAFF_ALERT_RECIPIENTS,
+        subject: `Driver Licence Expiry Summary — ${licenceExpiryItems.length} driver(s)`,
+        emailType: "driver_licence_summary",
+        html,
       });
 
-      if (staffLicenceRes.error) {
-        console.error("[ExpiryScan] Error sending driver licence summary:", staffLicenceRes.error);
-      } else if (staffLicenceRes.data?.status === "sent") {
+      if (staffLicenceRes.status === "sent") {
         totalSent++;
       }
     } catch (err: any) {
@@ -363,22 +349,17 @@ async function runExpiryScan() {
               };
               const html = renderRentDueTomorrowTemplate(templateData);
 
-              const rentEmailRes = await supabaseAdmin.functions.invoke("send-email", {
-                body: {
-                  recipient: driverEmail,
-                  subject: `Reminder: Your rent is due tomorrow — Virtual Car Hire`,
-                  template_type: "rent_due_tomorrow",
-                  html,
-                  template_data: templateData,
-                  metadata: { driver_id: d.id, weekly_rent: d.weekly_rent, due_date: dueStr },
-                },
+              const rentEmailRes = await sendEmailDirect({
+                recipient: driverEmail,
+                subject: `Reminder: Your rent is due tomorrow — Virtual Car Hire`,
+                emailType: "rent_due_tomorrow",
+                html,
+                metadata: { driver_id: d.id, weekly_rent: d.weekly_rent, due_date: dueStr },
               });
 
-              if (rentEmailRes.error) {
-                console.error(`[ExpiryScan] Resend error sending rent email to ${driverEmail}:`, rentEmailRes.error);
-              } else if (rentEmailRes.data?.status === "sent") {
+              if (rentEmailRes.status === "sent") {
                 totalSent++;
-              } else if (rentEmailRes.data?.status === "skipped") {
+              } else if (rentEmailRes.status === "skipped") {
                 totalSkipped++;
               }
             } else {
@@ -415,19 +396,14 @@ async function runExpiryScan() {
       };
       const html = renderRentDueTomorrowTemplate(templateData);
 
-      const staffRentRes = await supabaseAdmin.functions.invoke("send-email", {
-        body: {
-          recipient: STAFF_ALERT_RECIPIENTS,
-          subject: `Rent Due Tomorrow Summary — ${rentDueItems.length} active driver(s)`,
-          template_type: "rent_due_tomorrow",
-          html,
-          template_data: templateData,
-        },
+      const staffRentRes = await sendEmailDirect({
+        recipient: STAFF_ALERT_RECIPIENTS,
+        subject: `Rent Due Tomorrow Summary — ${rentDueItems.length} active driver(s)`,
+        emailType: "rent_due_tomorrow",
+        html,
       });
 
-      if (staffRentRes.error) {
-        console.error("[ExpiryScan] Error sending staff rent summary email:", staffRentRes.error);
-      } else if (staffRentRes.data?.status === "sent") {
+      if (staffRentRes.status === "sent") {
         totalSent++;
       }
     } catch (err: any) {
