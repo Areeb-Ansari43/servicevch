@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
 import { getRuntimeEnv } from "@/integrations/supabase/config";
-import { sendWhatsAppText, sendWhatsAppImageButtons, sendWhatsAppImage } from "@/lib/meta-whatsapp.server";
+import { sendWhatsAppText, sendWhatsAppImageButtons, sendWhatsAppImage, sendWhatsAppTypingIndicator } from "@/lib/meta-whatsapp.server";
 import { callGeminiProvider, callSecondaryProvider, sanitizeErrorMessage } from "@/lib/ai-providers";
 import { runAgentTurn, type LeadContext, type FleetVehicleItem } from "@/lib/ai-agent";
 import { CRM_BASE_URL, WEBSITE_BASE_URL } from "@/lib/domain-config";
@@ -24,10 +24,10 @@ const WELCOME_MENU =
   "⚠️ Report Accident";
 const WEBSITE_CATALOG = [
   { make: "Mercedes", model: "E300", fuel: "Plug-in-Hybrid", price: "£340/week", year: "2021–24" },
-  { make: "Mercedes", model: "Vito", fuel: "Petrol", price: "£380/week", year: "2021–24" },
-  { make: "Mercedes", model: "V-Class", fuel: "Petrol", price: "£450/week", year: "2022–24" },
+  { make: "Mercedes", model: "Vito", fuel: "Diesel", price: "£380/week", year: "2021–24" },
+  { make: "Mercedes", model: "V-Class", fuel: "Diesel", price: "£450/week", year: "2022–24" },
   { make: "Mercedes", model: "EQS", fuel: "Electric", price: "£500/week", year: "2022–24" },
-  { make: "Mercedes", model: "E220", fuel: "Petrol", price: "£310/week", year: "2020–24" },
+  { make: "Mercedes", model: "E220", fuel: "Diesel", price: "£310/week", year: "2020–24" },
   { make: "Mercedes", model: "EQE", fuel: "Electric", price: "£440/week", year: "2023–24" },
   {
     make: "Toyota",
@@ -798,7 +798,7 @@ function parseAiReply(
 ): Pick<AiResult, "reply" | "needs_human" | "reason" | "asks_closure"> {
   // Strip em dashes from anything Gemini generates — house style is plain
   // punctuation only, regardless of what the model's own writing style prefers.
-  const stripEmDash = (text: string) => text.replace(/\s*—\s*/g, ", ");
+  const stripEmDash = (text: string) => text.replace(/[\u2013\u2014]/g, ", ").replace(/\s+,\s+/g, ", ");
   const cleaned = content
     .trim()
     .replace(/^```(?:json)?\s*/i, "")
@@ -1507,6 +1507,8 @@ export async function handleAgentWebhookRequest(request: Request) {
     session_id: suppliedSessionId = null,
   } = parsed.data;
 
+  const webhookReceivedAt = (raw as any)?.webhook_received_at || new Date().toISOString();
+
   if (metaMessageId && isDuplicateMessage(metaMessageId)) {
     console.info("[agent-webhook] Skipping duplicate inbound message:", metaMessageId);
     return json({ ok: true, skipped: "duplicate_message_id" }, 200);
@@ -1679,6 +1681,7 @@ export async function handleAgentWebhookRequest(request: Request) {
         last_message_at: new Date().toISOString(),
         inactivity_prompted_at: null,
         inactivity_alerted_at: null,
+        holding_message_sent_at: null,
         message: content,
         ...(mediaUrl ? { media_url: mediaUrl } : {}),
       } as never)
@@ -1763,6 +1766,8 @@ export async function handleAgentWebhookRequest(request: Request) {
   const oldHistory = oldHistoryRes.data ? [...oldHistoryRes.data].reverse() : oldHistoryRes.data;
   const fleet = fleetRes.data;
 
+  const messageSavedAt = new Date().toISOString();
+
   const inbound: Turn = { sender: "customer", content, media_url: mediaUrl };
   const { error: inboundError } = await insertWithSessionFallback(db, "messages", {
     user_id: userId,
@@ -1777,6 +1782,14 @@ export async function handleAgentWebhookRequest(request: Request) {
     session_id: sessionId,
   });
   if (inboundError) return json({ ok: false, error: inboundError.message }, 500);
+
+  // Indicate AI is working by setting ai_status to 'typing' on whatsapp_leads and sending Meta typing indicator
+  await db
+    .from("whatsapp_leads")
+    .update({ ai_status: "typing" } as never)
+    .eq("id", leadId);
+  sendWhatsAppTypingIndicator(phone ?? chatId).catch(() => {});
+
   const history = [...((oldHistory ?? []) as Turn[]), inbound];
 
   if (isNewLead || closed) {
@@ -3466,12 +3479,16 @@ export async function handleAgentWebhookRequest(request: Request) {
     historyLength: history.length,
     fleetCount: fleet?.length ?? 0,
   });
+
+  const aiStartedAt = new Date().toISOString();
   const ai = await generateReply(
     history,
     content,
     Boolean(mediaUrl),
     (fleet ?? []) as FleetVehicle[],
   );
+  const firstProviderResponseAt = new Date().toISOString();
+
   console.info("[agent-webhook] AI response ready", {
     leadId,
     needsHuman: ai.needs_human,
@@ -3487,6 +3504,8 @@ export async function handleAgentWebhookRequest(request: Request) {
     hasPhone: Boolean(phone || chatId),
   });
   const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: finalReply });
+  const replySentAt = new Date().toISOString();
+
   if (outbound.sent) {
     await insertWithSessionFallback(db, "messages", {
       user_id: userId,
@@ -3501,12 +3520,15 @@ export async function handleAgentWebhookRequest(request: Request) {
     await db
       .from("whatsapp_leads")
       .update({
+        ai_status: "idle",
         ai_summary: finalReply,
         ...(ai.updatedContext ? { car_enquiry_data: ai.updatedContext } : {}),
         ...(needsHuman ? { status: "needs_human", ai_paused: true } : {}),
         last_message_at: new Date().toISOString(),
       } as never)
       .eq("id", leadId);
+
+    const crmVisibleAt = new Date().toISOString();
 
     try {
       await db.from("conversation_events").insert({
@@ -3517,11 +3539,23 @@ export async function handleAgentWebhookRequest(request: Request) {
         tool_calls: ai.toolCallsExecuted ? JSON.stringify(ai.toolCallsExecuted) : null,
         validation_result: ai.validationError ? `failed: ${ai.validationError}` : "ok",
         error: ai.reason !== "ok" ? ai.reason : null,
+        webhook_received_at: webhookReceivedAt,
+        message_saved_at: messageSavedAt,
+        ai_started_at: aiStartedAt,
+        first_provider_response_at: firstProviderResponseAt,
+        reply_sent_at: replySentAt,
+        crm_visible_at: crmVisibleAt,
         created_at: new Date().toISOString(),
       } as never);
     } catch (logErr) {
       console.warn("[agent-webhook] conversation_events log insert failed:", logErr);
     }
+  } else {
+    // Reset ai_status on error
+    await db
+      .from("whatsapp_leads")
+      .update({ ai_status: "idle" } as never)
+      .eq("id", leadId);
   }
   console.info("[agent-webhook] Meta WhatsApp AI dispatch complete", {
     leadId,

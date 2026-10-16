@@ -17,7 +17,7 @@ import {
   generateAccidentSummaryWithAi,
 } from "./agent-webhook";
 import { normalizeMetaPhone } from "@/lib/meta-whatsapp.server";
-import { executeToolCall, validateAiReply, buildSystemPrompt, type FleetVehicleItem, type LeadContext } from "@/lib/ai-agent";
+import { executeToolCall, validateAiReply, buildSystemPrompt, sanitizeDashes, type FleetVehicleItem, type LeadContext } from "@/lib/ai-agent";
 
 const evalFleet: FleetVehicleItem[] = [
   { id: "1", make: "Toyota", model: "Auris Estate", year: 2021, fuel_type: "Hybrid", weekly_rent: 250, monthly_mileage_allowance: 2500, status: "available", default_deposit: 500 },
@@ -672,5 +672,39 @@ describe("Transcript Evaluation Suite (40+ Real World Scenarios)", () => {
     const res = executeToolCall("request_human_handoff", { reason: "Unsure twice on complex policy question" }, evalFleet, {});
     expect(res.triggerHandoff).toBe(true);
     expect(res.updatedContext.stage).toBe("handoff_ready");
+  });
+
+  test("Production Scenario: Multi-vehicle request ('Mercedes e220 and Toyota Prius') compares both cars in tool call", () => {
+    const ctx: LeadContext = {};
+    const res = executeToolCall("compare_vehicles", { vehicle_names: ["Mercedes e220d", "Toyota Prius"] }, evalFleet, ctx);
+    expect(res.result.comparisons).toHaveLength(2);
+    expect(res.result.comparisons[0].name).toContain("Mercedes");
+    expect(res.result.comparisons[0].fuel_type).toBe("Diesel");
+    expect(res.result.comparisons[0].weekly_rent).toBe("£320/week");
+    expect(res.result.comparisons[1].name).toContain("Prius");
+  });
+
+  test("Production Scenario: Natural answer 'I'm 37 No penalty point. I have a valid pco badge' saves age, pco_badge, and penalty_points", () => {
+    let ctx: LeadContext = {};
+    ctx = executeToolCall("save_lead_field", { field: "age", value: 37 }, evalFleet, ctx).updatedContext;
+    ctx = executeToolCall("save_lead_field", { field: "pco_badge", value: true }, evalFleet, ctx).updatedContext;
+    ctx = executeToolCall("save_lead_field", { field: "penalty_points", value: 0 }, evalFleet, ctx).updatedContext;
+
+    expect(ctx.age).toBe(37);
+    expect(ctx.pco_badge).toBe(true);
+    expect(ctx.penalty_points).toBe(0);
+
+    const prompt = buildSystemPrompt(ctx, evalFleet);
+    expect(prompt).toContain("Age: 37");
+    expect(prompt).toContain("PCO Badge: Yes");
+    expect(prompt).toContain("Licence Points: 0");
+    expect(prompt).toContain("DO NOT RE-ASK DETAILS ALREADY HERE");
+  });
+
+  test("Production Scenario: Em dashes and en dashes are sanitized from bot responses", () => {
+    const rawWithEmDash = "Mercedes E220d — £320/week — Diesel fuel.";
+    const rawWithEnDash = "Weekly rate: 2021–2024 models.";
+    expect(sanitizeDashes(rawWithEmDash)).toBe("Mercedes E220d, £320/week, Diesel fuel.");
+    expect(sanitizeDashes(rawWithEnDash)).toBe("Weekly rate: 2021, 2024 models.");
   });
 });
