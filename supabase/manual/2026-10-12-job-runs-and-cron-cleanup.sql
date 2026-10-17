@@ -23,6 +23,9 @@ CREATE INDEX IF NOT EXISTS idx_job_runs_job_name_started_at ON public.job_runs (
 -- Enable RLS
 ALTER TABLE public.job_runs ENABLE ROW LEVEL SECURITY;
 
+-- Revoke all permissions from anon role
+REVOKE ALL ON public.job_runs FROM anon;
+
 -- Grants
 GRANT SELECT ON public.job_runs TO authenticated;
 GRANT ALL ON public.job_runs TO service_role;
@@ -125,8 +128,7 @@ A. Cloudflare / Application Server Secrets (Set in Cloudflare Pages / Server Env
    - NOTIFICATIONS_EMAIL_FROM    : "Virtual Car Hire <notifications@fa-ibi.co.uk>"
    - DRIVER_ALERTS_EMAIL_FROM    : "Virtual Car Hire <driver-alerts@fa-ibi.co.uk>"
 
-B. Supabase Edge Function Secrets (if Edge Functions are retained/invoked):
-   - RESEND_API_KEY              : Resend API Key
-   - SUPABASE_URL                : Supabase Project URL
-   - SUPABASE_SERVICE_ROLE_KEY   : Supabase Service Role Key
+B. GitHub Actions Secrets:
+   - CRON_SECRET                 : Secret token for invoking background job cron endpoints
+   - SUPABASE_ACCESS_TOKEN       : Supabase CLI access token for function deployments
 */
