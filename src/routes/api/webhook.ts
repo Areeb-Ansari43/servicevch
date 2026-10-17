@@ -178,7 +178,7 @@ export const Route = createFileRoute("/api/webhook")({
             "Access-Control-Allow-Headers": "content-type, x-hub-signature-256",
           },
         }),
-      POST: async ({ request }) => {
+      POST: async ({ request, ...rest }: { request: Request; [key: string]: any }) => {
         const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
         const rawBody = await request.text();
         let payload: JsonRecord;
@@ -243,80 +243,101 @@ export const Route = createFileRoute("/api/webhook")({
           normalized: messages.map(({ message, value }) => normalizeMetaMessage(message, value)),
           requestId,
         }).catch(() => {});
-        for (const { message, value } of messages) {
-          const normalized = normalizeMetaMessage(message, value);
-          if (!normalized.phone) {
-            console.error(
-              "[meta-webhook] message skipped: Meta payload had no usable sender phone",
-              {
-                requestId,
-                messageId: normalized.meta_message_id ?? null,
-                from: message.from ?? null,
-              },
-            );
-            continue;
-          }
-          try {
-            const response = await handleAgentWebhookRequest(
-              new Request(`${CRM_BASE_URL}/api/public/agent-webhook`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(normalized),
-              }),
-            );
-            const responseBody = (await response.text()).slice(0, 2000);
-            let responseSummary: JsonRecord = { raw: responseBody };
-            try {
-              responseSummary = JSON.parse(responseBody) as JsonRecord;
-            } catch {
-              /* retain raw response */
+        // Process messages asynchronously in background so Meta receives 200 OK immediately
+        const webhookReceivedAt = new Date().toISOString();
+        const processAsync = async () => {
+          for (const { message, value } of messages) {
+            const normalized = {
+              ...normalizeMetaMessage(message, value),
+              webhook_received_at: webhookReceivedAt,
+            };
+            if (!normalized.phone) {
+              console.error(
+                "[meta-webhook] message skipped: Meta payload had no usable sender phone",
+                {
+                  requestId,
+                  messageId: normalized.meta_message_id ?? null,
+                  from: message.from ?? null,
+                },
+              );
+              continue;
             }
-            console.info("[meta-webhook] agent processing result", {
-              requestId,
-              status: response.status,
-              ok: response.ok,
-              leadId: responseSummary.lead_id ?? null,
-              reply:
-                typeof responseSummary.reply === "string"
-                  ? responseSummary.reply.slice(0, 160)
-                  : null,
-              outbound: responseSummary.outbound ?? null,
-              welcomeMenu: responseSummary.welcome_menu ?? null,
-              needsHuman: responseSummary.needs_human ?? null,
-            });
-            if (!response.ok || responseSummary.outbound?.sent === false) {
+            try {
+              const response = await handleAgentWebhookRequest(
+                new Request(`${CRM_BASE_URL}/api/public/agent-webhook`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(normalized),
+                }),
+              );
+              const responseBody = (await response.text()).slice(0, 2000);
+              let responseSummary: JsonRecord = { raw: responseBody };
+              try {
+                responseSummary = JSON.parse(responseBody) as JsonRecord;
+              } catch {
+                /* retain raw response */
+              }
+              console.info("[meta-webhook] agent processing result", {
+                requestId,
+                status: response.status,
+                ok: response.ok,
+                leadId: responseSummary.lead_id ?? null,
+                reply:
+                  typeof responseSummary.reply === "string"
+                    ? responseSummary.reply.slice(0, 160)
+                    : null,
+                outbound: responseSummary.outbound ?? null,
+                welcomeMenu: responseSummary.welcome_menu ?? null,
+                needsHuman: responseSummary.needs_human ?? null,
+              });
+              if (!response.ok || responseSummary.outbound?.sent === false) {
+                logMetaEvent({
+                  payload,
+                  request,
+                  status: "agent_error",
+                  error: !response.ok
+                    ? `agent_http_${response.status}: ${responseBody}`
+                    : `outbound_failed: ${JSON.stringify(responseSummary.outbound ?? {})}`,
+                  normalized,
+                  requestId,
+                }).catch(() => {});
+              }
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error);
+              console.error("[meta-webhook] agent processing failed", { requestId, error: message });
               logMetaEvent({
                 payload,
                 request,
                 status: "agent_error",
-                error: !response.ok
-                  ? `agent_http_${response.status}: ${responseBody}`
-                  : `outbound_failed: ${JSON.stringify(responseSummary.outbound ?? {})}`,
+                error: message,
                 normalized,
                 requestId,
               }).catch(() => {});
             }
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            console.error("[meta-webhook] agent processing failed", { requestId, error: message });
-            logMetaEvent({
-              payload,
-              request,
-              status: "agent_error",
-              error: message,
-              normalized,
-              requestId,
-            }).catch(() => {});
           }
+          logMetaEvent({
+            payload,
+            request,
+            status: "processed",
+            normalized: messages.map(({ message, value }) => normalizeMetaMessage(message, value)),
+            requestId,
+          }).catch(() => {});
+        };
+
+        const promise = processAsync().catch((err) => {
+          console.error("[meta-webhook] background processing error:", err);
+        });
+
+        // Register background promise with execution context (Cloudflare Workers / Pages waitUntil) if available
+        const waitUntil = rest?.event?.waitUntil || rest?.context?.waitUntil || (globalThis as any).waitUntil;
+        if (typeof waitUntil === "function") {
+          waitUntil(promise);
+        } else {
+          // If no waitUntil exists in environment, await to guarantee completion
+          await promise;
         }
-        logMetaEvent({
-          payload,
-          request,
-          status: "processed",
-          normalized: messages.map(({ message, value }) => normalizeMetaMessage(message, value)),
-          requestId,
-        }).catch(() => {});
-        return json({ ok: true, received: true, processed: messages.length }, 200);
+
+        return json({ ok: true, received: true, queued: messages.length }, 200);
       },
     },
   },

@@ -224,10 +224,10 @@ const msFromRow = (r: any): MileageSubmission => ({
 
 export const WEBSITE_CATALOG = [
   { make: "Mercedes", model: "E300", fuel: "Plug-in-Hybrid", price: 340, year: "2021–24" },
-  { make: "Mercedes", model: "Vito", fuel: "Petrol", price: 380, year: "2021–24" },
-  { make: "Mercedes", model: "V-Class", fuel: "Petrol", price: 450, year: "2022–24" },
+  { make: "Mercedes", model: "Vito", fuel: "Diesel", price: 380, year: "2021–24" },
+  { make: "Mercedes", model: "V-Class", fuel: "Diesel", price: 450, year: "2022–24" },
   { make: "Mercedes", model: "EQS", fuel: "Electric", price: 500, year: "2022–24" },
-  { make: "Mercedes", model: "E220", fuel: "Petrol", price: 310, year: "2020–24" },
+  { make: "Mercedes", model: "E220", fuel: "Diesel", price: 310, year: "2020–24" },
   { make: "Mercedes", model: "EQE", fuel: "Electric", price: 440, year: "2023–24" },
   { make: "Toyota", model: "Corolla Estate", fuel: "Plug-in-Hybrid", price: 220, year: "2021–24" },
   { make: "Toyota", model: "Auris Estate", fuel: "Plug-in-Hybrid", price: 210, year: "2019–22" },
