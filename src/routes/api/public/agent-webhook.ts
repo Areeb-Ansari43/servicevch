@@ -1747,24 +1747,45 @@ export async function handleAgentWebhookRequest(request: Request) {
     }
   }
 
-  const [oldHistoryRes, fleetRes] = await Promise.all([
+  const [oldHistoryRes, fleetRes, overridesRes] = await Promise.all([
     db
       .from("messages")
       .select("sender, content, media_url")
       .eq("lead_id", leadId)
-      // Order newest-first so limit(30) keeps the most RECENT 30 messages,
-      // not the oldest 30. A long-running lead can easily exceed 30 messages
-      // across multiple sessions, and the AI must always see what just
-      // happened, not stale context from days ago. Reversed back to
-      // chronological order immediately below for every downstream consumer.
       .order("created_at", { ascending: false })
       .limit(30),
     db
       .from("vehicles")
       .select("reg, make, model, year, fuel_type, status, next_mot_date, pco_expiry_date"),
+    db
+      .from("bot_fleet_overrides")
+      .select("*")
+      .catch(() => ({ data: null })),
   ]);
   const oldHistory = oldHistoryRes.data ? [...oldHistoryRes.data].reverse() : oldHistoryRes.data;
-  const fleet = fleetRes.data;
+  const rawFleet = fleetRes.data ?? [];
+  const overrides = overridesRes?.data ?? [];
+
+  // Apply staff Bot Fleet Data overrides onto vehicles dataset
+  const fleet = rawFleet.map((v: FleetVehicle) => {
+    const override = overrides.find(
+      (o: any) =>
+        o.model &&
+        (v.model.toLowerCase().includes(o.model.toLowerCase()) ||
+          o.model.toLowerCase().includes(v.model.toLowerCase())),
+    );
+    if (!override) return v;
+    return {
+      ...v,
+      make: override.make || v.make,
+      model: override.model || v.model,
+      fuel_type: override.fuel || v.fuel_type,
+      year: override.year ? parseInt(override.year, 10) || v.year : v.year,
+      weekly_price: override.weekly_rent || v.weekly_price,
+      monthly_mileage_allowance: override.monthly_mileage_allowance || v.monthly_mileage_allowance,
+      minimum_contract_weeks: override.minimum_term_weeks || v.minimum_contract_weeks,
+    };
+  });
 
   const messageSavedAt = new Date().toISOString();
 
