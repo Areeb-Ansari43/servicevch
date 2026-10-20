@@ -11,14 +11,51 @@ import {
   renderRentDueTomorrowTemplate,
 } from "@/lib/email-templates";
 import { sendEmailDirect } from "@/lib/email-sender.server";
+import { getRuntimeEnv } from "@/integrations/supabase/config";
 
 export const STAFF_ALERT_RECIPIENTS = "admin@fa-ibi.co.uk";
+
+function verifyCronSecret(request: Request): boolean {
+  const cronSecret =
+    getRuntimeEnv("CRON_SECRET") ||
+    getRuntimeEnv("PORTAL_SHARED_SECRET") ||
+    process.env.CRON_SECRET ||
+    process.env.PORTAL_SHARED_SECRET ||
+    "vch-cron-secret-2026";
+
+  const authHeader = request.headers.get("Authorization") || "";
+  const headerSecret = request.headers.get("X-Cron-Secret") || "";
+
+  if (headerSecret && headerSecret === cronSecret) return true;
+  if (authHeader.startsWith("Bearer ") && authHeader.slice(7) === cronSecret) return true;
+
+  // Allow in development environment if secrets are not set
+  if (process.env.NODE_ENV === "development") return true;
+
+  return false;
+}
 
 export const Route = createFileRoute("/api/public/expiry-alerts")({
   server: {
     handlers: {
-      POST: async () => runExpiryScan(),
-      GET: async () => runExpiryScan(),
+      POST: async ({ request }) => {
+        if (!verifyCronSecret(request)) {
+          return new Response(JSON.stringify({ error: "Unauthorized" }), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return runExpiryScan();
+      },
+      GET: async ({ request }) => {
+        if (!verifyCronSecret(request)) {
+          return new Response(JSON.stringify({ error: "Unauthorized" }), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return runExpiryScan();
+      },
     },
   },
 });
