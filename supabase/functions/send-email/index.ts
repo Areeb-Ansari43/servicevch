@@ -1,20 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 
-const VCH_HEADER_LOGO_URL = "https://hq.virtual-carhire.co.uk/email/logo-header.png";
-const VCH_FOOTER_LOGO_URL = "https://hq.virtual-carhire.co.uk/email/logo-footer.png";
-
-// Verified sender address mapping
-const ALLOWED_SENDERS = {
-  auth: "Virtual Car Hire <auth@fa-ibi.co.uk>",
-  notifications: "Virtual Car Hire <notifications@fa-ibi.co.uk>",
-  driverAlerts: "Virtual Car Hire <driver-alerts@fa-ibi.co.uk>",
-};
-
-// Forbidden sending address domains/patterns
 const PROHIBITED_DOMAINS = ["resend.dev", "onboarding@resend.dev"];
 
-// Internal company sender mailboxes that must NEVER be sent emails TO
 const PROHIBITED_RECIPIENT_ADDRESSES = [
   "notifications@fa-ibi.co.uk",
   "auth@fa-ibi.co.uk",
@@ -48,7 +36,6 @@ function getFromAddress(type: string): string {
 
   const formatted = formatFromAddress(address);
 
-  // Strictly enforce configured fa-ibi.co.uk sender domain and forbid resend.dev
   for (const domain of PROHIBITED_DOMAINS) {
     if (formatted.toLowerCase().includes(domain)) {
       throw new Error(`Sending address domain '${domain}' is strictly prohibited. Must use fa-ibi.co.uk sender domain.`);
@@ -97,9 +84,9 @@ serve(async (req) => {
   const templateType = payload.template_type || payload.email_type || "driver_alert";
   const metadata = payload.metadata || {};
 
-  // Handle skipped recipients (e.g. driver without email on file)
+  // Handle skipped recipients
   if (!recipient || payload.skip) {
-    const skipReason = payload.skip_reason || "Driver has no email address on file (signup pending)";
+    const skipReason = payload.skip_reason || "Driver has no email address on file";
 
     if (supabaseUrl && supabaseServiceKey) {
       await supabase.from("email_log").insert({
@@ -122,7 +109,7 @@ serve(async (req) => {
     );
   }
 
-  // GUARD: Guard against sending emails TO internal company sender addresses (which bounce or suppress)
+  // Guard against internal sender addresses as recipient
   if (PROHIBITED_RECIPIENT_ADDRESSES.includes(recipient)) {
     const blockedMsg = `Sending email to internal sender address (${recipient}) is prohibited. Staff alerts must go to admin@fa-ibi.co.uk.`;
 
@@ -176,7 +163,7 @@ serve(async (req) => {
   const plainText = payload.text || payload.plain_text;
 
   if (!html) {
-    const missingHtmlMsg = "HTML payload missing. Pre-rendered HTML must be provided from src/lib/email-templates.ts.";
+    const missingHtmlMsg = "HTML payload missing. Pre-rendered HTML must be provided.";
     if (supabaseUrl && supabaseServiceKey) {
       await supabase.from("email_log").insert({
         recipient,
@@ -213,7 +200,6 @@ serve(async (req) => {
     );
   }
 
-  // High importance headers MUST ONLY be set on staff alert emails, NEVER on 2FA emails
   const isStaffAlert = templateType === "fleet_summary" || templateType === "driver_licence_summary";
   const emailHeaders = isStaffAlert
     ? {
@@ -222,20 +208,6 @@ serve(async (req) => {
         "X-MSMail-Priority": "High",
       }
     : undefined;
-
-  // Header and Footer Logo Attachments (CID Inline)
-  const emailAttachments = [
-    {
-      filename: "logo-header.png",
-      path: VCH_HEADER_LOGO_URL,
-      content_id: "logo-header",
-    },
-    {
-      filename: "logo-footer.png",
-      path: VCH_FOOTER_LOGO_URL,
-      content_id: "logo-footer",
-    },
-  ];
 
   try {
     const resendRes = await fetch("https://api.resend.com/emails", {
@@ -251,7 +223,6 @@ serve(async (req) => {
         html,
         text: plainText,
         headers: emailHeaders,
-        attachments: emailAttachments,
       }),
     });
 

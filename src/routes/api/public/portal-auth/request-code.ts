@@ -4,6 +4,7 @@ import { getRuntimeEnv } from "@/integrations/supabase/config";
 import { sendWhatsAppText } from "@/lib/meta-whatsapp.server";
 import { logPortalAuthEvent } from "@/lib/portal-auth-logger";
 import { render2FATemplate } from "@/lib/email-templates";
+import { sendEmailDirect } from "@/lib/email-sender.server";
 
 export async function checkDurableRateLimit(
   key: string,
@@ -55,46 +56,17 @@ export async function sendOtpEmail(targetEmail: string, code: string) {
   const html = render2FATemplate({ code, recipientName: targetEmail.split("@")[0] || "Driver" });
   const text = `Your Virtual Car Hire verification code is: ${code}. This code expires in 10 minutes. If you didn't request this, ignore this email. Never share this code.`;
 
-  try {
-    const { data: edgeRes, error: edgeErr } = await supabaseAdmin.functions.invoke("send-email", {
-      body: {
-        to: targetEmail,
-        recipient: targetEmail,
-        from: OTP_FROM,
-        subject,
-        html,
-        text,
-        email_type: "2fa_code",
-      },
-    });
-
-    if (!edgeErr && edgeRes && edgeRes.status !== "failed") {
-      return;
-    }
-  } catch {
-    // Fall back to direct Resend API call
-  }
-
-  const resendKey = getRuntimeEnv("RESEND_API_KEY");
-  if (!resendKey) throw new Error("RESEND_API_KEY missing");
-
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${resendKey}`,
-    },
-    body: JSON.stringify({
-      from: OTP_FROM,
-      to: [targetEmail],
-      subject,
-      html,
-      text,
-    }),
+  const result = await sendEmailDirect({
+    recipient: targetEmail,
+    from: OTP_FROM,
+    subject,
+    html,
+    text,
+    emailType: "2fa_code",
   });
 
-  if (!res.ok) {
-    throw new Error(`Email send failed with status ${res.status}`);
+  if (result.status === "failed") {
+    throw new Error(result.error || "Failed to send OTP email");
   }
 }
 
