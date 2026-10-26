@@ -55,6 +55,7 @@ import {
 import { AppearanceSettingsCard } from "@/components/appearance-settings-card";
 import { PortalAuthEventsAdminCard } from "@/components/portal-auth-events-card";
 import { TestAiProvidersCard } from "@/components/test-ai-card";
+import { BotInstructionsAdminCard } from "@/components/bot-instructions-card";
 import { ConversationEventsCard } from "@/components/conversation-events-card";
 
 export const Route = createFileRoute("/")({
@@ -1552,7 +1553,10 @@ function UserSettingsView({
         </div>
       </div>
 
-      {/* AI ASSISTANT DIAGNOSTIC TESTS */}
+      {/* 2. BOT INSTRUCTIONS ADMIN CARD */}
+      <BotInstructionsAdminCard vehicles={data.vehicles} toast={toast} />
+
+      {/* 3. TEST AI PROVIDERS */}
       <TestAiProvidersCard toast={toast} />
 
       {/* CONVERSATION EVENTS LOG CARD */}
@@ -9385,9 +9389,33 @@ function WhatsAppLeadsView({ toast }: { toast: (m: string, t?: Toast["type"]) =>
                 </span>
               </div>
 
+              {l.car_enquiry_data && Object.keys(l.car_enquiry_data).length > 0 && (
+                <div
+                  className="mt-4 rounded-xl border p-3 text-xs space-y-1"
+                  style={{ borderColor: T.borderSoft, background: T.panel2 }}
+                >
+                  <div className="font-bold uppercase tracking-wider text-emerald-400 mb-1.5">
+                    Lead Booking Details
+                  </div>
+                  {l.car_enquiry_data.driver_name && <div><span className="text-[#9aa5b8]">Driver Name:</span> {String(l.car_enquiry_data.driver_name)}</div>}
+                  {l.car_enquiry_data.age !== undefined && l.car_enquiry_data.age !== null && <div><span className="text-[#9aa5b8]">Age:</span> {String(l.car_enquiry_data.age)}</div>}
+                  {l.car_enquiry_data.pco_badge !== undefined && l.car_enquiry_data.pco_badge !== null && (
+                    <div><span className="text-[#9aa5b8]">PCO Badge:</span> {l.car_enquiry_data.pco_badge ? "Yes" : "No"}</div>
+                  )}
+                  {l.car_enquiry_data.penalty_points !== undefined && l.car_enquiry_data.penalty_points !== null && (
+                    <div><span className="text-[#9aa5b8]">Penalty Points:</span> {String(l.car_enquiry_data.penalty_points)}</div>
+                  )}
+                  {l.car_enquiry_data.preferred_vehicles && l.car_enquiry_data.preferred_vehicles.length > 0 && (
+                    <div><span className="text-[#9aa5b8]">Preferred Vehicles:</span> {Array.isArray(l.car_enquiry_data.preferred_vehicles) ? l.car_enquiry_data.preferred_vehicles.join(", ") : String(l.car_enquiry_data.preferred_vehicles)}</div>
+                  )}
+                  {l.car_enquiry_data.start_date && <div><span className="text-[#9aa5b8]">Start Date:</span> {String(l.car_enquiry_data.start_date)}</div>}
+                  {l.car_enquiry_data.notes && <div><span className="text-[#9aa5b8]">Notes:</span> {String(l.car_enquiry_data.notes)}</div>}
+                </div>
+              )}
+
               {l.ai_summary && (
                 <div
-                  className="mt-4 rounded-xl border p-3 text-sm"
+                  className="mt-3 rounded-xl border p-3 text-sm"
                   style={{ borderColor: T.borderSoft, background: T.panel2 }}
                 >
                   <div

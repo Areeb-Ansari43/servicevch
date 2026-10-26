@@ -555,15 +555,15 @@ describe("Transcript Evaluation Suite (40+ Real World Scenarios)", () => {
     expect(prompt).toContain("Customer Name: Alex Smith");
   });
 
-  test("Scenario 17: System prompt contains PCO requirement guidelines", () => {
+  test("Scenario 17: System prompt contains core bot instructions and tool usage guidelines", () => {
     const prompt = buildSystemPrompt({}, evalFleet);
-    expect(prompt).toContain("Valid UK PCO licence");
-    expect(prompt).toContain("6 weeks minimum");
+    expect(prompt).toContain("Virtual Car Hire's live WhatsApp assistant");
+    expect(prompt).toContain("find_vehicles");
   });
 
-  test("Scenario 18: System prompt includes deposit policy information", () => {
+  test("Scenario 18: System prompt includes booking flow guidelines", () => {
     const prompt = buildSystemPrompt({}, evalFleet);
-    expect(prompt).toContain("£500");
+    expect(prompt).toContain("Booking Flow");
   });
 
   test("Scenario 19: Reply validator rejects empty string", () => {
