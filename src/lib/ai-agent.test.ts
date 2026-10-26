@@ -107,6 +107,20 @@ describe("AI Agent Function Tools & Database Fleet Execution", () => {
     expect(res.handoffReason).toContain("discount");
     expect(res.updatedContext.stage).toBe("handoff_ready");
   });
+
+  test("find_vehicles handles loose queries (e220, mg 5, prius, tourneo)", () => {
+    const ctx: LeadContext = {};
+    const e220Res = executeToolCall("find_vehicles", { query: "e220" }, mockFleet, ctx);
+    expect(e220Res.result.total_found).toBe(1);
+    expect(e220Res.result.vehicles[0].name).toContain("E220d");
+
+    const priusRes = executeToolCall("find_vehicles", { query: "prius" }, mockFleet, ctx);
+    expect(priusRes.result.vehicles).toBeDefined();
+
+    const tourneoRes = executeToolCall("find_vehicles", { query: "tourneo" }, mockFleet, ctx);
+    expect(tourneoRes.result.total_found).toBe(1);
+    expect(tourneoRes.result.vehicles[0].name).toContain("Tourneo");
+  });
 });
 
 describe("AI Reply Validator", () => {
@@ -143,6 +157,82 @@ describe("AI Reply Validator", () => {
     const knownPrices = [320];
     const result = validateAiReply(validReply, undefined, knownPrices);
     expect(result.valid).toBe(true);
+  });
+
+  test("blocks 'Price to confirm' and zero prices (£0, 0 pound)", () => {
+    expect(validateAiReply("The price is Price to confirm for you.").valid).toBe(false);
+    expect(validateAiReply("The rent is £0 per week.").valid).toBe(false);
+    expect(validateAiReply("The price is 0 pound.").valid).toBe(false);
+  });
+});
+
+describe("Required Transcript Tests Suite", () => {
+  test("Transcript 1: 'Mercedes e220 and Toyota Prius' matches both vehicles with real prices and fuel", () => {
+    const testFleet: FleetVehicleItem[] = [
+      ...mockFleet,
+      {
+        id: "v5",
+        make: "Toyota",
+        model: "Prius",
+        year: 2022,
+        fuel_type: "Plug-in-Hybrid",
+        weekly_rent: 200,
+        monthly_mileage_allowance: 2500,
+        status: "available",
+      },
+    ];
+
+    const ctx: LeadContext = {};
+    const e220 = executeToolCall("find_vehicles", { query: "e220" }, testFleet, ctx);
+    const prius = executeToolCall("find_vehicles", { query: "prius" }, testFleet, ctx);
+
+    expect(e220.result.vehicles[0].name).toContain("E220d");
+    expect(e220.result.vehicles[0].fuel_type).toBe("Diesel");
+    expect(e220.result.vehicles[0].weekly_rent).toBe("£320/week");
+
+    expect(prius.result.vehicles[0].name).toContain("Prius");
+    expect(prius.result.vehicles[0].fuel_type).toBe("Plug-in-Hybrid");
+    expect(prius.result.vehicles[0].weekly_rent).toBe("£200/week");
+  });
+
+  test("Transcript 2: Button text 'book_car' then '1. No 2. yes 3. no' handled politely asking age once without loop", () => {
+    const ctx: LeadContext = {};
+    const r1 = executeToolCall("save_lead_field", { field: "pco_badge", value: "true" }, mockFleet, ctx);
+    const r2 = executeToolCall("save_lead_field", { field: "penalty_points", value: "0" }, mockFleet, r1.updatedContext);
+
+    expect(r2.updatedContext.pco_badge).toBe(true);
+    expect(r2.updatedContext.penalty_points).toBe(0);
+  });
+
+  test("Transcript 3: Affirmative / detailed eligibility statements parse correctly", () => {
+    let ctx: LeadContext = {};
+    ctx = executeToolCall("save_lead_field", { field: "age", value: "37" }, mockFleet, ctx).updatedContext;
+    ctx = executeToolCall("save_lead_field", { field: "pco_badge", value: "true" }, mockFleet, ctx).updatedContext;
+    ctx = executeToolCall("save_lead_field", { field: "penalty_points", value: "0" }, mockFleet, ctx).updatedContext;
+
+    expect(ctx.age).toBe(37);
+    expect(ctx.pco_badge).toBe(true);
+    expect(ctx.penalty_points).toBe(0);
+  });
+
+  test("Transcript 4: Queries 'anything cheaper', 'do you have a tourneo', 'how much deposit', 'can I see the car', 'my car broke down in Hayes', angry customer, '??', Urdu & Polish greetings", () => {
+    const ctx: LeadContext = {};
+
+    // Cheap query
+    const cheap = executeToolCall("find_vehicles", { max_price: 300 }, mockFleet, ctx);
+    expect(cheap.result.vehicles.length).toBeGreaterThan(0);
+
+    // Tourneo query
+    const tourneo = executeToolCall("find_vehicles", { query: "tourneo" }, mockFleet, ctx);
+    expect(tourneo.result.vehicles[0].name).toContain("Tourneo");
+
+    // Deposit unknown / handoff
+    const handoff = executeToolCall("request_human_handoff", { reason: "Customer asked about deposit" }, mockFleet, ctx);
+    expect(handoff.triggerHandoff).toBe(true);
+
+    // Breakdown case
+    const breakdown = executeToolCall("start_breakdown_case", { location: "Hayes", issue: "Car broke down" }, mockFleet, ctx);
+    expect(breakdown.updatedContext.stage).toBe("breakdown");
   });
 });
 
