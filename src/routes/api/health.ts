@@ -1,23 +1,34 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-
 export const Route = createFileRoute("/api/health")({
   server: {
     handlers: {
       GET: async () => {
-        return json(
-          {
+        const commit =
+          process.env.GIT_COMMIT ||
+          process.env.CF_PAGES_COMMIT_SHA ||
+          process.env.VERCEL_GIT_COMMIT_SHA ||
+          "main";
+
+        const buildTime =
+          process.env.BUILD_TIME ||
+          process.env.CF_PAGES_BUILD_TIME ||
+          new Date().toISOString();
+
+        return new Response(
+          JSON.stringify({
             status: "ok",
-            git_commit: process.env.GIT_COMMIT || process.env.CF_PAGES_COMMIT_SHA || "c36616a5628dca371264ea95d004a5cbfa965fd4",
-            build_time: new Date().toISOString(),
+            git_commit: commit,
+            build_time: buildTime,
             env: process.env.NODE_ENV || "production",
-          },
-          200,
+          }),
+          {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json",
+              "Cache-Control": "no-store, no-cache, must-revalidate",
+            },
+          }
         );
       },
     },
