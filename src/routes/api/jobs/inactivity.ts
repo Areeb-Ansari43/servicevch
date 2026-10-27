@@ -100,6 +100,80 @@ export const Route = createFileRoute("/api/jobs/inactivity")({
 
         let prompted = 0;
         let closed = 0;
+        let holdingSent = 0;
+
+        // --- SECTION 1: Human Handling Holding Message (10-minute check) ---
+        const tenMinutesAgo = new Date(now - 10 * 60_000).toISOString();
+        const { data: humanLeads } = await (db.from("whatsapp_leads") as any)
+          .select("id, user_id, contact_name, phone, session_id, status, ai_paused, last_message_at, holding_message_sent_at")
+          .or("ai_paused.eq.true,status.eq.needs_human")
+          .neq("status", "closed")
+          .is("holding_message_sent_at", null)
+          .lte("last_message_at", tenMinutesAgo)
+          .limit(50);
+
+        for (const lead of (humanLeads ?? []) as Record<string, unknown>[]) {
+          const leadId = typeof lead.id === "string" ? lead.id : "";
+          const chatId = chatIdFromLead(lead);
+          if (!leadId || !chatId) continue;
+
+          // Check if staff has already replied after the last customer message
+          const { data: recentMsgs } = await db
+            .from("messages")
+            .select("sender, created_at")
+            .eq("lead_id", leadId)
+            .order("created_at", { ascending: false })
+            .limit(5);
+
+          const lastMsg = recentMsgs?.[0];
+          // If the last message was sent by a human staff member, no holding message needed
+          if (lastMsg?.sender === "human" || lastMsg?.sender === "user") continue;
+
+          const holdingText = "Thanks for your patience, a member of our team will reply shortly.";
+          const outbound = await sendWhatsAppText({ phone: chatId, text: holdingText });
+
+          if (outbound.sent) {
+            await db.from("messages").insert({
+              user_id: lead.user_id,
+              lead_id: leadId,
+              sender: "ai_agent",
+              content: holdingText,
+            } as never);
+
+            await (db.from("whatsapp_leads") as any)
+              .update({ holding_message_sent_at: new Date().toISOString() })
+              .eq("id", leadId);
+
+            holdingSent += 1;
+
+            // Telegram alert to staff
+            const token = getRuntimeEnv("TELEGRAM_BOT_TOKEN")?.trim();
+            const tgChatId = getRuntimeEnv("TELEGRAM_CHAT_ID")?.trim();
+            if (token && tgChatId) {
+              const name = typeof lead.contact_name === "string" ? lead.contact_name : "Unknown";
+              const phone = typeof lead.phone === "string" ? lead.phone : "No number";
+              const alertText =
+                "⏳ <b>Customer Waiting 10+ Minutes</b>\n\n" +
+                `<b>Customer:</b> ${escapeHtml(name)}\n` +
+                `<b>Phone:</b> ${escapeHtml(phone)}\n` +
+                "<b>Status:</b> Holding message sent to customer. Staff response urgently required.\n\n" +
+                `<a href="${CRM_BASE_URL}/whatsapp-leads?lead=${encodeURIComponent(leadId)}">Open in CRM →</a>`;
+
+              fetch(`https://api.telegram.org/bot${encodeURIComponent(token)}/sendMessage`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  chat_id: tgChatId,
+                  text: alertText,
+                  parse_mode: "HTML",
+                  disable_web_page_preview: true,
+                }),
+              }).catch(() => {});
+            }
+          }
+        }
+
+        // --- SECTION 2: AI Inactivity Follow-up and Closure ---
         for (const lead of (leads ?? []) as Record<string, unknown>[]) {
           const leadId = typeof lead.id === "string" ? lead.id : "";
           const chatId = chatIdFromLead(lead);
@@ -193,7 +267,7 @@ export const Route = createFileRoute("/api/jobs/inactivity")({
           const alerted = await sendTelegramClosureAlert({ lead, transcript });
           if (alerted) closed += 1;
         }
-        return json({ ok: true, prompted, closed });
+        return json({ ok: true, prompted, closed, holdingSent });
       },
     },
   },

@@ -285,6 +285,11 @@ export function executeToolCall(
 }
 
 // --- Reply Validator ---
+export function sanitizeDashes(text: string): string {
+  if (!text) return text;
+  return text.replace(/[\u2013\u2014]/g, ", ").replace(/\s+,\s+/g, ", ");
+}
+
 export function validateAiReply(
   reply: string,
   lastBotMessage?: string,
@@ -294,7 +299,7 @@ export function validateAiReply(
     return { valid: false, reason: "Reply is empty or too short" };
   }
 
-  const trimmed = reply.trim();
+  const trimmed = sanitizeDashes(reply.trim());
 
   if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
     return { valid: false, reason: "Reply contains raw JSON output" };
@@ -359,12 +364,15 @@ CONVERSATION & TONE RULES:
 - Use the customer's name once known (e.g. "Hi John,").
 - Keep normal replies brief (1 to 4 short sentences, under 80 words) unless answering a specific multi-car comparison request.
 - Never repeat template headers, welcome menus, or previous messages.
+- NEVER use em dashes (—) or en dashes (–) in any response. Use commas, hyphens (-), colons, or parentheses instead.
 - ALWAYS reply in the same language as the customer if they speak non-English.
 
 CRITICAL DATA & PRICE VERIFICATION RULES:
 - EVERY price (£), year, fuel type, and mileage allowance MUST come strictly from tool results (get_fleet, get_vehicle, compare_vehicles).
-- NEVER guess, invent, or hardcode prices or specs. If a vehicle or price is missing from tool results, say: "A team member will confirm the exact price and details for you."
-- When a customer names a vehicle (e.g., "Toyota Auris Estate", "Mercedes E220d", "Tourneo Custom"), call get_vehicle or compare_vehicles first, then provide exact weekly rent, year, fuel type (e.g. Mercedes E220d is Diesel!), and mileage allowance.
+- NEVER guess, invent, or output "Price to confirm" or £0.
+- When a customer mentions MULTIPLE vehicles in a single message (e.g. "Mercedes e220 and Toyota Prius"), you MUST call get_vehicle or compare_vehicles for ALL mentioned vehicles and answer about ALL of them in ONE SINGLE REPLY with real price, year, fuel, and mileage allowance for each.
+- When a customer names a vehicle (e.g., "Toyota Auris Estate", "Mercedes E220d", "Tourneo Custom", "Prius"), call get_vehicle or compare_vehicles first, then provide exact weekly rent, year, fuel type (e.g. Mercedes E220d is Diesel!), and mileage allowance.
+- Understand natural answers to eligibility questions (e.g. "I'm 37 No penalty point. I have a valid pco badge"). Call save_lead_field to save age, pco_badge, and penalty_points. NEVER repeat a question for details already saved or answered.
 - If a customer asks to negotiate prices, change terms, lower rent, or request extra miles, politely explain that rates are fixed and offer to hand off to a team member.
 - If a customer is angry, asks for a human, asks about legal/insurance claims, or asks complex policy questions twice, call request_human_handoff immediately.
 - Only start the breakdown flow on CLEAR intent (e.g. "broke down", "accident", "won't start", "flat tyre", "stuck").
@@ -413,7 +421,7 @@ export async function runAgentTurn(params: {
       tools: [{ functionDeclarations: AGENT_TOOLS }],
     });
 
-    rawReply = primaryRes.reply;
+    rawReply = sanitizeDashes(primaryRes.reply);
     modelUsed = primaryRes.model;
     latencyMs = primaryRes.latencyMs;
 
@@ -448,7 +456,7 @@ export async function runAgentTurn(params: {
           system: systemPrompt,
           userText: followUpPrompt,
         });
-        rawReply = followUpRes.reply;
+        rawReply = sanitizeDashes(followUpRes.reply);
       }
     }
   } catch (err: any) {
@@ -458,7 +466,7 @@ export async function runAgentTurn(params: {
         system: systemPrompt,
         userText,
       });
-      rawReply = secondaryRes.reply;
+      rawReply = sanitizeDashes(secondaryRes.reply);
       providerUsed = secondaryRes.provider;
       modelUsed = secondaryRes.model;
       latencyMs = secondaryRes.latencyMs;
@@ -492,9 +500,10 @@ export async function runAgentTurn(params: {
         userText: correctivePrompt,
       });
 
-      const retryValidation = validateAiReply(retryRes.reply, params.lastBotMessage, knownPrices);
+      const sanitizedRetry = sanitizeDashes(retryRes.reply);
+      const retryValidation = validateAiReply(sanitizedRetry, params.lastBotMessage, knownPrices);
       if (retryValidation.valid) {
-        rawReply = retryRes.reply;
+        rawReply = sanitizedRetry;
       } else {
         console.error("[ai-agent] Corrective regeneration also failed validation. Handing off to human.");
         return {
