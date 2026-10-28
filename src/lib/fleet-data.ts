@@ -241,6 +241,50 @@ export const WEBSITE_CATALOG = [
   { make: "Volkswagen", model: "Multivan PHEV", fuel: "Plug-in-Hybrid", price: 350, year: "2024–25" },
 ];
 
+const STATIC_FLEET_RECONCILIATION = [
+  {
+    reg: "LB76BUJ",
+    make: "HYUNDAI",
+    model: "SANTA FE PLUG-IN HYBRID",
+    year: 2026,
+    fuel_type: "Plug-in-Hybrid" as const,
+  },
+] as const;
+
+async function reconcileStaticFleet(userId: string, rows: any[]) {
+  const existingRegs = new Set(
+    rows.map((row) => String(row.reg ?? "").replace(/\s+/g, "").toUpperCase()),
+  );
+  const missing = STATIC_FLEET_RECONCILIATION.filter((vehicle) => !existingRegs.has(vehicle.reg));
+  if (missing.length === 0) return rows;
+
+  const { data: inserted, error } = await supabase
+    .from("vehicles")
+    .insert(
+      missing.map((vehicle) => ({
+        user_id: userId,
+        reg: vehicle.reg,
+        make: vehicle.make,
+        model: vehicle.model,
+        year: vehicle.year,
+        fuel_type: vehicle.fuel_type,
+        current_mileage: 0,
+        status: "available",
+        next_service_date: null,
+        next_mot_date: null,
+        pco_expiry_date: null,
+        notes: "Added from the 2026 fleet update.",
+      })),
+    )
+    .select("*");
+
+  if (error) {
+    console.warn("[FleetData] Static fleet reconciliation skipped:", error.message);
+    return rows;
+  }
+  return [...rows, ...(inserted ?? [])];
+}
+
 export function getVehicleWeeklyPrice(make?: string | null, model?: string | null): number {
   if (!make && !model) return 200;
   const combined = `${make ?? ""} ${model ?? ""}`.toLowerCase();
@@ -406,7 +450,12 @@ export function useFleetData() {
       supabase.from("driver_charges").select("*").order("created_at", { ascending: false }),
       supabase.from("mileage_submissions").select("*").order("submitted_at", { ascending: false }),
     ]);
-    setVehicles((vRes.data ?? []).map(vFromRow));
+    let vehicleRows = vRes.data ?? [];
+    const { data: authData } = await supabase.auth.getUser();
+    if (authData.user) {
+      vehicleRows = await reconcileStaticFleet(authData.user.id, vehicleRows);
+    }
+    setVehicles(vehicleRows.map(vFromRow));
     setServices((sRes.data ?? []).map(sFromRow));
     setMileageSubmissions((msRes.data ?? []).map(msFromRow));
 
