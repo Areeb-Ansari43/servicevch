@@ -97,6 +97,9 @@ export const PDF_FLEET: PdfFleetVehicle[] = [
   { registration: "FL70EUV", displayName: "Hyundai Ioniq", fuelType: "Plug-in-Hybrid", year: 2020 },
   { registration: "EK70BKJ", displayName: "Hyundai Ioniq", fuelType: "Plug-in-Hybrid", year: 2020 },
 
+  // Hyundai Santa Fe (1)
+  { registration: "LB76BUJ", displayName: "Hyundai Santa Fe", fuelType: "Plug-in-Hybrid", year: 2026 },
+
   // MG 5 EV (9)
   { registration: "YC72HZM", displayName: "MG 5 EV", fuelType: "Electric", year: 2022 },
   { registration: "YF22UVZ", displayName: "MG 5 EV", fuelType: "Electric", year: 2022 },

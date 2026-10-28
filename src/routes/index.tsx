@@ -122,6 +122,7 @@ const ALL_VEHICLES_SEED: { reg: string; make: string; model: string; year: numbe
   { reg: "KL18TMV", make: "MERCEDES-BENZ", model: "VITO 114 BLUETEC TOURER PRO", year: 2018 },
   { reg: "LA69AXF", make: "TESLA", model: "MODEL 3 LONG RANGE AWD", year: 2019 },
   { reg: "LA69AYB", make: "TESLA", model: "MODEL 3 PERFORMANCE AWD", year: 2019 },
+  { reg: "LB76BUJ", make: "HYUNDAI", model: "SANTA FE PLUG-IN HYBRID", year: 2026 },
   { reg: "LB690FY", make: "TESLA", model: "MODEL 3 LONG RANGE AWD", year: 2019 },
   { reg: "LD20COJ", make: "TESLA", model: "MODEL 3 LONG RANGE AWD", year: 2020 },
   { reg: "LD20FCE", make: "TESLA", model: "MODEL 3 LONG RANGE AWD", year: 2020 },

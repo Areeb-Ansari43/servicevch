@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { PDF_FLEET } from "@/lib/pdf-fleet";
 
 describe("PDF Fleet Dataset Verification", () => {
-  test("contains exactly 80 vehicles in total", () => {
-    expect(PDF_FLEET.length).toBe(80);
+  test("contains exactly 81 vehicles in total", () => {
+    expect(PDF_FLEET.length).toBe(81);
   });
 
   test("contains exact requested count breakdown per make", () => {
@@ -40,7 +40,7 @@ describe("PDF Fleet Dataset Verification", () => {
       Toyota: 13,
       Tesla: 11,
       Jaguar: 2,
-      Hyundai: 8,
+      Hyundai: 9,
       MG: 9,
       Ford: 3,
     });
