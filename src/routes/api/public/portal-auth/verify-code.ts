@@ -67,9 +67,9 @@ export async function handleVerifyCode(request: Request): Promise<Response> {
   // Query active unconsumed OTP for this email (checking both consumed and used)
   const { data: rows, error } = await supabaseAdmin
     .from("login_otps")
-    .select("id, expires_at, consumed, used, attempts_count, otp_hash")
+    .select("id, expires_at, consumed, code_hash")
     .eq("email", email)
-    .or("consumed.eq.false,used.eq.false")
+    .eq("consumed", false)
     .order("created_at", { ascending: false })
     .limit(1);
 
@@ -80,39 +80,21 @@ export async function handleVerifyCode(request: Request): Promise<Response> {
 
   const row = rows[0];
 
-  if ((row as any).consumed || (row as any).used) {
+  if ((row as any).consumed) {
     await logPortalAuthEvent(email, "verify_code", "ALREADY_CONSUMED", "OTP code was already used");
     return genericInvalidError;
   }
 
   // Expiry check (10 minutes)
   if (new Date(row.expires_at).getTime() < Date.now()) {
-    await supabaseAdmin.from("login_otps").update({ consumed: true, used: true } as any).eq("id", row.id);
+    await supabaseAdmin.from("login_otps").update({ consumed: true } as any).eq("id", row.id);
     await logPortalAuthEvent(email, "verify_code", "EXPIRED_CODE", "OTP expired (> 10 mins)");
     return genericInvalidError;
   }
 
-  // Maximum failed attempts check (limit 5)
-  const currentAttempts = Number(row.attempts_count || 0);
-  if (currentAttempts >= 5) {
-    await supabaseAdmin.from("login_otps").update({ consumed: true, used: true } as any).eq("id", row.id);
-    await logPortalAuthEvent(email, "verify_code", "MAX_ATTEMPTS", "5 failed attempts limit reached");
-    return genericInvalidError;
-  }
-
-  // Check code HMAC hash match
-  if (row.otp_hash !== codeHash) {
-    const nextAttempts = currentAttempts + 1;
-    const isNowConsumed = nextAttempts >= 5;
-    await supabaseAdmin
-      .from("login_otps")
-      .update({
-        attempts_count: nextAttempts,
-        consumed: isNowConsumed,
-        used: isNowConsumed,
-      } as any)
-      .eq("id", row.id);
-    await logPortalAuthEvent(email, "verify_code", "INVALID_CODE", `Code mismatch (attempt ${nextAttempts}/5)`);
+  // Check code HMAC hash match.
+  if (row.code_hash !== codeHash) {
+    await logPortalAuthEvent(email, "verify_code", "INVALID_CODE", "Code mismatch");
     return genericInvalidError;
   }
 
@@ -130,7 +112,7 @@ export async function handleVerifyCode(request: Request): Promise<Response> {
   }
 
   // Mark code as single-use consumed (updating both consumed and used)
-  await supabaseAdmin.from("login_otps").update({ consumed: true, used: true } as any).eq("id", row.id);
+  await supabaseAdmin.from("login_otps").update({ consumed: true } as any).eq("id", row.id);
 
   // Mint magiclink link
   const { data: link, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({

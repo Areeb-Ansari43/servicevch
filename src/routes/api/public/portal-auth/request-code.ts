@@ -175,20 +175,18 @@ export async function handleRequestCode(request: Request): Promise<Response> {
   const codeHash = await hmacSha256(`${code}:${email}`);
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
-  // Invalidate all earlier unconsumed codes for this email (updating both consumed and used for DB compatibility)
+  // Invalidate all earlier unconsumed codes for this email.
   await supabaseAdmin
     .from("login_otps")
-    .update({ consumed: true, used: true } as any)
+    .update({ consumed: true } as any)
     .eq("email", email)
-    .or("consumed.eq.false,used.eq.false");
+    .eq("consumed", false);
 
   const { error: insertErr } = await supabaseAdmin.from("login_otps").insert({
     email,
-    otp_hash: codeHash,
+    code_hash: codeHash,
     expires_at: expiresAt,
     consumed: false,
-    used: false,
-    attempts_count: 0,
   } as any);
 
   if (insertErr) {
