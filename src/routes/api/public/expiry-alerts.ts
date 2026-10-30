@@ -83,7 +83,7 @@ function getLondonTodayISO(): string {
   return parts; // YYYY-MM-DD in Europe/London
 }
 
-async function runExpiryScan() {
+export async function runExpiryScan() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
   // Log job start in job_runs table (safely wrapped if table is missing)
@@ -121,6 +121,7 @@ async function runExpiryScan() {
   const londonTodayStr = getLondonTodayISO();
   let totalSent = 0;
   let totalSkipped = 0;
+  const resendIds: string[] = [];
 
   // ---------------------------------------------------------------------------
   // 1. Staff-Facing Fleet-Wide MOT & PCO Summary + Driver Single-Vehicle Notices
@@ -222,6 +223,7 @@ async function runExpiryScan() {
 
           if (driverRes.status === "sent") {
             totalSent++;
+            if (driverRes.id) resendIds.push(driverRes.id);
           } else if (driverRes.status === "skipped") {
             totalSkipped++;
           }
@@ -253,6 +255,7 @@ async function runExpiryScan() {
 
       if (staffFleetRes.status === "sent") {
         totalSent++;
+        if (staffFleetRes.id) resendIds.push(staffFleetRes.id);
       }
     } catch (err: any) {
       console.error("[ExpiryScan] Error sending fleet summary digest to staff:", err);
@@ -313,6 +316,7 @@ async function runExpiryScan() {
 
       if (staffLicenceRes.status === "sent") {
         totalSent++;
+        if (staffLicenceRes.id) resendIds.push(staffLicenceRes.id);
       }
     } catch (err: any) {
       console.error("[ExpiryScan] Error sending driver licence summary digest:", err);
@@ -396,6 +400,7 @@ async function runExpiryScan() {
 
               if (rentEmailRes.status === "sent") {
                 totalSent++;
+                if (rentEmailRes.id) resendIds.push(rentEmailRes.id);
               } else if (rentEmailRes.status === "skipped") {
                 totalSkipped++;
               }
@@ -442,6 +447,7 @@ async function runExpiryScan() {
 
       if (staffRentRes.status === "sent") {
         totalSent++;
+        if (staffRentRes.id) resendIds.push(staffRentRes.id);
       }
     } catch (err: any) {
       console.error("[ExpiryScan] Error sending staff rent-due-tomorrow summary email:", err);
@@ -454,6 +460,7 @@ async function runExpiryScan() {
     fleetExpiries: fleetSummaryItems.length,
     licenceExpiries: licenceExpiryItems.length,
     rentDueItems: rentDueItems.length,
+    resendIds,
   };
 
   if (jobRunId) {
