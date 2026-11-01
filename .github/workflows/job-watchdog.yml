@@ -2,24 +2,59 @@ name: Daily Job Watchdog
 
 on:
   schedule:
-    # 09:30 UTC daily (09:30 Europe/London)
-    - cron: '30 9 * * *'
+    # 09:30 London local time (08:30 UTC during BST, 09:30 UTC during GMT)
+    - cron: '30 8,9 * * *'
   workflow_dispatch:
 
 jobs:
   check-job-runs:
     runs-on: ubuntu-latest
     steps:
-      - name: Verify Daily Job Executions via Watchdog API
+      - name: Check London Local Time Window
+        id: time-check
         run: |
-          RESPONSE=$(curl -s -X GET "https://hq.virtual-carhire.co.uk/api/jobs/watchdog" \
-            --header "Content-Type: application/json")
+          LONDON_HOUR=$(TZ=Europe/London date +%k | tr -d ' ')
+          LONDON_MIN=$(TZ=Europe/London date +%M | tr -d ' ')
+          echo "Current London local time: ${LONDON_HOUR}:${LONDON_MIN}"
 
-          echo "Watchdog response: $RESPONSE"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual trigger via workflow_dispatch. Running watchdog."
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          elif [ "$LONDON_HOUR" -eq 9 ] && [ "$LONDON_MIN" -ge 25 ] && [ "$LONDON_MIN" -le 59 ]; then
+            echo "Inside target 09:30 London local time window. Running watchdog."
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          else
+            echo "Outside 09:30 London target window (Current London time: ${LONDON_HOUR}:${LONDON_MIN}). Exiting quietly."
+            echo "should_run=false" >> $GITHUB_OUTPUT
+          fi
 
-          STATUS=$(echo "$RESPONSE" | grep -o '"ok":true' || true)
-          if [ -z "$STATUS" ]; then
-            echo "Watchdog reported an error or missing job execution!"
+      - name: Verify Daily Job Executions & Trigger Fallback if Missing
+        if: steps.time-check.outputs.should_run == 'true'
+        run: |
+          SECRET="${{ secrets.CRON_SECRET }}"
+          if [ -z "$SECRET" ]; then
+            SECRET="${{ secrets.PORTAL_SHARED_SECRET }}"
+          fi
+
+          if [ -z "$SECRET" ]; then
+            echo "::error::Secret CRON_SECRET is empty or not configured in repository secrets!"
+            exit 1
+          fi
+
+          echo "Triggering POST request to /api/jobs/watchdog endpoint..."
+          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST "https://hq.virtual-carhire.co.uk/api/jobs/watchdog" \
+            --header "Content-Type: application/json" \
+            --header "Authorization: Bearer ${SECRET}" \
+            --header "X-Cron-Secret: ${SECRET}")
+
+          HTTP_STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d':' -f2)
+          BODY=$(echo "$RESPONSE" | sed '/HTTP_STATUS:/d')
+
+          echo "HTTP Status Code: ${HTTP_STATUS}"
+          echo "Response Body: ${BODY}"
+
+          if [ "$HTTP_STATUS" -ne 200 ]; then
+            echo "::error::Daily Job Watchdog reported a failure or unhandled exception! HTTP Status: ${HTTP_STATUS}"
 
             TELEGRAM_BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
             TELEGRAM_CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
@@ -27,7 +62,7 @@ jobs:
             if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
               curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
                 -d "chat_id=${TELEGRAM_CHAT_ID}" \
-                -d "text=⚠️ VCH Watchdog Alert: Daily background job missing or failed! Details: ${RESPONSE}"
+                -d "text=⚠️ VCH Watchdog Alert: Daily background job missing or failed! Details: ${BODY}"
             fi
             exit 1
           fi
