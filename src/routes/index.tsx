@@ -56,6 +56,7 @@ import { AppearanceSettingsCard } from "@/components/appearance-settings-card";
 import { PortalAuthEventsAdminCard } from "@/components/portal-auth-events-card";
 import { TestAiProvidersCard } from "@/components/test-ai-card";
 import { BotInstructionsAdminCard } from "@/components/bot-instructions-card";
+import { BotFleetDataAdminCard } from "@/components/bot-fleet-card";
 import { ConversationEventsCard } from "@/components/conversation-events-card";
 
 export const Route = createFileRoute("/")({
@@ -1556,7 +1557,10 @@ function UserSettingsView({
       {/* 2. BOT INSTRUCTIONS ADMIN CARD */}
       <BotInstructionsAdminCard vehicles={data.vehicles} toast={toast} />
 
-      {/* 3. TEST AI PROVIDERS */}
+      {/* 3. BOT FLEET CATALOGUE & AVAILABILITY CARD */}
+      <BotFleetDataAdminCard vehicles={data.vehicles} toast={toast} />
+
+      {/* 4. TEST AI PROVIDERS */}
       <TestAiProvidersCard toast={toast} />
 
       {/* CONVERSATION EVENTS LOG CARD */}

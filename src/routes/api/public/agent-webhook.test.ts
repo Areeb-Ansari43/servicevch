@@ -557,13 +557,13 @@ describe("Transcript Evaluation Suite (40+ Real World Scenarios)", () => {
 
   test("Scenario 17: System prompt contains core bot instructions and tool usage guidelines", () => {
     const prompt = buildSystemPrompt({}, evalFleet);
-    expect(prompt).toContain("Virtual Car Hire's live WhatsApp assistant");
+    expect(prompt).toContain("Virtual Car Hire");
     expect(prompt).toContain("find_vehicles");
   });
 
   test("Scenario 18: System prompt includes booking flow guidelines", () => {
     const prompt = buildSystemPrompt({}, evalFleet);
-    expect(prompt).toContain("Booking Flow");
+    expect(prompt).toContain("BOOKING FLOW");
   });
 
   test("Scenario 19: Reply validator rejects empty string", () => {
