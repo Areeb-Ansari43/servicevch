@@ -11,7 +11,8 @@ export async function logPortalAuthEvent(
   email: string,
   step: "request_code" | "verify_code",
   resultCode: string,
-  reason?: string
+  reason?: string,
+  source: "CRM" | "Portal" = "Portal"
 ): Promise<void> {
   try {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -21,6 +22,7 @@ export async function logPortalAuthEvent(
       step,
       result_code: resultCode,
       reason: reason || null,
+      source,
     });
   } catch (err) {
     console.error("[PortalAuthEventLog] Failed to log auth event:", err);
