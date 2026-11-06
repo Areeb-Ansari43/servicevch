@@ -24,6 +24,7 @@ import { Route as ServiceHistoryIndexRouteImport } from './routes/service-histor
 import { Route as VehiclesRegRouteImport } from './routes/vehicles.$reg'
 import { Route as ServiceHistoryNewRouteImport } from './routes/service-history.new'
 import { Route as ApiWebhookRouteImport } from './routes/api/webhook'
+import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiPublicTelegramBotRouteImport } from './routes/api/public/telegram-bot'
 import { Route as ApiPublicOcrOdometerRouteImport } from './routes/api/public/ocr-odometer'
 import { Route as ApiPublicExpiryAlertsRouteImport } from './routes/api/public/expiry-alerts'
@@ -110,6 +111,11 @@ const ApiWebhookRoute = ApiWebhookRouteImport.update({
   path: '/api/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiHealthRoute = ApiHealthRouteImport.update({
+  id: '/api/health',
+  path: '/api/health',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicTelegramBotRoute = ApiPublicTelegramBotRouteImport.update({
   id: '/api/public/telegram-bot',
   path: '/api/public/telegram-bot',
@@ -174,6 +180,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
   '/whatsapp-leads': typeof WhatsappLeadsRoute
+  '/api/health': typeof ApiHealthRoute
   '/api/webhook': typeof ApiWebhookRoute
   '/service-history/new': typeof ServiceHistoryNewRoute
   '/vehicles/$reg': typeof VehiclesRegRoute
@@ -201,6 +208,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
   '/whatsapp-leads': typeof WhatsappLeadsRoute
+  '/api/health': typeof ApiHealthRoute
   '/api/webhook': typeof ApiWebhookRoute
   '/service-history/new': typeof ServiceHistoryNewRoute
   '/vehicles/$reg': typeof VehiclesRegRoute
@@ -229,6 +237,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
   '/whatsapp-leads': typeof WhatsappLeadsRoute
+  '/api/health': typeof ApiHealthRoute
   '/api/webhook': typeof ApiWebhookRoute
   '/service-history/new': typeof ServiceHistoryNewRoute
   '/vehicles/$reg': typeof VehiclesRegRoute
@@ -258,6 +267,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/settings'
     | '/whatsapp-leads'
+    | '/api/health'
     | '/api/webhook'
     | '/service-history/new'
     | '/vehicles/$reg'
@@ -285,6 +295,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/settings'
     | '/whatsapp-leads'
+    | '/api/health'
     | '/api/webhook'
     | '/service-history/new'
     | '/vehicles/$reg'
@@ -312,6 +323,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/settings'
     | '/whatsapp-leads'
+    | '/api/health'
     | '/api/webhook'
     | '/service-history/new'
     | '/vehicles/$reg'
@@ -340,6 +352,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   SettingsRoute: typeof SettingsRoute
   WhatsappLeadsRoute: typeof WhatsappLeadsRoute
+  ApiHealthRoute: typeof ApiHealthRoute
   ApiWebhookRoute: typeof ApiWebhookRoute
   ServiceHistoryNewRoute: typeof ServiceHistoryNewRoute
   VehiclesRegRoute: typeof VehiclesRegRoute
@@ -464,6 +477,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/health': {
+      id: '/api/health'
+      path: '/api/health'
+      fullPath: '/api/health'
+      preLoaderRoute: typeof ApiHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/telegram-bot': {
       id: '/api/public/telegram-bot'
       path: '/api/public/telegram-bot'
@@ -548,6 +568,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   SettingsRoute: SettingsRoute,
   WhatsappLeadsRoute: WhatsappLeadsRoute,
+  ApiHealthRoute: ApiHealthRoute,
   ApiWebhookRoute: ApiWebhookRoute,
   ServiceHistoryNewRoute: ServiceHistoryNewRoute,
   VehiclesRegRoute: VehiclesRegRoute,

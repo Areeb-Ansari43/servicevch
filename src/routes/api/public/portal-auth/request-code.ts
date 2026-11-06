@@ -185,6 +185,7 @@ export async function handleRequestCode(request: Request): Promise<Response> {
   const { error: insertErr } = await supabaseAdmin.from("login_otps").insert({
     email,
     code_hash: codeHash,
+    otp_hash: codeHash,
     expires_at: expiresAt,
     consumed: false,
   } as any);
