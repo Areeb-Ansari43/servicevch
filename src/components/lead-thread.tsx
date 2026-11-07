@@ -70,14 +70,7 @@ function ReadReceipt({ status }: { status?: string | null }) {
       </span>
     );
   }
-  return (
-    <span
-      className="ml-1 inline-flex items-center text-[10px] italic leading-none text-[#8696a0]/70"
-      title="Status unmonitored for this message"
-    >
-      (unmonitored)
-    </span>
-  );
+  return null;
 }
 
 // Subcomponent for the reply input to isolate keystroke re-renders
@@ -136,6 +129,8 @@ export function LeadThread({
   toast: (m: string, t?: "success" | "error" | "info") => void;
 }) {
   const [messages, setMessages] = useState<ThreadMessage[]>([]);
+  const [aiStatus, setAiStatus] = useState<string | null>(null);
+  const [isLive, setIsLive] = useState(true);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -194,7 +189,7 @@ export function LeadThread({
     load(false);
   }, [leadId, load]);
 
-  // Live sync — new messages land in the thread as they arrive without unmounting
+  // Live sync & Realtime typing status with connection status and polling fallback
   useEffect(() => {
     const channel = supabase
       .channel(`lead-thread-${leadId}`)
@@ -203,8 +198,37 @@ export function LeadThread({
         { event: "*", schema: "public", table: "messages", filter: `lead_id=eq.${leadId}` },
         () => load(true),
       )
-      .subscribe();
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "whatsapp_leads", filter: `id=eq.${leadId}` },
+        (payload: any) => {
+          if (payload.new && typeof payload.new.ai_status !== "undefined") {
+            setAiStatus(payload.new.ai_status);
+          }
+        },
+      )
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          setIsLive(true);
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+          setIsLive(false);
+        }
+      });
+
+    // Polling fallback every 3 seconds for messages & typing status
+    const interval = setInterval(async () => {
+      void load(true);
+      const { data } = await (supabase.from("whatsapp_leads") as any)
+        .select("ai_status")
+        .eq("id", leadId)
+        .maybeSingle();
+      if (data) {
+        setAiStatus(data.ai_status);
+      }
+    }, 3000);
+
     return () => {
+      clearInterval(interval);
       supabase.removeChannel(channel);
     };
   }, [leadId, load]);
@@ -262,7 +286,20 @@ export function LeadThread({
             {contactName ? contactName[0].toUpperCase() : "W"}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-semibold text-[#e9edef]">{contactName}</div>
+            <div className="flex items-center gap-2">
+              <span className="truncate text-sm font-semibold text-[#e9edef]">{contactName}</span>
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                  isLive
+                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                    : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                }`}
+                title={isLive ? "Connected to Supabase Realtime" : "Polling fallback active"}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full ${isLive ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`} />
+                {isLive ? "Live" : "Polling"}
+              </span>
+            </div>
             <div className="text-[11px] text-[#8696a0]">
               {aiPaused ? "Human handling · AI auto-replies paused" : "AI auto-replies active"}
             </div>
@@ -392,6 +429,25 @@ export function LeadThread({
                 </div>
               );
             })
+          )}
+
+          {/* Animated AI Typing Indicator */}
+          {aiStatus === "typing" && !aiPaused && (
+            <div className="flex flex-col items-start">
+              <div className="relative max-w-[75%] rounded-2xl rounded-tl-xs bg-[#202c33] px-4 py-2.5 shadow-sm text-[#e9edef]">
+                <div className="mb-1 text-[10px] font-bold tracking-wider text-[#25d366]">
+                  AI Agent
+                </div>
+                <div className="flex items-center gap-1.5 py-0.5">
+                  <span className="text-xs text-[#8696a0] font-medium">AI is typing</span>
+                  <span className="flex items-center gap-0.5 ml-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#00a884] animate-bounce [animation-delay:-0.3s]" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#00a884] animate-bounce [animation-delay:-0.15s]" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#00a884] animate-bounce" />
+                  </span>
+                </div>
+              </div>
+            </div>
           )}
         </div>
 

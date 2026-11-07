@@ -513,6 +513,12 @@ export function sanitizeOutgoingMessage(message: string): string {
 }
 
 // --- Reply Validator & Output Guard ---
+// --- Reply Validator ---
+export function sanitizeDashes(text: string): string {
+  if (!text) return text;
+  return text.replace(/[\u2013\u2014]/g, ", ").replace(/\s+,\s+/g, ", ");
+}
+
 export function validateAiReply(
   reply: string,
   lastBotMessage?: string,
@@ -522,7 +528,7 @@ export function validateAiReply(
     return { valid: false, reason: "Reply is empty or too short" };
   }
 
-  const trimmed = reply.trim();
+  const trimmed = sanitizeDashes(reply.trim());
 
   if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
     return { valid: false, reason: "Reply contains raw JSON output" };
@@ -706,7 +712,7 @@ export async function runAgentTurn(params: {
       tools: [{ functionDeclarations: AGENT_TOOLS }],
     });
 
-    rawReply = primaryRes.reply;
+    rawReply = sanitizeDashes(primaryRes.reply);
     modelUsed = primaryRes.model;
     latencyMs = primaryRes.latencyMs;
 
@@ -741,7 +747,7 @@ export async function runAgentTurn(params: {
           system: systemPrompt,
           userText: followUpPrompt,
         });
-        rawReply = followUpRes.reply;
+        rawReply = sanitizeDashes(followUpRes.reply);
       }
     }
   } catch (err: any) {
@@ -751,7 +757,7 @@ export async function runAgentTurn(params: {
         system: systemPrompt,
         userText,
       });
-      rawReply = secondaryRes.reply;
+      rawReply = sanitizeDashes(secondaryRes.reply);
       providerUsed = secondaryRes.provider;
       modelUsed = secondaryRes.model;
       latencyMs = secondaryRes.latencyMs;
@@ -785,9 +791,10 @@ export async function runAgentTurn(params: {
         userText: correctivePrompt,
       });
 
-      const retryValidation = validateAiReply(retryRes.reply, params.lastBotMessage, knownPrices);
+      const sanitizedRetry = sanitizeDashes(retryRes.reply);
+      const retryValidation = validateAiReply(sanitizedRetry, params.lastBotMessage, knownPrices);
       if (retryValidation.valid) {
-        rawReply = retryRes.reply;
+        rawReply = sanitizedRetry;
       } else {
         console.error("[ai-agent] Corrective regeneration also failed validation. Handing off to human.");
         return {

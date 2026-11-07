@@ -60,6 +60,10 @@ html.dark select optgroup {
   color: #eef2f8;
 }
 
+html.light {
+  color-scheme: light;
+}
+
 @layer base {
   * {
     border-color: var(--vch-border);
@@ -67,13 +71,16 @@ html.dark select optgroup {
 
   html {
     background: var(--vch-bg) !important;
+    background-color: #05070c !important;
     color: var(--vch-text);
     min-height: 100vh;
     min-height: 100dvh;
+    color-scheme: dark;
   }
 
   body {
     background: var(--vch-bg) !important;
+    background-color: #05070c !important;
     color: var(--vch-text);
     min-height: 100vh;
     min-height: 100dvh;
@@ -83,9 +90,11 @@ html.dark select optgroup {
   #root,
   .vch-app {
     background: var(--vch-bg) !important;
+    background-color: #05070c !important;
     color: var(--vch-text);
     min-height: 100vh;
     min-height: 100dvh;
+    isolation: isolate;
   }
 }
 

@@ -70,6 +70,28 @@ async function sendPayload(payload: unknown): Promise<MetaSendResult> {
 
 const base = (to: string) => ({ messaging_product: "whatsapp", recipient_type: "individual", to });
 
+export function sendWhatsAppReadReceipt(messageId: string) {
+  const { accessToken, phoneNumberId } = config();
+  if (!accessToken || !phoneNumberId || !messageId)
+    return Promise.resolve<MetaSendResult>({ sent: true });
+  return sendPayload({
+    messaging_product: "whatsapp",
+    status: "read",
+    message_id: messageId,
+  });
+}
+
+export function sendWhatsAppTypingIndicator(phone: unknown) {
+  const to = normalizeMetaPhone(phone);
+  if (!to)
+    return Promise.resolve<MetaSendResult>({ sent: false, reason: "customer_phone_missing" });
+  return sendPayload({
+    ...base(to),
+    type: "typing",
+    typing: "on",
+  });
+}
+
 export function getMetaConfigStatus() {
   const { accessToken, phoneNumberId, wabaId } = config();
   return {

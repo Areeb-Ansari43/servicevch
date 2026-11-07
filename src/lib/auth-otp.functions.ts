@@ -108,17 +108,15 @@ export const requestLoginCode = createServerFn({ method: "POST" })
 
     await supabaseAdmin
       .from("login_otps")
-      .update({ consumed: true, used: true } as any)
+      .update({ consumed: true } as any)
       .eq("email", email)
-      .or("consumed.eq.false,used.eq.false");
+      .eq("consumed", false);
 
     const { error } = await supabaseAdmin.from("login_otps").insert({
       email,
-      otp_hash: codeHash,
+      code_hash: codeHash,
       expires_at: expiresAt,
       consumed: false,
-      used: false,
-      attempts_count: 0,
     } as any);
 
     if (error) {
@@ -183,53 +181,32 @@ export const verifyLoginCode = createServerFn({ method: "POST" })
 
     const { data: rows, error } = await supabaseAdmin
       .from("login_otps")
-      .select("id, expires_at, consumed, used, attempts_count, otp_hash")
+      .select("id, expires_at, consumed, code_hash")
       .eq("email", email)
-      .or("consumed.eq.false,used.eq.false")
+      .eq("consumed", false)
       .order("created_at", { ascending: false })
       .limit(1);
 
     if (error) throw new Error(error.message);
     const row = rows?.[0];
 
-    if (!row || (row as any).consumed || (row as any).used) {
+    if (!row || (row as any).consumed) {
       await logPortalAuthEvent(email, "verify_code", "NO_ACTIVE_CODE", "No unconsumed OTP row found");
       throw new Error("Invalid or expired verification code.");
     }
 
     if (new Date(row.expires_at).getTime() < Date.now()) {
-      await supabaseAdmin.from("login_otps").update({ consumed: true, used: true } as any).eq("id", row.id);
+      await supabaseAdmin.from("login_otps").update({ consumed: true } as any).eq("id", row.id);
       await logPortalAuthEvent(email, "verify_code", "EXPIRED_CODE", "OTP expired (> 10 mins)");
       throw new Error("Verification code expired. Please request a new code.");
     }
 
-    const currentAttempts = Number(row.attempts_count || 0);
-    if (currentAttempts >= 5) {
-      await supabaseAdmin.from("login_otps").update({ consumed: true, used: true } as any).eq("id", row.id);
-      await logPortalAuthEvent(email, "verify_code", "MAX_ATTEMPTS", "5 failed attempts limit reached");
-      throw new Error("Too many failed attempts. Please request a new verification code.");
+    if (row.code_hash !== codeHash) {
+      await logPortalAuthEvent(email, "verify_code", "INVALID_CODE", "Code mismatch");
+      throw new Error("Invalid verification code.");
     }
 
-    if (row.otp_hash !== codeHash) {
-      const nextAttempts = currentAttempts + 1;
-      if (nextAttempts >= 5) {
-        await supabaseAdmin
-          .from("login_otps")
-          .update({ attempts_count: nextAttempts, consumed: true, used: true } as any)
-          .eq("id", row.id);
-        await logPortalAuthEvent(email, "verify_code", "MAX_ATTEMPTS", "5 failed attempts limit reached");
-        throw new Error("Too many failed attempts. Please request a new verification code.");
-      } else {
-        await supabaseAdmin
-          .from("login_otps")
-          .update({ attempts_count: nextAttempts })
-          .eq("id", row.id);
-        await logPortalAuthEvent(email, "verify_code", "INVALID_CODE", `Code mismatch (attempt ${nextAttempts}/5)`);
-        throw new Error("Invalid verification code.");
-      }
-    }
-
-    await supabaseAdmin.from("login_otps").update({ consumed: true, used: true } as any).eq("id", row.id);
+    await supabaseAdmin.from("login_otps").update({ consumed: true } as any).eq("id", row.id);
 
     const sessionEmail = email === ALLOWED_EMAIL ? SESSION_USER_EMAIL : email;
     const { data: link, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
