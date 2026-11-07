@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getRuntimeEnv } from "@/integrations/supabase/config";
 import { sendWhatsAppText, sendWhatsAppImageButtons, sendWhatsAppImage, sendWhatsAppTypingIndicator } from "@/lib/meta-whatsapp.server";
 import { callGeminiProvider, callSecondaryProvider, sanitizeErrorMessage } from "@/lib/ai-providers";
-import { runAgentTurn, type LeadContext, type FleetVehicleItem } from "@/lib/ai-agent";
+import { runAgentTurn, sanitizeOutgoingMessage, type LeadContext, type FleetVehicleItem } from "@/lib/ai-agent";
 import { CRM_BASE_URL, WEBSITE_BASE_URL } from "@/lib/domain-config";
 
 const CRM_BASE = CRM_BASE_URL;

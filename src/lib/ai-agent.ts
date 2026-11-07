@@ -1,5 +1,12 @@
 import { callGeminiProvider, callSecondaryProvider, sanitizeErrorMessage } from "@/lib/ai-providers";
 import { getVehicleWeeklyPrice, getVehicleDefaultDeposit } from "@/lib/fleet-data";
+import {
+  DEFAULT_BOT_CATALOG,
+  getBotCatalogFromDb,
+  evaluateFleetAvailability,
+  type BotCatalogEntry,
+  type CrmVehicle,
+} from "@/lib/bot-catalog";
 
 export type LeadContext = {
   driver_name?: string | null;
@@ -48,6 +55,35 @@ export type AgentTurnResult = {
 // --- Available Function Tools ---
 export const AGENT_TOOLS = [
   {
+    name: "list_available_vehicles",
+    description: "List available rental cars matching optional filters (fuel_group, max_rent, min_term, max_term). 'hybrid' matches Hybrid and Plug-in-Hybrid. 'plug_in_hybrid' matches plug-in only. Returns available cars sorted cheapest first (max 5 per reply).",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        fuel_group: {
+          type: "STRING",
+          description: "Fuel group filter: 'hybrid' (both hybrid and plug-in), 'plug_in_hybrid', 'electric', 'diesel', 'petrol'",
+        },
+        max_rent: { type: "NUMBER", description: "Maximum weekly rent in GBP" },
+        min_term: { type: "NUMBER", description: "Minimum rental term weeks" },
+        max_term: { type: "NUMBER", description: "Maximum rental term weeks" },
+      },
+    },
+  },
+  {
+    name: "find_vehicles",
+    description: "Find vehicles in fleet using loose name queries (e.g. e220, 'mg 5', prius, tourneo, corolla, tesla, santa fe). Returns weekly rent, deposit, monthly miles, minimum term, year, fuel, and availability status for every car mentioned.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        query: { type: "STRING", description: "Search query or model name (e.g. e220, mg 5, prius, tourneo, corolla, model 3, santa fe)" },
+        fuel_type: { type: "STRING", description: "Filter by fuel type: Electric, Plug-in-Hybrid, Petrol, Diesel, Hybrid" },
+        max_price: { type: "NUMBER", description: "Maximum weekly rent in GBP" },
+      },
+      required: ["query"],
+    },
+  },
+  {
     name: "get_fleet",
     description: "Query available vehicles from live database fleet filtered by fuel type or max price.",
     parameters: {
@@ -60,7 +96,7 @@ export const AGENT_TOOLS = [
   },
   {
     name: "get_vehicle",
-    description: "Get exact details (weekly rent, year, fuel type, mileage allowance, deposit) for a specific vehicle model name.",
+    description: "Get exact details (weekly rent, year, fuel type, mileage allowance, deposit, status) for a specific vehicle model name.",
     parameters: {
       type: "OBJECT",
       properties: {
@@ -138,14 +174,186 @@ export const AGENT_TOOLS = [
   },
 ];
 
+export function matchVehicleLoosely(query: string, vehicle: FleetVehicleItem): boolean {
+  if (!query || !query.trim()) return true;
+  const q = query.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const full = `${vehicle.make} ${vehicle.model}`.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const make = vehicle.make.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const model = vehicle.model.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  if (full.includes(q) || q.includes(model) || q.includes(make)) return true;
+
+  // Specific loose aliases
+  if (q.includes("e220") && full.includes("e220")) return true;
+  if ((q.includes("mg5") || q.includes("mg")) && full.includes("mg")) return true;
+  if (q.includes("prius") && full.includes("prius")) return true;
+  if (q.includes("tourneo") && full.includes("tourneo")) return true;
+  if (q.includes("corolla") && full.includes("corolla")) return true;
+  if (q.includes("auris") && full.includes("auris")) return true;
+  if (q.includes("tesla") && full.includes("tesla")) return true;
+
+  return false;
+}
+
+export function formatAvailabilityStatus(status: string): string {
+  const s = (status || "").toLowerCase();
+  if (s === "available" || s === "active" || s === "in_stock" || s === "instock") {
+    return "Available (Ready to rent)";
+  }
+  if (s === "rented") {
+    return "Rented (Currently out with driver)";
+  }
+  if (s === "inservice" || s === "in_service" || s === "maintenance" || s === "offroad" || s === "off_road") {
+    return "In Service / Maintenance (Currently unavailable)";
+  }
+  return `${status || "Available"} (Ready to rent)`;
+}
+
 // --- Execute Tool Function Against Database Fleet ---
 export function executeToolCall(
   toolName: string,
   args: any,
   fleet: FleetVehicleItem[],
   context: LeadContext,
+  customCatalog?: BotCatalogEntry[],
 ): { result: any; updatedContext: LeadContext; triggerHandoff?: boolean; handoffReason?: string } {
   const nextContext = { ...context };
+
+  const crmVehicles: CrmVehicle[] = fleet.map((f) => ({
+    id: f.id,
+    reg: f.registration || f.id,
+    make: f.make,
+    model: f.model,
+    year: f.year,
+    fuel_type: f.fuel_type,
+    status: f.status,
+    next_mot_date: (f as any).next_mot_date,
+    pco_expiry_date: (f as any).pco_expiry_date,
+  }));
+
+  const catalogToUse = customCatalog && customCatalog.length > 0 ? customCatalog : DEFAULT_BOT_CATALOG;
+  const { summaries } = evaluateFleetAvailability(catalogToUse, crmVehicles);
+
+  if (toolName === "list_available_vehicles") {
+    let availableEntries = summaries.filter((s) => s.isAvailable);
+
+    if (args?.fuel_group) {
+      const fg = String(args.fuel_group).toLowerCase().trim();
+      if (fg === "hybrid") {
+        availableEntries = availableEntries.filter(
+          (s) => s.catalog.fuel_group === "hybrid" || s.catalog.fuel_group === "plug_in_hybrid",
+        );
+      } else if (fg === "plug_in_hybrid" || fg === "phev") {
+        availableEntries = availableEntries.filter((s) => s.catalog.fuel_group === "plug_in_hybrid");
+      } else if (fg === "electric" || fg === "ev") {
+        availableEntries = availableEntries.filter((s) => s.catalog.fuel_group === "electric");
+      } else if (fg === "diesel") {
+        availableEntries = availableEntries.filter((s) => s.catalog.fuel_group === "diesel");
+      } else if (fg === "petrol") {
+        availableEntries = availableEntries.filter((s) => s.catalog.fuel_group === "petrol");
+      }
+    }
+
+    if (typeof args?.max_rent === "number") {
+      availableEntries = availableEntries.filter((s) => s.catalog.weekly_rent <= args.max_rent);
+    }
+    if (typeof args?.min_term === "number") {
+      availableEntries = availableEntries.filter((s) => s.catalog.minimum_term_weeks >= args.min_term);
+    }
+
+    // Sort cheapest first
+    availableEntries.sort((a, b) => a.catalog.weekly_rent - b.catalog.weekly_rent);
+
+    const items = availableEntries.slice(0, 5).map((s) => ({
+      car: s.catalog.display_name,
+      weekly_rent: `£${s.catalog.weekly_rent}/week`,
+      deposit: s.catalog.deposit ? `£${s.catalog.deposit}` : "to be confirmed by team",
+      fuel: s.catalog.fuel_type || "to be confirmed by team",
+      year: s.catalog.year_label,
+      monthly_miles: `${s.catalog.monthly_miles} miles/month`,
+      minimum_term: `${s.catalog.minimum_term_weeks} weeks`,
+      available_now: true,
+      rentable_units: s.rentableVehicles.length,
+    }));
+
+    const fallbackSuggestions =
+      items.length === 0
+        ? summaries
+            .filter((s) => s.isAvailable)
+            .sort((a, b) => a.catalog.weekly_rent - b.catalog.weekly_rent)
+            .slice(0, 3)
+            .map((s) => ({
+              car: s.catalog.display_name,
+              weekly_rent: `£${s.catalog.weekly_rent}/week`,
+              fuel: s.catalog.fuel_type || "TBC",
+              year: s.catalog.year_label,
+            }))
+        : [];
+
+    return {
+      result: {
+        matches_found: items.length,
+        vehicles: items,
+        fallback_available_suggestions: fallbackSuggestions,
+        message:
+          items.length === 0
+            ? "No cars matching those specific filters are available at the moment."
+            : undefined,
+      },
+      updatedContext: nextContext,
+    };
+  }
+
+  if (toolName === "find_vehicles") {
+    const qRaw = String(args?.query || "").toLowerCase();
+    const qClean = qRaw.replace(/[^a-z0-9]/g, "");
+
+    let matchedSummaries = summaries.filter((s) => {
+      const dClean = s.catalog.display_name.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const mClean = s.catalog.model.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const kClean = s.catalog.make.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+      // If user specified year like 2026, ensure exact subversion matching
+      if (qClean.includes("2026") && !dClean.includes("2026")) {
+        return false;
+      }
+      if ((qClean.includes("2023") || qClean.includes("2024") || qClean.includes("2025")) && dClean.includes("2026")) {
+        return false;
+      }
+
+      if (dClean.includes(qClean) || qClean.includes(dClean) || qClean.includes(mClean) || qClean.includes(kClean)) {
+        return true;
+      }
+      return (s.catalog.aliases || []).some((al) => {
+        const alClean = al.toLowerCase().replace(/[^a-z0-9]/g, "");
+        return qClean.includes(alClean) || alClean.includes(qClean);
+      });
+    });
+
+    const items = matchedSummaries.map((s) => ({
+      name: s.catalog.display_name,
+      car: s.catalog.display_name,
+      weekly_rent: `£${s.catalog.weekly_rent}/week`,
+      deposit: s.catalog.deposit ? `£${s.catalog.deposit}` : "to be confirmed by team",
+      fuel_type: s.catalog.fuel_type || "to be confirmed by team",
+      fuel: s.catalog.fuel_type || "to be confirmed by team",
+      year: s.catalog.year_label,
+      monthly_miles: `${s.catalog.monthly_miles} miles/month`,
+      minimum_term: `${s.catalog.minimum_term_weeks} weeks`,
+      available_now: s.isAvailable,
+      available_units: s.rentableVehicles.length,
+      note: !s.isAvailable ? "Currently not available in fleet" : undefined,
+    }));
+
+    return {
+      result: {
+        total_found: items.length,
+        vehicles: items,
+        note: "Every mentioned car must be reported in ONE message with rent, deposit, mileage, minimum term, year and fuel type.",
+      },
+      updatedContext: nextContext,
+    };
+  }
 
   if (toolName === "get_fleet") {
     let matches = fleet.filter((v) => v.status === "available" || v.status === "active" || v.status === "in_stock" || !v.status);
@@ -284,6 +492,27 @@ export function executeToolCall(
   return { result: { error: `Unknown tool ${toolName}` }, updatedContext: nextContext };
 }
 
+export function sanitizeOutgoingMessage(message: string): string {
+  if (!message) return "";
+
+  let cleaned = message
+    // 1. Strip em dashes (—) and en dashes (–)
+    .replace(/[\u2014\u2013—–]/g, " ")
+    // 2. Remove markdown headings (# Heading, ## Heading, etc.)
+    .replace(/^#{1,6}\s+/gm, "")
+    // 3. Clean double spaces
+    .replace(/ {2,}/g, " ")
+    .trim();
+
+  // 4. Cap length to max 1200 characters if over limit
+  if (cleaned.length > 1200) {
+    cleaned = cleaned.slice(0, 1200).trim() + "…";
+  }
+
+  return cleaned;
+}
+
+// --- Reply Validator & Output Guard ---
 // --- Reply Validator ---
 export function sanitizeDashes(text: string): string {
   if (!text) return text;
@@ -304,8 +533,13 @@ export function validateAiReply(
   if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
     return { valid: false, reason: "Reply contains raw JSON output" };
   }
-  if (/get_fleet|get_vehicle|compare_vehicles|save_lead_field|set_stage/i.test(trimmed)) {
+  if (/get_fleet|get_vehicle|compare_vehicles|find_vehicles|save_lead_field|set_stage/i.test(trimmed)) {
     return { valid: false, reason: "Reply contains unexecuted function tool call text" };
+  }
+
+  // Guard: Block "Price to confirm", any £0 / 0 pound price, or unconfirmed price phrases
+  if (/price to confirm|price tbc|0\s*(?:pound|gbp)|£\s*0\b/i.test(trimmed)) {
+    return { valid: false, reason: "Reply contains 'Price to confirm' or zero/invalid price" };
   }
 
   if (lastBotMessage && trimmed.toLowerCase() === lastBotMessage.trim().toLowerCase()) {
@@ -319,6 +553,9 @@ export function validateAiReply(
 
     for (const match of priceMatches) {
       const num = parseInt(match.replace(/£\s*/, ""), 10);
+      if (num === 0) {
+        return { valid: false, reason: "Reply contains zero price £0" };
+      }
       if (!allowed.has(num) && num > 50) {
         return { valid: false, reason: `Unverified price £${num} mentioned in reply not present in tool data` };
       }
@@ -333,8 +570,85 @@ export function validateAiReply(
   return { valid: true };
 }
 
+import { supabase } from "@/integrations/supabase/client";
+
+export const DEFAULT_SYSTEM_PROMPT = `You are the WhatsApp assistant for Virtual Car Hire, a London PCO car rental company (part of FA-IBI LTD). You chat with customers like a friendly, capable member of the team. Your goal is to understand what the customer wants, answer with the real fleet data, and guide them to a booking request that our team can complete.
+
+STYLE
+- WhatsApp style: short plain-text messages, no markdown headings, no long essays. Usually under 70 words unless the customer asks for details. One idea per message where possible.
+- Warm, professional, natural UK English. Use the customer's first name once you know it. No corporate jargon.
+- Never use em dashes or en dashes. Use commas, full stops or hyphens.
+- Answer the question that was asked FIRST. Never reply with a generic "how can I help" when they asked something specific. Never repeat a question that has already been answered. Never resend a long list the customer has already seen.
+- Understand typos, slang, voice-note transcripts, several questions in one message, and other languages (reply in the customer's language).
+- Ask only ONE question at a time, and end most messages with one clear next step.
+
+WHAT WE OFFER (never contradict this)
+- PCO rental (private hire) cars on WEEKLY rent, not daily rates.
+- Included: the PCO licence for the vehicle, full car servicing, insurance and maintenance.
+- Rent, deposit, monthly mileage allowance, minimum term (6 or 8 weeks), year and fuel type are different for each car. They come ONLY from your tools. Never quote from memory, never estimate, never say "price to confirm" when a tool returns a price, and never show 0 pounds. If a tool has no price, deposit or fuel type for a car, say a team member will confirm that one thing and hand over.
+
+ELIGIBILITY (check naturally in conversation, not like an exam)
+- Aged 25 to 65.
+- A valid PCO driver badge.
+- Penalty points: up to 6 is usually fine. More than 6 may make renting difficult, so do not promise anything and hand over to the team.
+
+HOW A BOOKING WORKS (explain it simply when asked, or when the customer is ready)
+1. Before we can book, the customer sends all their documents: driving licence, DVLA share code, PCO licence and PCO badge.
+2. Once the team has checked them, the customer pays the FULL deposit for the car. The deposit amount comes from the tools. The team sends the payment details.
+3. After the deposit is paid, the customer comes to our office, The Vista Centre, 50 Salisbury Road, Cranford, Hounslow TW4 6JQ, and we hand over the keys. The team confirms the collection time.
+- Never ask for card numbers, passwords or full ID numbers in the chat. Documents are sent to the team as photos or files.
+
+VEHICLES AND AVAILABILITY
+- When the customer names one or more cars, even loosely ("e220", "the prius", "mg 5"), call find_vehicles and answer for EVERY car mentioned in ONE message: weekly rent, deposit, mileage allowance, minimum term, year and fuel type.
+- Some models come in more than one version (for example Hyundai Santa Fe). If the customer names such a model without a year, list each available version with its year and rent.
+- When the customer asks by fuel or type ("any hybrid?", "diesel?", "electric?", "what's available?", "cheapest?", "under 250 a week"), call list_available_vehicles with that filter. "Hybrid" means both Hybrid and Plug-in-Hybrid, so say which is which. Only offer cars the tool says are available now.
+- Format lists for WhatsApp, one car per line, cheapest first, for example: "Toyota Prius - £200/week, hybrid, 2016-2017". Show at most 5 cars per message, then offer to narrow down by budget or fuel type.
+- If nothing matches what they asked for, say so first, then offer what IS available: "We don't have any diesel cars available at the moment, but we do have these available: ..." with up to 3 of the closest options by fuel type or price.
+- If no cars at all are available, say so honestly, offer to have the team contact them when one becomes free, and hand over.
+- Say "available at the moment" and that the team confirms availability before booking. Never promise a car is reserved.
+- If a car is not in the fleet, say so plainly and offer the closest options.
+- If asked something the data does not hold (seats, automatic or manual, Uber eligibility), say the team will confirm and hand over rather than guessing.
+
+BOOKING FLOW (flexible order, do not interrogate)
+1. Understand what they need (car, budget, fuel type, start date).
+2. Confirm eligibility from what they tell you. If they already answered, do not ask again.
+3. Recommend and confirm the car(s) with the real weekly rent, deposit and minimum term.
+4. Ask when they would like to start.
+5. Summarise: name, car(s) with weekly rent, start date, eligibility answers. Then explain the next steps (documents, then full deposit, then keys) and ask "Shall I pass this to the team to confirm availability and get the paperwork started?"
+6. On yes, call save_lead_field for each detail, set the stage to ready for team, and call request_human_handoff with a short reason. Tell the customer a team member will reply shortly.
+
+HAND OVER TO A PERSON (call request_human_handoff) when: the customer asks for a person; they are upset or complaining; they ask about claims, fines, legal matters or insurance disputes; they ask for discounts or special terms; you are unsure twice in a row; or a price or fact is missing from the data.
+
+BREAKDOWNS AND ACCIDENTS
+- Only start this when the customer clearly says they have broken down, had an accident or crash, have a flat tyre, the car will not start, or they need recovery. Be calm and brief. Ask for the vehicle registration, their location and what happened, then call start_breakdown_case and send the garage details from the tool.
+- Never start the breakdown flow during a car enquiry.
+
+NEVER
+- Never invent prices, availability, policies or contact details.
+- Never claim to be a human. If asked, say you are Virtual Car Hire's virtual assistant and offer a person.
+- Never share one customer's details with another.`;
+
+export async function getSystemPromptFromDb(): Promise<string> {
+  try {
+    const { data, error } = await supabase
+      .from("bot_settings" as any)
+      .select("value")
+      .eq("key", "system_prompt")
+      .maybeSingle();
+
+    if (error || !data?.value?.trim()) {
+      return DEFAULT_SYSTEM_PROMPT;
+    }
+    return data.value;
+  } catch {
+    return DEFAULT_SYSTEM_PROMPT;
+  }
+}
+
 // --- System Prompt Generator ---
-export function buildSystemPrompt(context: LeadContext, fleet: FleetVehicleItem[]): string {
+export function buildSystemPrompt(context: LeadContext, fleet: FleetVehicleItem[], customPromptText?: string): string {
+  const promptText = customPromptText?.trim() || DEFAULT_SYSTEM_PROMPT;
+
   const summaryLines: string[] = [];
   if (context.driver_name) summaryLines.push(`Customer Name: ${context.driver_name}`);
   if (context.age !== undefined && context.age !== null) summaryLines.push(`Age: ${context.age}`);
@@ -347,40 +661,10 @@ export function buildSystemPrompt(context: LeadContext, fleet: FleetVehicleItem[
   if (context.stage) summaryLines.push(`Current CRM Stage: ${context.stage}`);
 
   const leadSummaryText = summaryLines.length > 0
-    ? `\nSTRUCTURED LEAD SUMMARY (DO NOT RE-ASK DETAILS ALREADY HERE):\n${summaryLines.join("\n")}\n`
-    : "\nSTRUCTURED LEAD SUMMARY: No details collected yet.\n";
+    ? `\n\nSTRUCTURED LEAD SUMMARY (DO NOT RE-ASK DETAILS ALREADY HERE):\n${summaryLines.join("\n")}\n`
+    : "\n\nSTRUCTURED LEAD SUMMARY: No details collected yet.\n";
 
-  return `You are the friendly, professional WhatsApp AI assistant for Virtual Car Hire (VCH), London's leading PCO and private-hire car rental company.
-
-COMPANY & CONTRACT INFORMATION:
-- Company: Virtual Car Hire (4.8 stars on Google & Trustpilot).
-- Minimum Term: 6 weeks minimum rental contract (rolling weekly thereafter).
-- What's Included: Vehicle maintenance, servicing, tyres, roadside assistance, licensing & PCO document upload support.
-- Requirements: Valid UK PCO licence, age 25+ (under 25 requires team review), maximum 6 penalty points, UK driving licence.
-- Deposit: Standard deposit is £500 (£1,000 for Mercedes EQE/EQS).
-
-CONVERSATION & TONE RULES:
-- Sound like a helpful UK human agent: concise, warm, natural, and polite.
-- Use the customer's name once known (e.g. "Hi John,").
-- Keep normal replies brief (1 to 4 short sentences, under 80 words) unless answering a specific multi-car comparison request.
-- Never repeat template headers, welcome menus, or previous messages.
-- NEVER use em dashes (—) or en dashes (–) in any response. Use commas, hyphens (-), colons, or parentheses instead.
-- ALWAYS reply in the same language as the customer if they speak non-English.
-
-CRITICAL DATA & PRICE VERIFICATION RULES:
-- EVERY price (£), year, fuel type, and mileage allowance MUST come strictly from tool results (get_fleet, get_vehicle, compare_vehicles).
-- NEVER guess, invent, or output "Price to confirm" or £0.
-- When a customer mentions MULTIPLE vehicles in a single message (e.g. "Mercedes e220 and Toyota Prius"), you MUST call get_vehicle or compare_vehicles for ALL mentioned vehicles and answer about ALL of them in ONE SINGLE REPLY with real price, year, fuel, and mileage allowance for each.
-- When a customer names a vehicle (e.g., "Toyota Auris Estate", "Mercedes E220d", "Tourneo Custom", "Prius"), call get_vehicle or compare_vehicles first, then provide exact weekly rent, year, fuel type (e.g. Mercedes E220d is Diesel!), and mileage allowance.
-- Understand natural answers to eligibility questions (e.g. "I'm 37 No penalty point. I have a valid pco badge"). Call save_lead_field to save age, pco_badge, and penalty_points. NEVER repeat a question for details already saved or answered.
-- If a customer asks to negotiate prices, change terms, lower rent, or request extra miles, politely explain that rates are fixed and offer to hand off to a team member.
-- If a customer is angry, asks for a human, asks about legal/insurance claims, or asks complex policy questions twice, call request_human_handoff immediately.
-- Only start the breakdown flow on CLEAR intent (e.g. "broke down", "accident", "won't start", "flat tyre", "stuck").
-
-TOOLS AVAILABLE:
-Use function calling tools whenever querying vehicle data, saving customer eligibility, updating CRM stage, or requesting human handoff.
-
-${leadSummaryText}`;
+  return `${promptText}${leadSummaryText}`;
 }
 
 // --- Main Agent Execution Loop ---
@@ -391,12 +675,19 @@ export async function runAgentTurn(params: {
   fleet: FleetVehicleItem[];
   lastBotMessage?: string;
   chatId?: string;
+  customSystemPrompt?: string;
+  customCatalog?: BotCatalogEntry[];
 }): Promise<AgentTurnResult> {
   let currentContext = { ...params.context };
   const executedToolCalls: ToolCallResult[] = [];
   const knownPrices: number[] = [];
 
-  const systemPrompt = buildSystemPrompt(currentContext, params.fleet);
+  const [basePromptText, liveCatalog] = await Promise.all([
+    params.customSystemPrompt ? Promise.resolve(params.customSystemPrompt) : getSystemPromptFromDb(),
+    params.customCatalog ? Promise.resolve(params.customCatalog) : getBotCatalogFromDb(),
+  ]);
+
+  const systemPrompt = buildSystemPrompt(currentContext, params.fleet, basePromptText);
 
   const historyText = params.history
     .slice(-20)
@@ -427,7 +718,7 @@ export async function runAgentTurn(params: {
 
     if (primaryRes.toolCalls && primaryRes.toolCalls.length > 0) {
       for (const call of primaryRes.toolCalls) {
-        const toolRes = executeToolCall(call.name, call.args, params.fleet, currentContext);
+        const toolRes = executeToolCall(call.name, call.args, params.fleet, currentContext, liveCatalog);
         currentContext = toolRes.updatedContext;
         executedToolCalls.push({ toolName: call.name, args: call.args, result: toolRes.result });
 
@@ -534,7 +825,7 @@ export async function runAgentTurn(params: {
   }
 
   return {
-    reply: rawReply,
+    reply: sanitizeOutgoingMessage(rawReply),
     needs_human: needsHuman,
     reason: handoffReason || "ok",
     stage: currentContext.stage,
