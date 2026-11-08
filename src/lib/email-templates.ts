@@ -8,6 +8,14 @@ export const VCH_FOOTER_LOGO_URL = "https://hq.virtual-carhire.co.uk/email/logo-
 // Legacy export fallback
 export const VCH_LOGO_URL = VCH_HEADER_LOGO_URL;
 
+/**
+ * Logo used in the header of the staff "Fleet MOT & PCO Expiry Summary" email.
+ * The source PNG is square (1024x1024, artwork centred on transparent padding), so it is
+ * always rendered at a 1:1 size; Outlook ignores object-fit, so forcing a wide box would stretch it.
+ */
+export const FLEET_SUMMARY_LOGO_URL = "https://www.virtual-carhire.co.uk/assets/logo.png";
+export const FLEET_SUMMARY_LOGO_SIZE = 180;
+
 export interface Template2FAOptions {
   code: string;
   recipientName?: string;
@@ -121,6 +129,8 @@ function renderUnifiedEmailLayout({
   ctaText,
   logoHeaderSrc = VCH_HEADER_LOGO_URL,
   logoFooterSrc = VCH_FOOTER_LOGO_URL,
+  logoHeaderWidth = 220,
+  logoHeaderHeight = 66,
 }: {
   title: string;
   eyebrow?: string;
@@ -131,7 +141,10 @@ function renderUnifiedEmailLayout({
   ctaText?: string;
   logoHeaderSrc?: string;
   logoFooterSrc?: string;
+  logoHeaderWidth?: number;
+  logoHeaderHeight?: number;
 }): string {
+  const squareLogo = logoHeaderWidth === logoHeaderHeight;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -147,9 +160,9 @@ function renderUnifiedEmailLayout({
 
           <!-- Centered Header Logo -->
           <tr>
-            <td style="padding: 32px 24px 16px 24px; text-align: center; background-color: #0f172a;">
+            <td style="padding: ${squareLogo ? "4px 24px 0 24px" : "32px 24px 16px 24px"}; text-align: center; background-color: #0f172a;">
               <a href="https://virtual-carhire.co.uk" target="_blank" style="text-decoration: none; display: inline-block;">
-                <img src="${logoHeaderSrc}" alt="Virtual Car Hire" width="220" height="66" style="width: 220px; height: 66px; max-width: 220px; display: block; margin: 0 auto; border: 0; object-fit: contain;" />
+                <img src="${logoHeaderSrc}" alt="Virtual Car Hire" width="${logoHeaderWidth}" height="${logoHeaderHeight}" style="width: ${logoHeaderWidth}px; height: ${logoHeaderHeight}px; max-width: ${logoHeaderWidth}px; display: block; margin: 0 auto; border: 0;" />
               </a>
             </td>
           </tr>
@@ -466,7 +479,7 @@ export function renderFleetSummaryTemplate(options: TemplateFleetSummaryOptions)
     return `
       <tr style="border-bottom: 1px solid #e2e8f0;">
         <td width="60" style="padding: 10px 6px; vertical-align: middle;">
-          ${v.photoUrl ? `<img src="${v.photoUrl}" alt="${v.registration}" style="width: 56px; height: 40px; object-fit: contain; background-color: #f8fafc; border-radius: 4px; border: 1px solid #e2e8f0; display: block;" />` : `<div style="width: 56px; height: 40px; background: #f1f5f9; border-radius: 4px; text-align: center; line-height: 40px; font-size: 16px; color: #64748b;">🚘</div>`}
+          ${v.photoUrl ? `<img src="${v.photoUrl}" alt="${v.registration}" width="56" height="40" style="width: 56px; height: 40px; object-fit: contain; background-color: #f8fafc; border-radius: 4px; border: 1px solid #e2e8f0; display: block;" />` : `<div style="width: 56px; height: 40px; background: #f1f5f9; border-radius: 4px; text-align: center; line-height: 40px; font-size: 16px; color: #64748b;">🚘</div>`}
         </td>
         <td style="padding: 10px 6px; vertical-align: middle;">
           <div style="font-size: 13px; font-weight: 700; color: #0f172a;">${v.registration}</div>
@@ -508,8 +521,10 @@ export function renderFleetSummaryTemplate(options: TemplateFleetSummaryOptions)
     cardContent,
     ctaUrl: options.manageUrl || "https://hq.virtual-carhire.co.uk/vehicles",
     ctaText: "Manage Fleet Expiries",
-    logoHeaderSrc: options.logoHeaderSrc,
+    logoHeaderSrc: options.logoHeaderSrc || FLEET_SUMMARY_LOGO_URL,
     logoFooterSrc: options.logoFooterSrc,
+    logoHeaderWidth: FLEET_SUMMARY_LOGO_SIZE,
+    logoHeaderHeight: FLEET_SUMMARY_LOGO_SIZE,
   });
 }
 

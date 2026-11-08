@@ -1479,29 +1479,15 @@ export function useFleetData() {
 
       if (notifErr) console.warn("Could not save driver notification:", notifErr.message);
 
-      // 2. Email driver if email exists, otherwise log skipped
-      const driverEmail = driver.email?.trim() || null;
+      // 2. Email driver via the unified server-side path (sendEmailDirect). Skips + logs when no email.
       try {
-        await supabase.functions.invoke("send-email", {
-          body: {
-            recipient: driverEmail || "none",
-            skip: !driverEmail,
-            skip_reason: `Driver ${driver.driver_name} has no email address on file`,
-            subject: `Virtual Car Hire: ${title}`,
-            template_type: "driver_notice",
-            template_data: {
-              recipientName: driver.driver_name,
-              headline: title,
-              singleMessageBody: message,
-              vehicleReg: driver.registration,
-              actionUrl: DRIVER_PORTAL_URL,
-              actionText: "Log in to Driver Portal",
-            },
-            metadata: { driver_id: driver.id, reminder_type: reminderType },
-          },
+        const { sendDriverNoticeFn } = await import("@/lib/email-admin.functions");
+        const res = await sendDriverNoticeFn({
+          data: { driverId: driver.id, title, message, reminderType: reminderType.toLowerCase() },
         });
+        if (res && res.ok === false) console.warn("Driver reminder email failed:", res.error);
       } catch (e) {
-        console.warn("Failed invoking send-email for driver reminder:", e);
+        console.warn("Failed sending driver reminder email:", e);
       }
 
       await refresh();
