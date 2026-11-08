@@ -35,6 +35,7 @@ import { Route as ApiJobsInactivityRouteImport } from './routes/api/jobs/inactiv
 import { Route as ApiAdminJobRunsRouteImport } from './routes/api/admin/job-runs'
 import { Route as ApiPublicPortalAuthVerifyCodeRouteImport } from './routes/api/public/portal-auth/verify-code'
 import { Route as ApiPublicPortalAuthRequestCodeRouteImport } from './routes/api/public/portal-auth/request-code'
+import { Route as ApiPublicPortalAuthLogEventRouteImport } from './routes/api/public/portal-auth/log-event'
 import { Route as ApiPublicPortalAuthHandshakeRouteImport } from './routes/api/public/portal-auth/handshake'
 
 const WhatsappLeadsRoute = WhatsappLeadsRouteImport.update({
@@ -169,6 +170,12 @@ const ApiPublicPortalAuthRequestCodeRoute =
     path: '/api/public/portal-auth/request-code',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicPortalAuthLogEventRoute =
+  ApiPublicPortalAuthLogEventRouteImport.update({
+    id: '/api/public/portal-auth/log-event',
+    path: '/api/public/portal-auth/log-event',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicPortalAuthHandshakeRoute =
   ApiPublicPortalAuthHandshakeRouteImport.update({
     id: '/api/public/portal-auth/handshake',
@@ -202,6 +209,7 @@ export interface FileRoutesByFullPath {
   '/api/public/ocr-odometer': typeof ApiPublicOcrOdometerRoute
   '/api/public/telegram-bot': typeof ApiPublicTelegramBotRoute
   '/api/public/portal-auth/handshake': typeof ApiPublicPortalAuthHandshakeRoute
+  '/api/public/portal-auth/log-event': typeof ApiPublicPortalAuthLogEventRoute
   '/api/public/portal-auth/request-code': typeof ApiPublicPortalAuthRequestCodeRoute
   '/api/public/portal-auth/verify-code': typeof ApiPublicPortalAuthVerifyCodeRoute
 }
@@ -231,6 +239,7 @@ export interface FileRoutesByTo {
   '/api/public/ocr-odometer': typeof ApiPublicOcrOdometerRoute
   '/api/public/telegram-bot': typeof ApiPublicTelegramBotRoute
   '/api/public/portal-auth/handshake': typeof ApiPublicPortalAuthHandshakeRoute
+  '/api/public/portal-auth/log-event': typeof ApiPublicPortalAuthLogEventRoute
   '/api/public/portal-auth/request-code': typeof ApiPublicPortalAuthRequestCodeRoute
   '/api/public/portal-auth/verify-code': typeof ApiPublicPortalAuthVerifyCodeRoute
 }
@@ -261,6 +270,7 @@ export interface FileRoutesById {
   '/api/public/ocr-odometer': typeof ApiPublicOcrOdometerRoute
   '/api/public/telegram-bot': typeof ApiPublicTelegramBotRoute
   '/api/public/portal-auth/handshake': typeof ApiPublicPortalAuthHandshakeRoute
+  '/api/public/portal-auth/log-event': typeof ApiPublicPortalAuthLogEventRoute
   '/api/public/portal-auth/request-code': typeof ApiPublicPortalAuthRequestCodeRoute
   '/api/public/portal-auth/verify-code': typeof ApiPublicPortalAuthVerifyCodeRoute
 }
@@ -292,6 +302,7 @@ export interface FileRouteTypes {
     | '/api/public/ocr-odometer'
     | '/api/public/telegram-bot'
     | '/api/public/portal-auth/handshake'
+    | '/api/public/portal-auth/log-event'
     | '/api/public/portal-auth/request-code'
     | '/api/public/portal-auth/verify-code'
   fileRoutesByTo: FileRoutesByTo
@@ -321,6 +332,7 @@ export interface FileRouteTypes {
     | '/api/public/ocr-odometer'
     | '/api/public/telegram-bot'
     | '/api/public/portal-auth/handshake'
+    | '/api/public/portal-auth/log-event'
     | '/api/public/portal-auth/request-code'
     | '/api/public/portal-auth/verify-code'
   id:
@@ -350,6 +362,7 @@ export interface FileRouteTypes {
     | '/api/public/ocr-odometer'
     | '/api/public/telegram-bot'
     | '/api/public/portal-auth/handshake'
+    | '/api/public/portal-auth/log-event'
     | '/api/public/portal-auth/request-code'
     | '/api/public/portal-auth/verify-code'
   fileRoutesById: FileRoutesById
@@ -380,6 +393,7 @@ export interface RootRouteChildren {
   ApiPublicOcrOdometerRoute: typeof ApiPublicOcrOdometerRoute
   ApiPublicTelegramBotRoute: typeof ApiPublicTelegramBotRoute
   ApiPublicPortalAuthHandshakeRoute: typeof ApiPublicPortalAuthHandshakeRoute
+  ApiPublicPortalAuthLogEventRoute: typeof ApiPublicPortalAuthLogEventRoute
   ApiPublicPortalAuthRequestCodeRoute: typeof ApiPublicPortalAuthRequestCodeRoute
   ApiPublicPortalAuthVerifyCodeRoute: typeof ApiPublicPortalAuthVerifyCodeRoute
 }
@@ -568,6 +582,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicPortalAuthRequestCodeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/portal-auth/log-event': {
+      id: '/api/public/portal-auth/log-event'
+      path: '/api/public/portal-auth/log-event'
+      fullPath: '/api/public/portal-auth/log-event'
+      preLoaderRoute: typeof ApiPublicPortalAuthLogEventRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/portal-auth/handshake': {
       id: '/api/public/portal-auth/handshake'
       path: '/api/public/portal-auth/handshake'
@@ -604,6 +625,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicOcrOdometerRoute: ApiPublicOcrOdometerRoute,
   ApiPublicTelegramBotRoute: ApiPublicTelegramBotRoute,
   ApiPublicPortalAuthHandshakeRoute: ApiPublicPortalAuthHandshakeRoute,
+  ApiPublicPortalAuthLogEventRoute: ApiPublicPortalAuthLogEventRoute,
   ApiPublicPortalAuthRequestCodeRoute: ApiPublicPortalAuthRequestCodeRoute,
   ApiPublicPortalAuthVerifyCodeRoute: ApiPublicPortalAuthVerifyCodeRoute,
 }
