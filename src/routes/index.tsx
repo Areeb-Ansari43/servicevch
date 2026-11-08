@@ -1185,6 +1185,8 @@ function JobRunsAdminCard() {
   const [jobRuns, setJobRuns] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [runningManualScan, setRunningManualScan] = useState(false);
+  const [scanResult, setScanResult] = useState<any | null>(null);
 
   const fetchJobRuns = async () => {
     setLoading(true);
@@ -1203,13 +1205,35 @@ function JobRunsAdminCard() {
     }
   };
 
+  const triggerManualFleetScan = async () => {
+    setRunningManualScan(true);
+    setScanResult(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/public/expiry-alerts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || `HTTP ${res.status} error executing fleet summary scan`);
+      }
+      setScanResult(data);
+      await fetchJobRuns();
+    } catch (err: any) {
+      setError(err.message || "Failed to run fleet expiry summary");
+    } finally {
+      setRunningManualScan(false);
+    }
+  };
+
   useEffect(() => {
     fetchJobRuns();
   }, []);
 
   return (
     <div className="bg-card text-card-foreground border border-border/80 rounded-2xl p-6 shadow-sm mb-8">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div>
           <h3 className="text-lg font-bold flex items-center gap-2">
             <span className="text-xl">⏱️</span> Job Execution Log
@@ -1218,14 +1242,55 @@ function JobRunsAdminCard() {
             Last 30 background job executions (expiry scans, notifications, watchdogs)
           </p>
         </div>
-        <button
-          onClick={fetchJobRuns}
-          disabled={loading}
-          className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors"
-        >
-          {loading ? "Refreshing..." : "Refresh"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={triggerManualFleetScan}
+            disabled={runningManualScan || loading}
+            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-orange-500 text-white hover:bg-orange-600 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+          >
+            {runningManualScan ? (
+              <>
+                <span className="animate-spin text-sm">⏳</span> Running Scan...
+              </>
+            ) : (
+              <>
+                <span>🚀</span> Run Expiry Scan Now
+              </>
+            )}
+          </button>
+          <button
+            onClick={fetchJobRuns}
+            disabled={loading}
+            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors"
+          >
+            {loading ? "Refreshing..." : "Refresh"}
+          </button>
+        </div>
       </div>
+
+      {scanResult && (
+        <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-xs mb-4">
+          <div className="font-bold flex items-center justify-between">
+            <span>✅ Fleet Expiry Scan Executed Successfully</span>
+            <span className="text-[10px] opacity-75">Resend Logged</span>
+          </div>
+          <div className="mt-1 font-mono text-[11px] flex flex-wrap gap-x-4 gap-y-1">
+            <span>Sent: {scanResult.sent}</span>
+            <span>Skipped: {scanResult.skipped}</span>
+            <span>Fleet Expiries: {scanResult.fleetExpiries}</span>
+            <span>Licence Expiries: {scanResult.licenceExpiries}</span>
+            <span>Rent Due Items: {scanResult.rentDueItems}</span>
+          </div>
+          {scanResult.resendIds && scanResult.resendIds.length > 0 && (
+            <div className="mt-2 text-[11px] font-mono bg-black/30 p-2 rounded-lg border border-emerald-500/20">
+              <span className="font-bold text-emerald-300">Resend Email ID(s):</span>
+              <div className="mt-0.5 select-all break-all text-emerald-200">
+                {scanResult.resendIds.join(", ")}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {error && (
         <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-xs mb-4">
