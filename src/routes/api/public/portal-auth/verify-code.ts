@@ -64,10 +64,10 @@ export async function handleVerifyCode(request: Request): Promise<Response> {
 
   const codeHash = await hmacSha256(`${code}:${email}`);
 
-  // Query active unconsumed OTP for this email (checking both consumed and used)
+  // Query active unconsumed OTP for this email (checking both consumed and used, code_hash and otp_hash)
   const { data: rows, error } = await supabaseAdmin
     .from("login_otps")
-    .select("id, expires_at, consumed, code_hash")
+    .select("id, expires_at, consumed, code_hash, otp_hash")
     .eq("email", email)
     .eq("consumed", false)
     .order("created_at", { ascending: false })
@@ -78,9 +78,9 @@ export async function handleVerifyCode(request: Request): Promise<Response> {
     return genericInvalidError;
   }
 
-  const row = rows[0];
+  const row: any = rows[0];
 
-  if ((row as any).consumed) {
+  if (row.consumed) {
     await logPortalAuthEvent(email, "verify_code", "ALREADY_CONSUMED", "OTP code was already used");
     return genericInvalidError;
   }
@@ -92,8 +92,9 @@ export async function handleVerifyCode(request: Request): Promise<Response> {
     return genericInvalidError;
   }
 
-  // Check code HMAC hash match.
-  if (row.code_hash !== codeHash) {
+  // Check code HMAC hash match across either code_hash or otp_hash
+  const activeHash = row.code_hash || row.otp_hash;
+  if (activeHash !== codeHash) {
     await logPortalAuthEvent(email, "verify_code", "INVALID_CODE", "Code mismatch");
     return genericInvalidError;
   }

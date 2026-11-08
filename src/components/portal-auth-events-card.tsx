@@ -8,6 +8,7 @@ export interface PortalAuthEvent {
   step: string;
   result_code: string;
   reason: string | null;
+  source?: "CRM" | "Portal" | string;
 }
 
 export function PortalAuthEventsAdminCard({
@@ -101,6 +102,7 @@ export function PortalAuthEventsAdminCard({
             <thead className="border-b bg-black/30 text-[10px] font-bold uppercase tracking-wider text-[#8b95a8]" style={{ borderColor: "var(--vch-border-soft)" }}>
               <tr>
                 <th className="px-4 py-3">Timestamp</th>
+                <th className="px-4 py-3">Source</th>
                 <th className="px-4 py-3">Hashed Email (SHA-256)</th>
                 <th className="px-4 py-3">Step</th>
                 <th className="px-4 py-3">Result Code</th>
@@ -108,32 +110,46 @@ export function PortalAuthEventsAdminCard({
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.06]">
-              {events.map((ev) => (
-                <tr key={ev.id} className="transition-colors hover:bg-white/[0.02]">
-                  <td className="px-4 py-3 text-[#aeb8c9] whitespace-nowrap">
-                    {new Date(ev.created_at).toLocaleString("en-GB", {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      second: "2-digit",
-                    })}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-[11px] text-[#ff8a3d] truncate max-w-[180px]" title={ev.hashed_email}>
-                    {ev.hashed_email ? `${ev.hashed_email.slice(0, 12)}...` : "—"}
-                  </td>
-                  <td className="px-4 py-3 font-semibold text-white capitalize">
-                    {ev.step ? ev.step.replace("_", " ") : "—"}
-                  </td>
-                  <td className="px-4 py-3">
-                    {resultCodeBadge(ev.result_code || "UNKNOWN")}
-                  </td>
-                  <td className="px-4 py-3 text-[#c8d0dd] max-w-[280px] truncate" title={ev.reason || ""}>
-                    {ev.reason || "—"}
-                  </td>
-                </tr>
-              ))}
+              {events.map((ev) => {
+                const isCrm = (ev.source || "").toUpperCase() === "CRM";
+                return (
+                  <tr key={ev.id} className="transition-colors hover:bg-white/[0.02]">
+                    <td className="px-4 py-3 text-[#aeb8c9] whitespace-nowrap">
+                      {new Date(ev.created_at).toLocaleString("en-GB", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                      })}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold border ${
+                          isCrm
+                            ? "border-sky-500/40 bg-sky-500/15 text-sky-300"
+                            : "border-purple-500/40 bg-purple-500/15 text-purple-300"
+                        }`}
+                      >
+                        {ev.source || "Portal"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 font-mono text-[11px] text-[#ff8a3d] truncate max-w-[180px]" title={ev.hashed_email}>
+                      {ev.hashed_email ? `${ev.hashed_email.slice(0, 12)}...` : "—"}
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-white capitalize">
+                      {ev.step ? ev.step.replace("_", " ") : "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      {resultCodeBadge(ev.result_code || "UNKNOWN")}
+                    </td>
+                    <td className="px-4 py-3 text-[#c8d0dd] max-w-[280px] truncate" title={ev.reason || ""}>
+                      {ev.reason || "—"}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
