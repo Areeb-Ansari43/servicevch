@@ -7,7 +7,6 @@ import { render2FATemplate } from "@/lib/email-templates";
 import { sendEmailDirect } from "@/lib/email-sender.server";
 
 const ALLOWED_EMAIL = "admin@fa-ibi.co.uk";
-const ALLOWED_PASSWORD = "Pakistan1!";
 const SESSION_USER_EMAIL = "admin@fa-ibi.co.uk";
 
 async function hmacSha256(data: string): Promise<string> {
@@ -56,42 +55,38 @@ export const requestLoginCode = createServerFn({ method: "POST" })
     const password = data.password.trim();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    let isStaff = false;
     let driverPhone: string | null = null;
 
-    if (email === ALLOWED_EMAIL && password === ALLOWED_PASSWORD) {
-      isStaff = true;
+    // Every account, including the CRM admin, authenticates against Supabase Auth.
+    // Throwaway client: signInWithPassword on supabaseAdmin would store this user's session on
+    // the shared service-role client and break every later admin query in the isolate.
+    const { createEphemeralAuthClient } = await import("@/lib/supabase-ephemeral.server");
+    const { data: authRes, error: authErr } =
+      await createEphemeralAuthClient().auth.signInWithPassword({
+        email,
+        password,
+      });
+
+    if (authErr || !authRes.user) {
+      await logPortalAuthEvent(email, "request_code", "INVALID_CREDENTIALS", authErr?.message || "Invalid password", "CRM");
+      await new Promise((r) => setTimeout(r, 400));
+      throw new Error("Invalid credentials");
+    }
+
+    const { data: driverMatch } = await supabaseAdmin
+      .from("driver_tracks")
+      .select("id, active, deleted_at, phone")
+      .or(`auth_user_id.eq.${authRes.user.id},email.ilike.${email}`)
+      .maybeSingle();
+
+    if (driverMatch) {
+      if (driverMatch.active === false || driverMatch.deleted_at) {
+        await logPortalAuthEvent(email, "request_code", "ACCOUNT_DISABLED", "Driver profile inactive or deleted", "CRM");
+        throw new Error("Account disabled or inactive. Please contact staff.");
+      }
+      driverPhone = driverMatch.phone ?? authRes.user.phone ?? null;
     } else {
-      // Throwaway client: signInWithPassword on supabaseAdmin would store this user's session on
-      // the shared service-role client and break every later admin query in the isolate.
-      const { createEphemeralAuthClient } = await import("@/lib/supabase-ephemeral.server");
-      const { data: authRes, error: authErr } =
-        await createEphemeralAuthClient().auth.signInWithPassword({
-          email,
-          password,
-        });
-
-      if (authErr || !authRes.user) {
-        await logPortalAuthEvent(email, "request_code", "INVALID_CREDENTIALS", authErr?.message || "Invalid password", "CRM");
-        await new Promise((r) => setTimeout(r, 400));
-        throw new Error("Invalid credentials");
-      }
-
-      const { data: driverMatch } = await supabaseAdmin
-        .from("driver_tracks")
-        .select("id, active, deleted_at, phone")
-        .or(`auth_user_id.eq.${authRes.user.id},email.ilike.${email}`)
-        .maybeSingle();
-
-      if (driverMatch) {
-        if (driverMatch.active === false || driverMatch.deleted_at) {
-          await logPortalAuthEvent(email, "request_code", "ACCOUNT_DISABLED", "Driver profile inactive or deleted", "CRM");
-          throw new Error("Account disabled or inactive. Please contact staff.");
-        }
-        driverPhone = driverMatch.phone ?? authRes.user.phone ?? null;
-      } else {
-        driverPhone = authRes.user.phone ?? null;
-      }
+      driverPhone = authRes.user.phone ?? null;
     }
 
     const thirtySecsAgo = new Date(Date.now() - 30 * 1000).toISOString();
