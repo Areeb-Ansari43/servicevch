@@ -5,6 +5,7 @@ import { PDF_FLEET } from "@/lib/pdf-fleet";
 import { logAuditEvent } from "@/lib/audit-logger";
 import { getVehicleDefaultDeposit } from "@/lib/contract-helpers";
 import { DRIVER_PORTAL_URL } from "@/lib/domain-config";
+import { SUPABASE_URL } from "@/integrations/supabase/config";
 
 export { getVehicleDefaultDeposit };
 
@@ -133,6 +134,8 @@ export type MileageSubmission = {
   rejected_at?: string | null;
   rejection_reason?: string | null;
   notes?: string | null;
+  /** Reading the driver typed in the portal (separate from the AI reading). */
+  reading_value?: number | null;
 };
 
 const statusToDb = (s: Vehicle["status"]): string =>
@@ -210,7 +213,11 @@ const msFromRow = (r: any): MileageSubmission => ({
   driver_id: r.driver_id ?? null,
   driver_name: r.driver_name ?? "Unknown Driver",
   registration: r.registration ?? r.reg ?? "",
-  photo_url: r.photo_url ?? "",
+  // Portal submissions may only carry image_path (website table layout): build the public URL.
+  photo_url:
+    r.photo_url ||
+    (r.image_path ? `${SUPABASE_URL}/storage/v1/object/public/mileage-photos/${r.image_path}` : ""),
+  reading_value: r.reading_value != null && !isNaN(Number(r.reading_value)) ? Number(r.reading_value) : null,
   ocr_mileage: typeof r.ocr_mileage === "number" ? r.ocr_mileage : null,
   ocr_confidence: r.ocr_confidence ?? "low",
   status: (r.status as "pending" | "approved" | "rejected") ?? "pending",

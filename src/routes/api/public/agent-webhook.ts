@@ -1240,17 +1240,21 @@ async function generateReply(
   flowContext?: string,
   leadContext?: LeadContext,
 ): Promise<AiResult> {
+  // Prices/deposits/terms the bot quotes come from bot_fleet_catalog (Settings); these CRM rows
+  // only decide availability (status, MOT, PCO) and registration matching.
   const fleetItems: FleetVehicleItem[] = (fleet || []).map((v) => ({
-    id: v.id || v.registration || String(Math.random()),
+    id: v.reg || `${v.make}-${v.model}`,
     make: v.make || "Vehicle",
     model: v.model || "",
     year: v.year || 2023,
     fuel_type: v.fuel_type || "Petrol",
-    weekly_rent: v.weekly_rent || getVehicleWeeklyPrice(`${v.make} ${v.model}`),
+    weekly_rent: Number(v.weekly_price) || getVehicleWeeklyPrice(`${v.make} ${v.model}`),
     monthly_mileage_allowance: v.monthly_mileage_allowance || 2500,
     status: v.status || "available",
-    registration: v.registration,
-    default_deposit: v.default_deposit || getVehicleDefaultDeposit(`${v.make} ${v.model}`),
+    registration: v.reg,
+    default_deposit: getVehicleDefaultDeposit(`${v.make} ${v.model}`),
+    next_mot_date: v.next_mot_date,
+    pco_expiry_date: v.pco_expiry_date,
   }));
 
   const lastBotMessage = history
@@ -1816,14 +1820,18 @@ export async function handleAgentWebhookRequest(request: Request) {
     db
       .from("vehicles")
       .select("reg, make, model, year, fuel_type, status, next_mot_date, pco_expiry_date"),
-    db
-      .from("bot_fleet_overrides")
-      .select("*")
-      .catch(() => ({ data: null })),
+    // Supabase query builders are thenables without .catch(); wrap so a missing table can't throw.
+    (async () => {
+      try {
+        return await db.from("bot_fleet_overrides").select("*");
+      } catch {
+        return { data: null };
+      }
+    })(),
   ]);
   const oldHistory = oldHistoryRes.data ? [...oldHistoryRes.data].reverse() : oldHistoryRes.data;
   const rawFleet = fleetRes.data ?? [];
-  const overrides = overridesRes?.data ?? [];
+  const overrides: any[] = (overridesRes?.data as any[] | null) ?? [];
 
   // Apply staff Bot Fleet Data overrides onto vehicles dataset
   const fleet = rawFleet.map((v: FleetVehicle) => {

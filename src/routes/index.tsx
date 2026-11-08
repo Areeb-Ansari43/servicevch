@@ -8298,7 +8298,9 @@ function MileageSubmissionCard({
       ? String(submission.approved_mileage)
       : submission.ocr_mileage
         ? String(submission.ocr_mileage)
-        : "",
+        : submission.reading_value
+          ? String(submission.reading_value)
+          : "",
   );
 
   const numVal = parseInt(confirmedInput) || 0;
@@ -8442,12 +8444,31 @@ function MileageSubmissionCard({
                 <span className="font-bold">{submission.ocr_mileage.toLocaleString()} mi</span>
                 <span className="text-[10px] text-emerald-400/80">(High Confidence - Editable)</span>
               </div>
+            ) : submission.ocr_mileage ? (
+              <div className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-300">
+                <span>✨ AI reading:</span>
+                <span className="font-bold">{submission.ocr_mileage.toLocaleString()} mi</span>
+                <span className="text-[10px] text-amber-400/80">(Low confidence - please check the photo)</span>
+              </div>
             ) : (
               <div className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-300">
                 <span>⚠️ Manual Entry Required</span>
                 <span className="text-[10px] text-amber-400/80">(OCR low confidence or photo unclear)</span>
               </div>
             )}
+
+            {submission.reading_value ? (
+              <div
+                className="inline-flex items-center gap-1.5 rounded-md border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-xs font-semibold text-sky-300"
+                data-driver-reading
+              >
+                <span>Driver entered:</span>
+                <span className="font-bold">{submission.reading_value.toLocaleString()} mi</span>
+                {submission.ocr_mileage && Math.abs(submission.ocr_mileage - submission.reading_value) > 50 ? (
+                  <span className="text-[10px] text-red-300">(differs from AI reading)</span>
+                ) : null}
+              </div>
+            ) : null}
 
             {driver && (
               <div className="text-xs text-[#8b95a8]">

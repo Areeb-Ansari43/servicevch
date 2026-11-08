@@ -1,4 +1,12 @@
 import { describe, expect, test } from "bun:test";
+// Prices/fuel/deposit the bot quotes come from the Bot Fleet Catalogue (Settings), not the CRM rows.
+import { DEFAULT_BOT_CATALOG as __CATALOG } from "@/lib/bot-catalog";
+const cat = (name: string) => {
+  const c = __CATALOG.find((x) => x.display_name === name);
+  if (!c) throw new Error(`catalogue entry ${name} missing`);
+  return { ...c, rent: `£${c.weekly_rent}/week`, dep: c.deposit ? `£${c.deposit}` : "to be confirmed by team" };
+};
+
 import {
   executeToolCall,
   validateAiReply,
@@ -53,11 +61,13 @@ const mockFleet: FleetVehicleItem[] = [
 describe("AI Agent Function Tools & Database Fleet Execution", () => {
   test("get_fleet filters by fuel type correctly", () => {
     const ctx: LeadContext = {};
-    const res = executeToolCall("get_fleet", { fuel_type: "Hybrid" }, mockFleet, ctx);
+    // A CRM Auris within the catalogue's model years, so it counts as rentable.
+    const fleet = [...mockFleet, { ...mockFleet[0], id: "auris-2019", year: 2019 }];
+    const res = executeToolCall("get_fleet", { fuel_type: "Hybrid" }, fleet, ctx);
 
     expect(res.result.available_count).toBeGreaterThanOrEqual(1);
     expect(res.result.vehicles[0].name).toContain("Toyota Auris");
-    expect(res.result.vehicles[0].weekly_rent).toBe("£250/week");
+    expect(res.result.vehicles[0].weekly_rent).toBe(cat("Toyota Auris").rent);
   });
 
   test("get_vehicle returns exact specs including E220d Diesel fuel type and £320 price", () => {
@@ -65,10 +75,10 @@ describe("AI Agent Function Tools & Database Fleet Execution", () => {
     const res = executeToolCall("get_vehicle", { vehicle_name: "Mercedes E220d" }, mockFleet, ctx);
 
     expect(res.result.found).toBe(true);
-    expect(res.result.name).toBe("Mercedes-Benz E220d");
+    expect(res.result.name).toBe("Mercedes E220D");
     expect(res.result.fuel_type).toBe("Diesel");
-    expect(res.result.weekly_rent).toBe("£320/week");
-    expect(res.updatedContext.preferred_vehicles).toContain("Mercedes-Benz E220d");
+    expect(res.result.weekly_rent).toBe(cat("Mercedes E220D").rent);
+    expect(res.updatedContext.preferred_vehicles).toContain("Mercedes E220D");
   });
 
   test("compare_vehicles compares E300 and E220d accurately", () => {

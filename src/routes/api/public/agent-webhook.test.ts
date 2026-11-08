@@ -1,4 +1,12 @@
 import { expect, test, describe } from "bun:test";
+// Prices/fuel/deposit the bot quotes come from the Bot Fleet Catalogue (Settings), not the CRM rows.
+import { DEFAULT_BOT_CATALOG as __CATALOG } from "@/lib/bot-catalog";
+const cat = (name: string) => {
+  const c = __CATALOG.find((x) => x.display_name === name);
+  if (!c) throw new Error(`catalogue entry ${name} missing`);
+  return { ...c, rent: `£${c.weekly_rent}/week`, dep: c.deposit ? `£${c.deposit}` : "to be confirmed by team" };
+};
+
 import {
   parseCarEligibility,
   isAvailable,
@@ -449,9 +457,9 @@ describe("Transcript Evaluation Suite (40+ Real World Scenarios)", () => {
     const ctx: LeadContext = {};
     const res1 = executeToolCall("get_vehicle", { vehicle_name: "Toyota Auris Estate" }, evalFleet, ctx);
     expect(res1.result.found).toBe(true);
-    expect(res1.result.name).toBe("Toyota Auris Estate");
-    expect(res1.result.weekly_rent).toBe("£250/week");
-    expect(res1.updatedContext.preferred_vehicles).toContain("Toyota Auris Estate");
+    expect(res1.result.name).toBe("Toyota Auris");
+    expect(res1.result.weekly_rent).toBe(cat("Toyota Auris").rent);
+    expect(res1.updatedContext.preferred_vehicles).toContain("Toyota Auris");
 
     const res2 = executeToolCall("set_stage", { stage: "terms_confirmed" }, evalFleet, res1.updatedContext);
     expect(res2.updatedContext.stage).toBe("terms_confirmed");
@@ -462,18 +470,20 @@ describe("Transcript Evaluation Suite (40+ Real World Scenarios)", () => {
     const res = executeToolCall("compare_vehicles", { vehicle_names: ["Mercedes e300", "Mercedes e220d"] }, evalFleet, ctx);
     expect(res.result.comparisons).toHaveLength(2);
     expect(res.result.comparisons[0].fuel_type).toBe("Plug-in-Hybrid");
-    expect(res.result.comparisons[0].weekly_rent).toBe("£340/week");
+    expect(res.result.comparisons[0].weekly_rent).toBe(cat("Mercedes E300").rent);
     expect(res.result.comparisons[1].fuel_type).toBe("Diesel");
-    expect(res.result.comparisons[1].weekly_rent).toBe("£320/week");
+    expect(res.result.comparisons[1].weekly_rent).toBe(cat("Mercedes E220D").rent);
   });
 
   test("Scenario 3: Asking for 'Tourneo Custom' and 'plug in' shows Tourneo specs and suggests plug-in alternatives", () => {
     const ctx: LeadContext = {};
     const res1 = executeToolCall("get_vehicle", { vehicle_name: "Tourneo Custom" }, evalFleet, ctx);
     expect(res1.result.found).toBe(true);
-    expect(res1.result.fuel_type).toBe("Diesel");
+    expect(res1.result.fuel_type).toBe(cat("Ford Tourneo Custom").fuel_type);
 
-    const res2 = executeToolCall("get_fleet", { fuel_type: "Plug-in-Hybrid" }, evalFleet, ctx);
+    // A CRM E300 within the catalogue's model years, so it counts as rentable.
+    const fleet = [...evalFleet, { ...evalFleet[3], id: "e300-2019", year: 2019 }];
+    const res2 = executeToolCall("get_fleet", { fuel_type: "Plug-in-Hybrid" }, fleet, ctx);
     expect(res2.result.vehicles[0].name).toContain("Mercedes");
   });
 
@@ -492,7 +502,8 @@ describe("Transcript Evaluation Suite (40+ Real World Scenarios)", () => {
   });
 
   test("Scenario 6: 'anything cheaper' filters fleet by max price", () => {
-    const res = executeToolCall("get_fleet", { max_price: 270 }, evalFleet, {});
+    const fleet = [...evalFleet, { ...evalFleet[0], id: "auris-2019", year: 2019 }];
+    const res = executeToolCall("get_fleet", { max_price: 270 }, fleet, {});
     expect(res.result.vehicles.length).toBeGreaterThanOrEqual(1);
     expect(res.result.vehicles.every((v: any) => parseInt(v.weekly_rent.replace(/\D/g, ""), 10) <= 270)).toBe(true);
   });
@@ -646,21 +657,21 @@ describe("Transcript Evaluation Suite (40+ Real World Scenarios)", () => {
   test("Scenario 38: Toyota Corolla Estate search matches Corolla Estate in eval fleet", () => {
     const res = executeToolCall("get_vehicle", { vehicle_name: "Corolla Estate" }, evalFleet, {});
     expect(res.result.found).toBe(true);
-    expect(res.result.weekly_rent).toBe("£260/week");
+    expect(res.result.weekly_rent).toBe(cat("Toyota Corolla").rent);
   });
 
   test("Scenario 39: Tesla Model 3 search matches Tesla in eval fleet", () => {
     const res = executeToolCall("get_vehicle", { vehicle_name: "Tesla Model 3" }, evalFleet, {});
     expect(res.result.found).toBe(true);
     expect(res.result.fuel_type).toBe("Electric");
-    expect(res.result.weekly_rent).toBe("£350/week");
+    expect(res.result.weekly_rent).toBe(cat("Tesla Model 3").rent);
   });
 
   test("Scenario 40: Mercedes EQE search returns £450/week rent and £1000 deposit", () => {
     const res = executeToolCall("get_vehicle", { vehicle_name: "EQE" }, evalFleet, {});
     expect(res.result.found).toBe(true);
-    expect(res.result.weekly_rent).toBe("£450/week");
-    expect(res.result.deposit).toBe("£1000");
+    expect(res.result.weekly_rent).toBe(cat("Mercedes EQE").rent);
+    expect(res.result.deposit).toBe(cat("Mercedes EQE").dep);
   });
 
   test("Scenario 41: Legal / claim inquiry ('my solicitor wants to speak with you') triggers human handoff", () => {
@@ -680,7 +691,7 @@ describe("Transcript Evaluation Suite (40+ Real World Scenarios)", () => {
     expect(res.result.comparisons).toHaveLength(2);
     expect(res.result.comparisons[0].name).toContain("Mercedes");
     expect(res.result.comparisons[0].fuel_type).toBe("Diesel");
-    expect(res.result.comparisons[0].weekly_rent).toBe("£320/week");
+    expect(res.result.comparisons[0].weekly_rent).toBe(cat("Mercedes E220D").rent);
     expect(res.result.comparisons[1].name).toContain("Prius");
   });
 
