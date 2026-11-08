@@ -130,7 +130,11 @@ describe("Email Templates Foundation", () => {
       expect(html).toContain("Mercedes-Benz EQE");
       expect(html).toContain(photoUrl);
       expect(html).toContain("Manage Fleet Expiries");
-      expect(html).toContain(VCH_HEADER_LOGO_URL);
+      // Fleet summary uses the website's square logo at a true 1:1 size (no stretching).
+      expect(html).toContain('src="https://www.virtual-carhire.co.uk/assets/logo.png"');
+      expect(html).toMatch(/assets\/logo\.png" alt="Virtual Car Hire" width="(\d+)" height="\1"/);
+      expect(html).toContain("https://hq.virtual-carhire.co.uk/");
+      expect(html).not.toMatch(/hero|flyer/i);
       expect(html).toContain(VCH_FOOTER_LOGO_URL);
     });
   });

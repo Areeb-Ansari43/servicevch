@@ -1,54 +1,25 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { runExpiryScan } from "@/routes/api/public/expiry-alerts";
 import { sendTelegramAlert } from "@/lib/telegram.server";
-import { getRuntimeEnv } from "@/integrations/supabase/config";
-
-function verifyCronSecret(request: Request): boolean {
-  const cronSecret =
-    getRuntimeEnv("CRON_SECRET") ||
-    getRuntimeEnv("PORTAL_SHARED_SECRET") ||
-    process.env.CRON_SECRET ||
-    process.env.PORTAL_SHARED_SECRET ||
-    "vch-cron-secret-2026";
-
-  const authHeader = request.headers.get("Authorization") || "";
-  const headerSecret = request.headers.get("X-Cron-Secret") || "";
-
-  if (headerSecret && headerSecret === cronSecret) return true;
-  if (authHeader.startsWith("Bearer ") && authHeader.slice(7) === cronSecret) return true;
-
-  if (process.env.NODE_ENV === "development") return true;
-
-  return false;
-}
 
 export const Route = createFileRoute("/api/jobs/watchdog")({
   server: {
     handlers: {
-      GET: async ({ request }) => {
-        if (!verifyCronSecret(request)) {
-          return new Response(JSON.stringify({ error: "Unauthorized" }), {
-            status: 401,
-            headers: { "Content-Type": "application/json" },
-          });
-        }
-        return runWatchdogCheck();
-      },
-      POST: async ({ request }) => {
-        if (!verifyCronSecret(request)) {
-          return new Response(JSON.stringify({ error: "Unauthorized" }), {
-            status: 401,
-            headers: { "Content-Type": "application/json" },
-          });
-        }
-        return runWatchdogCheck();
-      },
+      GET: async ({ request }) => guarded(request),
+      POST: async ({ request }) => guarded(request),
     },
   },
 });
 
+async function guarded(request: Request): Promise<Response> {
+  const { verifyCronRequest, cronAuthErrorResponse } = await import("@/lib/cron-auth.server");
+  const auth = verifyCronRequest(request);
+  if (!auth.ok) return cronAuthErrorResponse(auth);
+  return runWatchdogCheck();
+}
+
 export async function runWatchdogCheck() {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  // Generated DB types are out of date for job_runs/email_log; query untyped.
+  const supabaseAdmin: any = (await import("@/integrations/supabase/client.server")).supabaseAdmin;
 
   // Determine start of today in Europe/London timezone ISO format
   const londonToday = new Intl.DateTimeFormat("en-CA", {
@@ -58,7 +29,21 @@ export async function runWatchdogCheck() {
     day: "2-digit",
   }).format(new Date());
 
-  const startOfTodayISO = `${londonToday}T00:00:00.000Z`;
+  const { runExpiryScan, londonMidnightUtcISO, EXPIRY_JOB_NAME } =
+    await import("@/lib/expiry-scan.server");
+  const startOfTodayISO = londonMidnightUtcISO();
+
+  let watchdogRunId: string | null = null;
+  try {
+    const { data } = await supabaseAdmin
+      .from("job_runs")
+      .insert({ job_name: "job-watchdog", status: "running", started_at: new Date().toISOString() })
+      .select("id")
+      .single();
+    watchdogRunId = (data as any)?.id ?? null;
+  } catch (err) {
+    console.warn("[Watchdog] Could not insert job_runs row:", err);
+  }
 
   // 1. Check job runs from today for expiry-alerts
   const { data: recentRuns, error: jobError } = await supabaseAdmin
@@ -71,24 +56,30 @@ export async function runWatchdogCheck() {
     console.error("[Watchdog] Error querying job_runs:", jobError);
   }
 
-  const runs = recentRuns ?? [];
-  const expiryRun = runs.find((r) => r.job_name === "expiry-alerts" && r.status === "success");
+  const runs: any[] = recentRuns ?? [];
+  const expiryRun = runs.find((r) => r.job_name === EXPIRY_JOB_NAME && r.status === "success");
 
   let executedFallbackScan = false;
   let fallbackScanCounts = null;
 
   // If expiry-alerts job is missing or failed today, execute fallback run and send Telegram alert
   if (!expiryRun) {
-    console.warn("[Watchdog] Expiry alerts job missing or failed for today. Running fallback scan...");
+    console.warn(
+      "[Watchdog] Expiry alerts job missing or failed for today. Running fallback scan...",
+    );
 
     const alertMessage = `⚠️ <b>VCH Watchdog Warning:</b> Expiry alerts scan was missing or failed today (${londonToday}). Executing automatic fallback scan now.`;
     await sendTelegramAlert(alertMessage);
 
     try {
-      const scanRes = await runExpiryScan();
-      const scanData = await scanRes.json();
-      executedFallbackScan = true;
-      fallbackScanCounts = scanData;
+      const scanData = await runExpiryScan({ trigger: "watchdog" });
+      executedFallbackScan = scanData.ok;
+      fallbackScanCounts = scanData as any;
+      if (!scanData.ok) {
+        await sendTelegramAlert(
+          `🚨 <b>VCH Watchdog Critical Alert:</b> Fallback expiry scan failed: ${(scanData.errors[0] || "unknown error").slice(0, 300)}`,
+        );
+      }
     } catch (err: any) {
       console.error("[Watchdog] Error executing fallback expiry scan:", err);
       const errMessage = `🚨 <b>VCH Watchdog Critical Alert:</b> Fallback expiry scan failed! Error: ${err.message || err}`;
@@ -108,7 +99,7 @@ export async function runWatchdogCheck() {
     console.error("[Watchdog] Error querying email_log failed records:", logError);
   }
 
-  const failedEmails = failedLogs ?? [];
+  const failedEmails: any[] = failedLogs ?? [];
   if (failedEmails.length > 0) {
     console.warn(`[Watchdog] Found ${failedEmails.length} failed email send(s) today.`);
     const details = failedEmails
@@ -122,6 +113,26 @@ export async function runWatchdogCheck() {
 
   const isOk = expiryRun !== undefined || executedFallbackScan;
 
+  if (watchdogRunId) {
+    try {
+      await supabaseAdmin
+        .from("job_runs")
+        .update({
+          status: isOk ? "success" : "failed",
+          completed_at: new Date().toISOString(),
+          counts: {
+            executedFallbackScan,
+            runsCountToday: runs.length,
+            failedEmailsCountToday: failedEmails.length,
+          },
+          error_message: isOk ? null : "Expiry scan missing today and fallback scan failed",
+        })
+        .eq("id", watchdogRunId);
+    } catch (err) {
+      console.warn("[Watchdog] Could not update job_runs row:", err);
+    }
+  }
+
   return new Response(
     JSON.stringify({
       ok: isOk,
@@ -131,6 +142,6 @@ export async function runWatchdogCheck() {
       fallbackScanCounts,
       failedEmailsCountToday: failedEmails.length,
     }),
-    { status: isOk ? 200 : 500, headers: { "Content-Type": "application/json" } }
+    { status: isOk ? 200 : 500, headers: { "Content-Type": "application/json" } },
   );
 }

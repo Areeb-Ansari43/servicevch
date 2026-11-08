@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { getRuntimeEnv } from "@/integrations/supabase/config";
 import { checkDurableRateLimit, hmacSha256 } from "./request-code";
 import { logPortalAuthEvent } from "@/lib/portal-auth-logger";
+import { createEphemeralAuthClient } from "@/lib/supabase-ephemeral.server";
+import { checkPortalSecret, jsonResponse } from "@/lib/portal-secret.server";
 
 export const Route = createFileRoute("/api/public/portal-auth/verify-code")({
   server: {
@@ -13,16 +14,28 @@ export const Route = createFileRoute("/api/public/portal-auth/verify-code")({
 });
 
 export async function handleVerifyCode(request: Request): Promise<Response> {
-  // 1. Secret verification
-  const portalSecret = getRuntimeEnv("PORTAL_SHARED_SECRET");
-  const reqSecret = request.headers.get("X-Portal-Secret");
+  try {
+    return await handleVerifyCodeInner(request);
+  } catch (err: any) {
+    await logPortalAuthEvent(
+      "unknown",
+      "verify_code",
+      "CRM_INTERNAL_ERROR",
+      err?.message || String(err),
+    );
+    return jsonResponse(
+      { error: "Authentication service error.", code: "crm_internal_error" },
+      500,
+    );
+  }
+}
 
-  if (!portalSecret || !reqSecret || reqSecret !== portalSecret) {
-    await logPortalAuthEvent("unknown", "verify_code", "UNAUTHORIZED", "Invalid X-Portal-Secret");
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
+async function handleVerifyCodeInner(request: Request): Promise<Response> {
+  // 1. Shared-secret handshake with the website proxy
+  const secret = checkPortalSecret(request);
+  if (!secret.ok) {
+    await logPortalAuthEvent("unknown", "verify_code", secret.code.toUpperCase(), secret.reason);
+    return jsonResponse({ error: "Unauthorized", code: secret.code }, secret.status);
   }
 
   let body: any = {};
@@ -40,25 +53,36 @@ export async function handleVerifyCode(request: Request): Promise<Response> {
 
   const genericInvalidError = new Response(
     JSON.stringify({ error: "Invalid or expired verification code." }),
-    { status: 400, headers: { "Content-Type": "application/json" } }
+    { status: 400, headers: { "Content-Type": "application/json" } },
   );
 
   if (!email || !code || !/^\d{6}$/.test(code) || email === "admin@fa-ibi.co.uk") {
-    await logPortalAuthEvent(email || "unknown", "verify_code", "INVALID_INPUT", "Email or 6-digit code format invalid");
+    await logPortalAuthEvent(
+      email || "unknown",
+      "verify_code",
+      "INVALID_INPUT",
+      "Email or 6-digit code format invalid",
+    );
     return genericInvalidError;
   }
 
   // 2. Rate limit verify attempts: 10 per 15 minutes per email and end-user IP
-  const clientIp = request.headers.get("X-Client-IP") || request.headers.get("cf-connecting-ip") || "unknown";
+  const clientIp =
+    request.headers.get("X-Client-IP") || request.headers.get("cf-connecting-ip") || "unknown";
 
   const ipAllowed = await checkDurableRateLimit(`ip:${clientIp}`, "verify_code", 10, 15);
   const emailAllowed = await checkDurableRateLimit(`email:${email}`, "verify_code", 10, 15);
 
   if (!ipAllowed || !emailAllowed) {
-    await logPortalAuthEvent(email, "verify_code", "RATE_LIMITED", `Verification rate limit exceeded (IP: ${clientIp})`);
+    await logPortalAuthEvent(
+      email,
+      "verify_code",
+      "RATE_LIMITED",
+      `Verification rate limit exceeded (IP: ${clientIp})`,
+    );
     return new Response(
       JSON.stringify({ error: "Too many failed attempts. Please try again later." }),
-      { status: 429, headers: { "Content-Type": "application/json" } }
+      { status: 429, headers: { "Content-Type": "application/json" } },
     );
   }
 
@@ -73,7 +97,14 @@ export async function handleVerifyCode(request: Request): Promise<Response> {
     .order("created_at", { ascending: false })
     .limit(1);
 
-  if (error || !rows || rows.length === 0) {
+  if (error) {
+    await logPortalAuthEvent(email, "verify_code", "OTP_LOOKUP_FAILED", error.message);
+    return jsonResponse(
+      { error: "Authentication service error.", code: "crm_internal_error" },
+      500,
+    );
+  }
+  if (!rows || rows.length === 0) {
     await logPortalAuthEvent(email, "verify_code", "NO_ACTIVE_CODE", "No unconsumed OTP row found");
     return genericInvalidError;
   }
@@ -87,7 +118,10 @@ export async function handleVerifyCode(request: Request): Promise<Response> {
 
   // Expiry check (10 minutes)
   if (new Date(row.expires_at).getTime() < Date.now()) {
-    await supabaseAdmin.from("login_otps").update({ consumed: true } as any).eq("id", row.id);
+    await supabaseAdmin
+      .from("login_otps")
+      .update({ consumed: true } as any)
+      .eq("id", row.id);
     await logPortalAuthEvent(email, "verify_code", "EXPIRED_CODE", "OTP expired (> 10 mins)");
     return genericInvalidError;
   }
@@ -108,12 +142,20 @@ export async function handleVerifyCode(request: Request): Promise<Response> {
     .maybeSingle();
 
   if (driverMatch && (driverMatch.active === false || driverMatch.deleted_at)) {
-    await logPortalAuthEvent(email, "verify_code", "ACCOUNT_DISABLED", "Driver profile missing or inactive");
+    await logPortalAuthEvent(
+      email,
+      "verify_code",
+      "ACCOUNT_DISABLED",
+      "Driver profile missing or inactive",
+    );
     return genericInvalidError;
   }
 
   // Mark code as single-use consumed (updating both consumed and used)
-  await supabaseAdmin.from("login_otps").update({ consumed: true } as any).eq("id", row.id);
+  await supabaseAdmin
+    .from("login_otps")
+    .update({ consumed: true } as any)
+    .eq("id", row.id);
 
   // Mint magiclink link
   const { data: link, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
@@ -122,25 +164,33 @@ export async function handleVerifyCode(request: Request): Promise<Response> {
   });
 
   if (linkErr || !link?.properties?.hashed_token) {
-    await logPortalAuthEvent(email, "verify_code", "SYSTEM_ERROR", linkErr?.message || "Failed generateLink magiclink");
-    return new Response(JSON.stringify({ error: "Failed to mint login session." }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    await logPortalAuthEvent(
+      email,
+      "session",
+      "SESSION_MINT_FAILED",
+      linkErr?.message || "Failed generateLink magiclink",
+    );
+    return jsonResponse({ error: "Failed to mint login session.", code: "session_failed" }, 500);
   }
 
-  // Server-side exchange of token_hash for real access_token and refresh_token
-  const { data: sessionRes, error: sessionErr } = await supabaseAdmin.auth.verifyOtp({
+  // Server-side exchange of token_hash for a real session. Uses a throwaway client: calling
+  // verifyOtp on supabaseAdmin would store the driver's session on the shared admin client.
+  const { data: sessionRes, error: sessionErr } = await createEphemeralAuthClient().auth.verifyOtp({
     token_hash: link.properties.hashed_token,
     type: "magiclink",
   });
 
   if (sessionErr || !sessionRes.session) {
-    await logPortalAuthEvent(email, "verify_code", "SYSTEM_ERROR", sessionErr?.message || "Failed verifyOtp session mint");
-    return new Response(JSON.stringify({ error: "Failed to establish login session." }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    await logPortalAuthEvent(
+      email,
+      "session",
+      "SESSION_EXCHANGE_FAILED",
+      sessionErr?.message || "Failed verifyOtp session mint",
+    );
+    return jsonResponse(
+      { error: "Failed to establish login session.", code: "session_failed" },
+      500,
+    );
   }
 
   await logPortalAuthEvent(email, "verify_code", "SUCCESS", "Session established successfully");
@@ -157,6 +207,6 @@ export async function handleVerifyCode(request: Request): Promise<Response> {
         email,
       },
     }),
-    { status: 200, headers: { "Content-Type": "application/json" } }
+    { status: 200, headers: { "Content-Type": "application/json" } },
   );
 }

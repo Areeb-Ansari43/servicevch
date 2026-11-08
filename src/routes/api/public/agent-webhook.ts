@@ -2,7 +2,15 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
 import { getRuntimeEnv } from "@/integrations/supabase/config";
-import { sendWhatsAppText, sendWhatsAppImageButtons, sendWhatsAppImage, sendWhatsAppTypingIndicator } from "@/lib/meta-whatsapp.server";
+import {
+  sendWhatsAppText,
+  sendWhatsAppButtons,
+  sendWhatsAppImageButtons,
+  sendWhatsAppImage,
+  sendWhatsAppTypingIndicator,
+} from "@/lib/meta-whatsapp.server";
+import { getVehicleWeeklyPrice } from "@/lib/fleet-data";
+import { getVehicleDefaultDeposit } from "@/lib/contract-helpers";
 import { callGeminiProvider, callSecondaryProvider, sanitizeErrorMessage } from "@/lib/ai-providers";
 import { runAgentTurn, sanitizeOutgoingMessage, type LeadContext, type FleetVehicleItem } from "@/lib/ai-agent";
 import { CRM_BASE_URL, WEBSITE_BASE_URL } from "@/lib/domain-config";
@@ -1179,6 +1187,51 @@ export async function callGroqFallback(
   return callSecondaryAiFallback(system, userText, geminiErrorReason);
 }
 
+type BotCatalogRow = Parameters<typeof runAgentTurn>[0]["customCatalog"] extends
+  | (infer T)[]
+  | undefined
+  ? T
+  : never;
+// bot_settings / bot_fleet_catalog are not in the generated DB types yet.
+type UntypedDb = {
+  from: (table: string) => {
+    select: (cols: string) => {
+      eq: (
+        col: string,
+        val: unknown,
+      ) => {
+        maybeSingle: () => Promise<{ data: { value?: unknown } | null }>;
+        order: (
+          col: string,
+          opts: { ascending: boolean },
+        ) => Promise<{ data: BotCatalogRow[] | null; error: unknown }>;
+      };
+    };
+  };
+};
+
+async function loadBotOverrides(): Promise<{ prompt?: string; catalog?: BotCatalogRow[] }> {
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as unknown as UntypedDb;
+    const [promptRes, catalogRes] = await Promise.all([
+      db.from("bot_settings").select("value").eq("key", "system_prompt").maybeSingle(),
+      db
+        .from("bot_fleet_catalog")
+        .select("*")
+        .eq("active", true)
+        .order("weekly_rent", { ascending: true }),
+    ]);
+    const prompt = (promptRes.data?.value as string | undefined)?.trim() || undefined;
+    const rows = catalogRes.data;
+    const catalog = !catalogRes.error && Array.isArray(rows) && rows.length > 0 ? rows : undefined;
+    return { prompt, catalog };
+  } catch (err) {
+    console.warn("[agent-webhook] Could not load bot overrides, using defaults:", err);
+    return {};
+  }
+}
+
 async function generateReply(
   history: Turn[],
   latest: string,
@@ -1205,12 +1258,18 @@ async function generateReply(
     .pop()?.content;
 
   try {
+    // Load the staff-edited prompt and catalogue with the service-role client. The browser
+    // client used inside ai-agent has no session here, so RLS (staff-only) would hide them
+    // and the bot would silently fall back to the built-in defaults.
+    const overrides = await loadBotOverrides();
     const turnResult = await runAgentTurn({
       history,
       latest,
       context: leadContext || {},
       fleet: fleetItems,
       lastBotMessage,
+      customSystemPrompt: overrides.prompt,
+      customCatalog: overrides.catalog,
     });
 
     return {

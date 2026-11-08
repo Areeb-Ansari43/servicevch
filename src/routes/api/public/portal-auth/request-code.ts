@@ -5,12 +5,14 @@ import { sendWhatsAppText } from "@/lib/meta-whatsapp.server";
 import { logPortalAuthEvent } from "@/lib/portal-auth-logger";
 import { render2FATemplate } from "@/lib/email-templates";
 import { sendEmailDirect } from "@/lib/email-sender.server";
+import { createEphemeralAuthClient } from "@/lib/supabase-ephemeral.server";
+import { checkPortalSecret, jsonResponse } from "@/lib/portal-secret.server";
 
 export async function checkDurableRateLimit(
   key: string,
   action: string,
   limit: number,
-  windowMinutes = 15
+  windowMinutes = 15,
 ): Promise<boolean> {
   const windowAgo = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString();
 
@@ -41,7 +43,7 @@ export async function hmacSha256(data: string): Promise<string> {
     enc.encode(pepper),
     { name: "HMAC", hash: "SHA-256" },
     false,
-    ["sign"]
+    ["sign"],
   );
   const signature = await crypto.subtle.sign("HMAC", key, enc.encode(data));
   return Array.from(new Uint8Array(signature))
@@ -78,104 +80,159 @@ export const Route = createFileRoute("/api/public/portal-auth/request-code")({
   },
 });
 
+/**
+ * Internal result codes returned in the JSON `code` field (the website logs them; users see
+ * friendly text only):
+ *   missing_config | missing_header | secret_mismatch | invalid_input | rate_limited |
+ *   invalid_credentials | account_disabled | otp_store_failed | email_send_failed | crm_internal_error
+ */
 export async function handleRequestCode(request: Request): Promise<Response> {
-  // 1. Secret verification
-  const portalSecret = getRuntimeEnv("PORTAL_SHARED_SECRET");
-  const reqSecret = request.headers.get("X-Portal-Secret");
+  try {
+    return await handleRequestCodeInner(request);
+  } catch (err: any) {
+    await logPortalAuthEvent(
+      "unknown",
+      "request_code",
+      "CRM_INTERNAL_ERROR",
+      err?.message || String(err),
+    );
+    return jsonResponse(
+      { error: "Authentication service error.", code: "crm_internal_error" },
+      500,
+    );
+  }
+}
 
-  if (!portalSecret || !reqSecret || reqSecret !== portalSecret) {
-    await logPortalAuthEvent("unknown", "request_code", "UNAUTHORIZED", "Invalid X-Portal-Secret");
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
+async function handleRequestCodeInner(request: Request): Promise<Response> {
+  // 1. Shared-secret handshake with the website proxy
+  const secret = checkPortalSecret(request);
+  if (!secret.ok) {
+    await logPortalAuthEvent("unknown", "request_code", secret.code.toUpperCase(), secret.reason);
+    return jsonResponse({ error: "Unauthorized", code: secret.code }, secret.status);
   }
 
-  // Parse body
   let body: any = {};
   try {
     body = await request.json();
   } catch {
-    return new Response(JSON.stringify({ error: "Invalid request payload" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
+    return jsonResponse({ error: "Invalid request payload", code: "invalid_input" }, 400);
   }
 
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   const password = typeof body.password === "string" ? body.password : "";
 
   if (!email || !password || email === "admin@fa-ibi.co.uk") {
-    await logPortalAuthEvent(email || "unknown", "request_code", "INVALID_INPUT", "Email or password missing or forbidden email");
-    return new Response(JSON.stringify({ error: "Invalid email or password" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
+    await logPortalAuthEvent(
+      email || "unknown",
+      "request_code",
+      "INVALID_INPUT",
+      "Email or password missing or forbidden email",
+    );
+    return jsonResponse({ error: "Invalid email or password", code: "invalid_input" }, 400);
   }
 
-  // 2. Durable rate limiting by End-User IP (X-Client-IP) and Email (5 requests / 15 mins)
-  const clientIp = request.headers.get("X-Client-IP") || request.headers.get("cf-connecting-ip") || "unknown";
-
+  // 2. Durable rate limiting by end-user IP (X-Client-IP) and email (5 requests / 15 mins)
+  const clientIp =
+    request.headers.get("X-Client-IP") || request.headers.get("cf-connecting-ip") || "unknown";
   const ipAllowed = await checkDurableRateLimit(`ip:${clientIp}`, "request_code", 5, 15);
   const emailAllowed = await checkDurableRateLimit(`email:${email}`, "request_code", 5, 15);
-
   if (!ipAllowed || !emailAllowed) {
-    await logPortalAuthEvent(email, "request_code", "RATE_LIMITED", `IP or email rate limit exceeded (IP: ${clientIp})`);
-    return new Response(JSON.stringify({ error: "Too many requests. Please try again later." }), {
-      status: 429,
-      headers: { "Content-Type": "application/json" },
-    });
+    await logPortalAuthEvent(
+      email,
+      "request_code",
+      "RATE_LIMITED",
+      "IP or email rate limit exceeded",
+    );
+    return jsonResponse(
+      { error: "Too many requests. Please try again later.", code: "rate_limited" },
+      429,
+    );
   }
 
-  const genericAuthError = new Response(JSON.stringify({ error: "Invalid email or password" }), {
-    status: 400,
-    headers: { "Content-Type": "application/json" },
-  });
+  const invalidCredentials = () =>
+    jsonResponse({ error: "Invalid email or password", code: "invalid_credentials" }, 400);
 
-  // 3. Verify driver credentials via Supabase Auth
-  const { data: authRes, error: authErr } = await supabaseAdmin.auth.signInWithPassword({
+  // 3. Password check on a throwaway client (never on supabaseAdmin, see supabase-ephemeral.server.ts)
+  const authClient = createEphemeralAuthClient();
+  const { data: authRes, error: authErr } = await authClient.auth.signInWithPassword({
     email,
     password,
   });
-
   if (authErr || !authRes.user) {
-    await logPortalAuthEvent(email, "request_code", "INVALID_CREDENTIALS", authErr?.message || "Invalid password");
-    return genericAuthError;
+    const status = (authErr as any)?.status;
+    if (status && status >= 500) {
+      await logPortalAuthEvent(
+        email,
+        "password_check",
+        "AUTH_PROVIDER_ERROR",
+        authErr?.message || "Supabase Auth 5xx",
+      );
+      return jsonResponse(
+        { error: "Authentication service error.", code: "crm_internal_error" },
+        502,
+      );
+    }
+    await logPortalAuthEvent(
+      email,
+      "password_check",
+      "INVALID_CREDENTIALS",
+      authErr?.message || "Invalid password",
+    );
+    return invalidCredentials();
   }
+  // Drop the user session immediately; we only needed to verify the password.
+  void authClient.auth.signOut({ scope: "local" }).catch(() => {});
 
-  // Restrict to active driver portal customer accounts
-  const { data: driverMatch } = await supabaseAdmin
+  // Restrict to active driver portal accounts
+  const { data: driverMatch, error: driverErr } = await supabaseAdmin
     .from("driver_tracks")
     .select("id, active, deleted_at, phone")
     .or(`auth_user_id.eq.${authRes.user.id},email.ilike.${email}`)
+    .limit(1)
     .maybeSingle();
 
+  if (driverErr) {
+    await logPortalAuthEvent(email, "password_check", "DRIVER_LOOKUP_FAILED", driverErr.message);
+    return jsonResponse(
+      { error: "Authentication service error.", code: "crm_internal_error" },
+      500,
+    );
+  }
   if (!driverMatch || driverMatch.active === false || driverMatch.deleted_at) {
-    await logPortalAuthEvent(email, "request_code", "ACCOUNT_DISABLED", "Driver profile missing, inactive, or soft-deleted");
-    return genericAuthError;
+    await logPortalAuthEvent(
+      email,
+      "password_check",
+      "ACCOUNT_DISABLED",
+      "Driver profile missing, inactive, or soft-deleted",
+    );
+    return invalidCredentials();
   }
 
-  // Check 30s resend cooldown
+  // 30s resend cooldown
   const thirtySecsAgo = new Date(Date.now() - 30 * 1000).toISOString();
   const { data: recentOtps } = await supabaseAdmin
     .from("login_otps")
     .select("created_at")
     .eq("email", email)
     .gte("created_at", thirtySecsAgo);
-
   if (recentOtps && recentOtps.length > 0) {
-    await logPortalAuthEvent(email, "request_code", "RATE_LIMITED", "30-second resend cooldown active");
-    return new Response(
-      JSON.stringify({ error: "Please wait 30 seconds before requesting another code." }),
-      { status: 429, headers: { "Content-Type": "application/json" } }
+    await logPortalAuthEvent(
+      email,
+      "request_code",
+      "RATE_LIMITED",
+      "30-second resend cooldown active",
+    );
+    return jsonResponse(
+      { error: "Please wait 30 seconds before requesting another code.", code: "rate_limited" },
+      429,
     );
   }
 
-  const code = String(Math.floor(100000 + Math.random() * 900000));
+  // 4. Store the hashed code (otp_hash + code_hash for schema compatibility)
+  const code = String((crypto.getRandomValues(new Uint32Array(1))[0] % 900000) + 100000);
   const codeHash = await hmacSha256(`${code}:${email}`);
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
-  // Invalidate all earlier unconsumed codes for this email.
   await supabaseAdmin
     .from("login_otps")
     .update({ consumed: true } as any)
@@ -189,47 +246,50 @@ export async function handleRequestCode(request: Request): Promise<Response> {
     expires_at: expiresAt,
     consumed: false,
   } as any);
-
   if (insertErr) {
-    await logPortalAuthEvent(email, "request_code", "SYSTEM_ERROR", insertErr.message);
-    return new Response(JSON.stringify({ error: "Failed to issue verification code" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    await logPortalAuthEvent(email, "otp_store", "OTP_STORE_FAILED", insertErr.message);
+    return jsonResponse(
+      { error: "Failed to issue verification code", code: "otp_store_failed" },
+      500,
+    );
   }
 
-  let deliveryMethod: "email" | "whatsapp" | "unsupported" = "email";
-  const driverPhone = driverMatch.phone || authRes.user.phone || null;
-
+  // 5. Deliver the code: email first (auth@fa-ibi.co.uk), WhatsApp as fallback
+  let deliveryMethod: "email" | "whatsapp" = "email";
   try {
     await sendOtpEmail(email, code);
-  } catch {
-    if (driverPhone) {
-      const waRes = await sendWhatsAppText({
-        phone: driverPhone,
-        text: `${code} is your Virtual Car Hire portal 2FA verification code. Expires in 10 minutes.`,
-      });
-      if (waRes.sent) {
-        deliveryMethod = "whatsapp";
-      } else {
-        deliveryMethod = "unsupported";
-      }
-    } else {
-      deliveryMethod = "unsupported";
+  } catch (err: any) {
+    const emailError = err?.message || "Email send failed";
+    await logPortalAuthEvent(email, "email_send", "EMAIL_SEND_FAILED", emailError);
+    const driverPhone = driverMatch.phone || authRes.user.phone || null;
+    const waRes = driverPhone
+      ? await sendWhatsAppText({
+          phone: driverPhone,
+          text: `${code} is your Virtual Car Hire portal 2FA verification code. Expires in 10 minutes.`,
+        })
+      : { sent: false };
+    if (!waRes.sent) {
+      return jsonResponse(
+        {
+          error: "We couldn't send your verification code. Please try again shortly.",
+          code: "email_send_failed",
+        },
+        502,
+      );
     }
+    deliveryMethod = "whatsapp";
   }
 
   await logPortalAuthEvent(email, "request_code", "SUCCESS", `Code issued via ${deliveryMethod}`);
 
-  return new Response(
-    JSON.stringify({
+  return jsonResponse(
+    {
       success: true,
       email,
       delivery: deliveryMethod,
-      message: deliveryMethod === "unsupported"
-        ? "No registered delivery channel available. Please contact support."
-        : "Verification code sent.",
-    }),
-    { status: 200, headers: { "Content-Type": "application/json" } }
+      code: "ok",
+      message: "Verification code sent.",
+    },
+    200,
   );
 }

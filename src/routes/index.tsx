@@ -58,6 +58,9 @@ import { TestAiProvidersCard } from "@/components/test-ai-card";
 import { BotInstructionsAdminCard } from "@/components/bot-instructions-card";
 import { BotFleetDataAdminCard } from "@/components/bot-fleet-card";
 import { ConversationEventsCard } from "@/components/conversation-events-card";
+import { SettingsCardBoundary } from "@/components/settings-card-boundary";
+import { EmailTestCard } from "@/components/email-test-card";
+import { runExpiryScanNowFn } from "@/lib/email-admin.functions";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -879,65 +882,6 @@ function DriverSearch({
   );
 }
 
-export async function sendTestEmail(
-  payload: {
-    recipient: string;
-    subject: string;
-    template_type: string;
-    template_data: Record<string, any>;
-  },
-  toast: (msg: string, type?: Toast["type"]) => void
-) {
-  toast(`Sending test email to ${payload.recipient}...`, "info");
-  try {
-    const { data, error } = await supabase.functions.invoke("send-email", {
-      body: payload,
-    });
-
-    if (error) {
-      let detailedError = error.message;
-      try {
-        if (error.context && typeof (error.context as any).json === "function") {
-          const errBody = await (error.context as any).json();
-          if (errBody?.error) detailedError = errBody.error;
-          else if (errBody?.message) detailedError = errBody.message;
-        } else if (error.context && typeof (error.context as any).text === "function") {
-          const errText = await (error.context as any).text();
-          try {
-            const parsed = JSON.parse(errText);
-            if (parsed?.error) detailedError = parsed.error;
-            else if (parsed?.message) detailedError = parsed.message;
-          } catch {
-            if (errText) detailedError = errText;
-          }
-        }
-      } catch {
-        // Fall back to error.message
-      }
-
-      if (data && typeof data === "object") {
-        if (data.error) detailedError = data.error;
-        else if (data.message) detailedError = data.message;
-      }
-
-      toast(`Failed to send test email: ${detailedError}`, "error");
-      return;
-    }
-
-    if (data && typeof data === "object") {
-      if (data.success === false || data.status === "failed") {
-        const msg = data.error || data.details?.message || data.message || "Unknown error";
-        toast(`Failed to send test email: ${msg}`, "error");
-        return;
-      }
-    }
-
-    toast(`Test email sent to ${payload.recipient}`);
-  } catch (err: any) {
-    toast(`Failed to send test email: ${err?.message || "Unexpected network error"}`, "error");
-  }
-}
-
 function PortalAccountsAdminCard({
   toast,
 }: {
@@ -1184,6 +1128,7 @@ function PortalAccountsAdminCard({
 }
 
 function JobRunsAdminCard() {
+  const runExpiryScanNow = useServerFn(runExpiryScanNowFn);
   const [jobRuns, setJobRuns] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1194,12 +1139,14 @@ function JobRunsAdminCard() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/admin/job-runs");
-      const data = await res.json();
-      if (!res.ok || !data.ok) {
-        throw new Error(data.error || "Failed to load job runs");
-      }
-      setJobRuns(data.jobRuns || []);
+      // Read with the signed-in session; job_runs has a staff-read RLS policy.
+      const { data, error } = await supabase
+        .from("job_runs" as any)
+        .select("*")
+        .order("started_at", { ascending: false })
+        .limit(30);
+      if (error) throw new Error(error.message);
+      setJobRuns((data as any[]) || []);
     } catch (err: any) {
       setError(err.message || "Failed to fetch job execution history");
     } finally {
@@ -1212,16 +1159,15 @@ function JobRunsAdminCard() {
     setScanResult(null);
     setError(null);
     try {
-      const res = await fetch("/api/public/expiry-alerts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) {
-        throw new Error(data.error || `HTTP ${res.status} error executing fleet summary scan`);
+      // Runs server-side with the staff session (no cron secret in the browser).
+      const data: any = await runExpiryScanNow();
+      await fetchJobRuns();
+      if (!data?.ok) {
+        throw new Error(
+          (data?.errors && data.errors[0]) || "Fleet expiry scan failed. See the Job Execution Log for details.",
+        );
       }
       setScanResult(data);
-      await fetchJobRuns();
     } catch (err: any) {
       setError(err.message || "Failed to run fleet expiry summary");
     } finally {
@@ -1369,9 +1315,11 @@ function JobRunsAdminCard() {
 function UserSettingsView({
   account,
   toast,
+  vehicles,
 }: {
   account: { email: string } | null;
   toast: (m: string, t?: Toast["type"]) => void;
+  vehicles: Vehicle[];
 }) {
   const email = account?.email || "admin@virtualcarhire.com";
   const [newPassword, setNewPassword] = useState("");
@@ -1456,432 +1404,213 @@ function UserSettingsView({
 
       <div className="grid gap-6 md:grid-cols-2">
         {/* ACCOUNT PROFILE CARD */}
-        <div
-          className="rounded-2xl border p-5"
-          style={{ borderColor: T.border, background: T.panel }}
-        >
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-[#ff6a00] to-[#ff9d4d] text-lg font-bold text-white shadow-md">
-              {email ? email[0].toUpperCase() : "A"}
+        <SettingsCardBoundary name="Account Profile">
+          <div
+            className="rounded-2xl border p-5"
+            style={{ borderColor: T.border, background: T.panel }}
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-[#ff6a00] to-[#ff9d4d] text-lg font-bold text-white shadow-md">
+                {email ? email[0].toUpperCase() : "A"}
+              </div>
+              <div>
+                <div className="text-base font-bold text-white">{email}</div>
+                <div className="inline-flex items-center gap-1.5 rounded-full border border-[#ff6a00]/30 bg-[#ff6a00]/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#ff8a3d]">
+                  Fleet Admin
+                </div>
+              </div>
             </div>
-            <div>
-              <div className="text-base font-bold text-white">{email}</div>
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-[#ff6a00]/30 bg-[#ff6a00]/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#ff8a3d]">
-                Fleet Admin
+
+            <div className="mt-6 space-y-3 border-t pt-4" style={{ borderColor: T.borderSoft }}>
+              <div className="flex justify-between text-xs">
+                <span style={{ color: T.muted }}>Account Type</span>
+                <span className="font-semibold text-white">CRM Staff Operator</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span style={{ color: T.muted }}>Access Role</span>
+                <span className="font-semibold text-[#ff8a3d]">Full Administrator</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span style={{ color: T.muted }}>Authentication Provider</span>
+                <span className="font-semibold text-white">Supabase Auth</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span style={{ color: T.muted }}>Status</span>
+                <span className="inline-flex items-center gap-1 font-semibold text-emerald-400">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Active Session
+                </span>
               </div>
             </div>
           </div>
 
-          <div className="mt-6 space-y-3 border-t pt-4" style={{ borderColor: T.borderSoft }}>
-            <div className="flex justify-between text-xs">
-              <span style={{ color: T.muted }}>Account Type</span>
-              <span className="font-semibold text-white">CRM Staff Operator</span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span style={{ color: T.muted }}>Access Role</span>
-              <span className="font-semibold text-[#ff8a3d]">Full Administrator</span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span style={{ color: T.muted }}>Authentication Provider</span>
-              <span className="font-semibold text-white">Supabase Auth</span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span style={{ color: T.muted }}>Status</span>
-              <span className="inline-flex items-center gap-1 font-semibold text-emerald-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Active Session
-              </span>
-            </div>
-          </div>
-        </div>
+        </SettingsCardBoundary>
 
         {/* CHANGE PASSWORD CARD */}
+        <SettingsCardBoundary name="Change Password">
+          <div
+            className="rounded-2xl border p-5"
+            style={{ borderColor: T.border, background: T.panel }}
+          >
+            <div className="flex items-center gap-2">
+              <Icon.Key className="h-5 w-5 text-[#ff6a00]" />
+              <h2 className="text-base font-bold text-white">Change Password</h2>
+            </div>
+            <p className="mt-1 text-xs text-[#9aa5b8]">
+              Update your account password securely via Supabase Auth.
+            </p>
+
+            <form onSubmit={handlePasswordUpdate} className="mt-4 space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-[#9aa5b8] mb-1">
+                  New Password
+                </label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Enter new password (min 6 chars)"
+                  className="w-full rounded-xl border bg-black/40 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-[#ff6a00] focus:outline-none"
+                  style={{ borderColor: T.borderSoft }}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#9aa5b8] mb-1">
+                  Confirm New Password
+                </label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm new password"
+                  className="w-full rounded-xl border bg-black/40 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-[#ff6a00] focus:outline-none"
+                  style={{ borderColor: T.borderSoft }}
+                />
+              </div>
+
+              {passwordSuccess && (
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-xs text-emerald-300">
+                  ✓ Password changed successfully!
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={updatingPassword}
+                className="mt-2 w-full rounded-xl bg-gradient-to-r from-[#ff6a00] to-[#ff9d4d] px-4 py-2.5 text-xs font-bold text-white shadow-md transition hover:opacity-90 disabled:opacity-50"
+              >
+                {updatingPassword ? "Updating Password..." : "Update Password"}
+              </button>
+            </form>
+          </div>
+        </SettingsCardBoundary>
+      </div>
+
+      {/* APP PREFERENCES */}
+      <SettingsCardBoundary name="Account Preferences">
         <div
           className="rounded-2xl border p-5"
           style={{ borderColor: T.border, background: T.panel }}
         >
           <div className="flex items-center gap-2">
-            <Icon.Key className="h-5 w-5 text-[#ff6a00]" />
-            <h2 className="text-base font-bold text-white">Change Password</h2>
+            <Icon.Cog className="h-5 w-5 text-[#ff6a00]" />
+            <h2 className="text-base font-bold text-white">Account Preferences</h2>
           </div>
           <p className="mt-1 text-xs text-[#9aa5b8]">
-            Update your account password securely via Supabase Auth.
+            Customize default navigation behavior and automated portal notifications.
           </p>
 
-          <form onSubmit={handlePasswordUpdate} className="mt-4 space-y-3">
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
             <div>
               <label className="block text-xs font-semibold text-[#9aa5b8] mb-1">
-                New Password
+                Default Landing View
               </label>
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Enter new password (min 6 chars)"
-                className="w-full rounded-xl border bg-black/40 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-[#ff6a00] focus:outline-none"
+              <select
+                value={startView}
+                onChange={(e) => setStartView(e.target.value)}
+                className="w-full rounded-xl border bg-black/40 px-3 py-2 text-xs text-white focus:border-[#ff6a00] focus:outline-none"
                 style={{ borderColor: T.borderSoft }}
-              />
+              >
+                <option value="/">Dashboard</option>
+                <option value="/vehicles">Vehicles</option>
+                <option value="/drivers">Drivers</option>
+                <option value="/whatsapp-leads">WhatsApp Leads</option>
+                <option value="/driver-mileage">Driver Mileage</option>
+                <option value="/accident-cases">Accident Cases</option>
+                <option value="/audit-logs">Audit Logs</option>
+              </select>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-[#9aa5b8] mb-1">
-                Confirm New Password
-              </label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Confirm new password"
-                className="w-full rounded-xl border bg-black/40 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-[#ff6a00] focus:outline-none"
-                style={{ borderColor: T.borderSoft }}
-              />
-            </div>
-
-            {passwordSuccess && (
-              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-xs text-emerald-300">
-                ✓ Password changed successfully!
+            <div className="flex items-center justify-between rounded-xl border p-3" style={{ borderColor: T.borderSoft, background: T.panel2 }}>
+              <div>
+                <div className="text-xs font-semibold text-white">Rent Alert Toasts</div>
+                <div className="text-[11px] text-[#8b95a8]">
+                  Display system alerts for overdue driver rent
+                </div>
               </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={updatingPassword}
-              className="mt-2 w-full rounded-xl bg-gradient-to-r from-[#ff6a00] to-[#ff9d4d] px-4 py-2.5 text-xs font-bold text-white shadow-md transition hover:opacity-90 disabled:opacity-50"
-            >
-              {updatingPassword ? "Updating Password..." : "Update Password"}
-            </button>
-          </form>
-        </div>
-      </div>
-
-      {/* APP PREFERENCES */}
-      <div
-        className="rounded-2xl border p-5"
-        style={{ borderColor: T.border, background: T.panel }}
-      >
-        <div className="flex items-center gap-2">
-          <Icon.Cog className="h-5 w-5 text-[#ff6a00]" />
-          <h2 className="text-base font-bold text-white">Account Preferences</h2>
-        </div>
-        <p className="mt-1 text-xs text-[#9aa5b8]">
-          Customize default navigation behavior and automated portal notifications.
-        </p>
-
-        <div className="mt-5 grid gap-4 md:grid-cols-2">
-          <div>
-            <label className="block text-xs font-semibold text-[#9aa5b8] mb-1">
-              Default Landing View
-            </label>
-            <select
-              value={startView}
-              onChange={(e) => setStartView(e.target.value)}
-              className="w-full rounded-xl border bg-black/40 px-3 py-2 text-xs text-white focus:border-[#ff6a00] focus:outline-none"
-              style={{ borderColor: T.borderSoft }}
-            >
-              <option value="/">Dashboard</option>
-              <option value="/vehicles">Vehicles</option>
-              <option value="/drivers">Drivers</option>
-              <option value="/whatsapp-leads">WhatsApp Leads</option>
-              <option value="/driver-mileage">Driver Mileage</option>
-              <option value="/accident-cases">Accident Cases</option>
-              <option value="/audit-logs">Audit Logs</option>
-            </select>
-          </div>
-
-          <div className="flex items-center justify-between rounded-xl border p-3" style={{ borderColor: T.borderSoft, background: T.panel2 }}>
-            <div>
-              <div className="text-xs font-semibold text-white">Rent Alert Toasts</div>
-              <div className="text-[11px] text-[#8b95a8]">
-                Display system alerts for overdue driver rent
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setRentAlerts(!rentAlerts)}
-              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                rentAlerts ? "bg-[#ff6a00]" : "bg-zinc-700"
-              }`}
-            >
-              <span
-                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                  rentAlerts ? "translate-x-4" : "translate-x-0"
+              <button
+                type="button"
+                onClick={() => setRentAlerts(!rentAlerts)}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  rentAlerts ? "bg-[#ff6a00]" : "bg-zinc-700"
                 }`}
-              />
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    rentAlerts ? "translate-x-4" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-5 flex justify-end">
+            <button
+              onClick={handleSavePreferences}
+              className="rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
+            >
+              Save Preferences
             </button>
           </div>
         </div>
+      </SettingsCardBoundary>
 
-        <div className="mt-5 flex justify-end">
-          <button
-            onClick={handleSavePreferences}
-            className="rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
-          >
-            Save Preferences
-          </button>
-        </div>
-      </div>
+      {/* Each card is isolated: one failing card shows a short error instead of crashing /settings. */}
+      <SettingsCardBoundary name="Bot Instructions">
+        <BotInstructionsAdminCard vehicles={vehicles} toast={toast} />
+      </SettingsCardBoundary>
 
-      {/* 2. BOT INSTRUCTIONS ADMIN CARD */}
-      <BotInstructionsAdminCard vehicles={data.vehicles} toast={toast} />
+      <SettingsCardBoundary name="Bot Fleet Catalogue">
+        <BotFleetDataAdminCard vehicles={vehicles} toast={toast} />
+      </SettingsCardBoundary>
 
-      {/* 3. BOT FLEET CATALOGUE & AVAILABILITY CARD */}
-      <BotFleetDataAdminCard vehicles={data.vehicles} toast={toast} />
+      <SettingsCardBoundary name="Test AI Providers">
+        <TestAiProvidersCard toast={toast} />
+      </SettingsCardBoundary>
 
-      {/* 4. TEST AI PROVIDERS */}
-      <TestAiProvidersCard toast={toast} />
+      <SettingsCardBoundary name="Conversation Events">
+        <ConversationEventsCard />
+      </SettingsCardBoundary>
 
-      {/* CONVERSATION EVENTS LOG CARD */}
-      <ConversationEventsCard />
+      <SettingsCardBoundary name="Job Execution Log">
+        <JobRunsAdminCard />
+      </SettingsCardBoundary>
 
-      {/* APPEARANCE CUSTOMISATION CARD */}
-      <JobRunsAdminCard />
-      <AppearanceSettingsCard toast={toast} />
+      <SettingsCardBoundary name="Appearance">
+        <AppearanceSettingsCard toast={toast} />
+      </SettingsCardBoundary>
 
-      {/* PORTAL ACCOUNTS & STRAY CREDENTIALS AUDIT */}
-      <PortalAccountsAdminCard toast={toast} />
+      <SettingsCardBoundary name="Portal Accounts">
+        <PortalAccountsAdminCard toast={toast} />
+      </SettingsCardBoundary>
 
-      {/* PORTAL 2FA & AUTH EVENTS LOG */}
-      <PortalAuthEventsAdminCard toast={toast} />
+      <SettingsCardBoundary name="2FA & Auth Security Events">
+        <PortalAuthEventsAdminCard toast={toast} />
+      </SettingsCardBoundary>
 
-      {/* EMAIL TEMPLATE PREVIEWS */}
-      <div
-        className="rounded-2xl border p-5"
-        style={{ borderColor: T.border, background: T.panel }}
-      >
-        <div className="flex items-center gap-2">
-          <Icon.Eye className="h-5 w-5 text-[#ff6a00]" />
-          <h2 className="text-base font-bold text-white">Email Template Previews</h2>
-        </div>
-        <p className="mt-1 text-xs text-[#9aa5b8]">
-          Send sample test copies of each branded HTML template to your email address ({email}) to inspect rendering and layout.
-        </p>
-
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {/* 1. 2FA CODE */}
-          <button
-            type="button"
-            onClick={() =>
-              sendTestEmail(
-                {
-                  recipient: email,
-                  subject: "[Test Preview] Your Verification Code",
-                  template_type: "2fa_code",
-                  template_data: {
-                    code: "849201",
-                    recipientName: email.split("@")[0] || "Admin",
-                    expiresInMinutes: 10,
-                  },
-                },
-                toast
-              )
-            }
-            className="flex flex-col items-start rounded-xl border p-3.5 text-left transition hover:border-[#ff6a00]/50 hover:bg-white/5"
-            style={{ borderColor: T.borderSoft, background: T.panel2 }}
-          >
-            <div className="text-xs font-bold text-white">2FA Verification Code</div>
-            <div className="mt-1 text-[11px] text-[#8b95a8]">
-              Sent via <span className="font-semibold text-[#ff8a3d]">auth@fa-ibi.co.uk</span>
-            </div>
-            <span className="mt-3 rounded-lg border border-[#ff6a00]/30 bg-[#ff6a00]/10 px-2.5 py-1 text-[10px] font-bold text-[#ff8a3d]">
-              Send Test Email &rarr;
-            </span>
-          </button>
-
-          {/* 2. FLEET SUMMARY */}
-          <button
-            type="button"
-            onClick={() =>
-              sendTestEmail(
-                {
-                  recipient: email,
-                  subject: "[Test Preview] Fleet MOT & PCO Expiry Summary — 2 vehicles",
-                  template_type: "fleet_summary",
-                  template_data: {
-                    headerLabel: "FLEET COMPLIANCE",
-                    headline: "Multiple vehicles have upcoming MOT & PCO expiries (2)",
-                    subtext: "Ensure your fleet remains road-legal, compliant, and ready for work.",
-                    vehicles: [
-                      {
-                        registration: "KN73XLB",
-                        model: "Mercedes-Benz EQE",
-                        photoUrl: `${WEBSITE_BASE_URL}/vehicle-artwork/mercedes-eqe-transparent.png`,
-                        motExpiry: "2026-10-15",
-                        motDaysRemaining: 5,
-                        pcoExpiry: "2026-10-20",
-                        pcoDaysRemaining: 10,
-                        detailsUrl: "#",
-                      },
-                      {
-                        registration: "KF19UCJ",
-                        model: "Toyota Corolla",
-                        photoUrl: `${WEBSITE_BASE_URL}/vehicle-artwork/toyota-corolla-estate-transparent.png`,
-                        motExpiry: "2026-10-18",
-                        motDaysRemaining: 8,
-                        detailsUrl: "#",
-                      },
-                    ],
-                    manageUrl: "https://hq.virtual-carhire.co.uk/vehicles",
-                  },
-                },
-                toast
-              )
-            }
-            className="flex flex-col items-start rounded-xl border p-3.5 text-left transition hover:border-[#ff6a00]/50 hover:bg-white/5"
-            style={{ borderColor: T.borderSoft, background: T.panel2 }}
-          >
-            <div className="text-xs font-bold text-white">Fleet-Wide MOT/PCO Summary</div>
-            <div className="mt-1 text-[11px] text-[#8b95a8]">
-              Sent via <span className="font-semibold text-sky-400">notifications@fa-ibi.co.uk</span>
-            </div>
-            <span className="mt-3 rounded-lg border border-[#ff6a00]/30 bg-[#ff6a00]/10 px-2.5 py-1 text-[10px] font-bold text-[#ff8a3d]">
-              Send Test Email &rarr;
-            </span>
-          </button>
-
-          {/* 3. DRIVER LICENCE SUMMARY */}
-          <button
-            type="button"
-            onClick={() =>
-              sendTestEmail(
-                {
-                  recipient: email,
-                  subject: "[Test Preview] Driver Licence Expiry Summary — 2 drivers",
-                  template_type: "driver_licence_summary",
-                  template_data: {
-                    headerLabel: "LICENCE COMPLIANCE",
-                    headline: "Driver Licences Expiring Soon",
-                    subtext: "Review driver licence expiry dates across your team and take required action.",
-                    introLine: "Hi there,\nHere are the upcoming driver licence expiry dates for your team:",
-                    drivers: [
-                      {
-                        driverId: "DRV-1029",
-                        name: "Alexander Wright",
-                        licenceType: "Full UK Licence",
-                        expiryDate: "2026-10-12",
-                        daysRemaining: 12,
-                        reviewUrl: "https://hq.virtual-carhire.co.uk/drivers",
-                      },
-                      {
-                        driverId: "DRV-1044",
-                        name: "David Miller",
-                        licenceType: "PCO Licence",
-                        expiryDate: "2026-10-25",
-                        daysRemaining: 25,
-                        reviewUrl: "https://hq.virtual-carhire.co.uk/drivers",
-                      },
-                    ],
-                    helpUrl: "https://hq.virtual-carhire.co.uk/drivers",
-                  },
-                },
-                toast
-              )
-            }
-            className="flex flex-col items-start rounded-xl border p-3.5 text-left transition hover:border-[#ff6a00]/50 hover:bg-white/5"
-            style={{ borderColor: T.borderSoft, background: T.panel2 }}
-          >
-            <div className="text-xs font-bold text-white">Driver Licence Expiry Summary</div>
-            <div className="mt-1 text-[11px] text-[#8b95a8]">
-              Sent via <span className="font-semibold text-sky-400">notifications@fa-ibi.co.uk</span>
-            </div>
-            <span className="mt-3 rounded-lg border border-[#ff6a00]/30 bg-[#ff6a00]/10 px-2.5 py-1 text-[10px] font-bold text-[#ff8a3d]">
-              Send Test Email &rarr;
-            </span>
-          </button>
-
-          {/* 4. RENT DUE TOMORROW */}
-          <button
-            type="button"
-            onClick={() => {
-              const name = email.split("@")[0] || "Driver";
-              sendTestEmail(
-                {
-                  recipient: email,
-                  subject: "[Test Preview] Reminder: Your rent is due tomorrow — Virtual Car Hire",
-                  template_type: "rent_due_tomorrow",
-                  template_data: {
-                    recipientName: name,
-                    headline: "Rent due tomorrow",
-                    subtext: "The following active drivers have weekly rent due tomorrow:",
-                    drivers: [
-                      {
-                        driverName: name,
-                        reg: "KN73XLB",
-                        vehicleModel: "Mercedes-Benz EQE",
-                        weeklyRent: 260.00,
-                        dueDate: "Tomorrow",
-                        rentStatus: "unpaid",
-                      },
-                    ],
-                    actionUrl: "https://virtual-carhire.co.uk/portal/dashboard",
-                    actionText: "View Drivers",
-                  },
-                },
-                toast
-              );
-            }}
-            className="flex flex-col items-start rounded-xl border p-3.5 text-left transition hover:border-[#ff6a00]/50 hover:bg-white/5"
-            style={{ borderColor: T.borderSoft, background: T.panel2 }}
-          >
-            <div className="text-xs font-bold text-white">Rent-Due-Tomorrow Reminder</div>
-            <div className="mt-1 text-[11px] text-[#8b95a8]">
-              Sent via <span className="font-semibold text-sky-400">notifications@fa-ibi.co.uk</span>
-            </div>
-            <span className="mt-3 rounded-lg border border-[#ff6a00]/30 bg-[#ff6a00]/10 px-2.5 py-1 text-[10px] font-bold text-[#ff8a3d]">
-              Send Test Email &rarr;
-            </span>
-          </button>
-
-          {/* 5. DRIVER MOT/PCO NOTICE */}
-          <button
-            type="button"
-            onClick={() => {
-              const name = email.split("@")[0] || "Driver";
-              sendTestEmail(
-                {
-                  recipient: email,
-                  subject: "[Test Preview] Important Notice: Upcoming Vehicle Expiry for KN73XLB",
-                  template_type: "driver_alert",
-                  template_data: {
-                    recipientName: name,
-                    headline: "Vehicle Expiry Notice — KN73XLB",
-                    subtext: "Please review the details below and schedule an inspection.",
-                    cards: [
-                      {
-                        iconType: "mot",
-                        title: "MOT Inspection Due",
-                        dateStr: "2026-10-15",
-                        vehicleReg: "KN73XLB",
-                        vehicleModel: "Mercedes-Benz EQE",
-                        daysRemaining: 5,
-                      },
-                      {
-                        iconType: "pco",
-                        title: "PCO Licence Renewal Due",
-                        dateStr: "2026-10-20",
-                        vehicleReg: "KN73XLB",
-                        vehicleModel: "Mercedes-Benz EQE",
-                        daysRemaining: 10,
-                      },
-                    ],
-                    actionUrl: "https://virtual-carhire.co.uk/portal/dashboard",
-                    actionText: "View Details in Portal",
-                  },
-                },
-                toast
-              );
-            }}
-            className="flex flex-col items-start rounded-xl border p-3.5 text-left transition hover:border-[#ff6a00]/50 hover:bg-white/5"
-            style={{ borderColor: T.borderSoft, background: T.panel2 }}
-          >
-            <div className="text-xs font-bold text-white">Driver Single-Vehicle MOT/PCO Notice</div>
-            <div className="mt-1 text-[11px] text-[#8b95a8]">
-              Sent via <span className="font-semibold text-emerald-400">driver-alerts@fa-ibi.co.uk</span>
-            </div>
-            <span className="mt-3 rounded-lg border border-[#ff6a00]/30 bg-[#ff6a00]/10 px-2.5 py-1 text-[10px] font-bold text-[#ff8a3d]">
-              Send Test Email &rarr;
-            </span>
-          </button>
-        </div>
-      </div>
+      <SettingsCardBoundary name="Email Template Previews">
+        <EmailTestCard email={email} toast={toast} />
+      </SettingsCardBoundary>
     </div>
   );
 }
@@ -2613,7 +2342,7 @@ export function FleetShell({ view }: { view: View }) {
           ) : view === "generations" ? (
             <GenerationsView vehicles={data.vehicles} drivers={data.drivers} toast={toast} />
           ) : view === "settings" ? (
-            <UserSettingsView account={account} toast={toast} />
+            <UserSettingsView account={account} toast={toast} vehicles={data.vehicles} />
           ) : view === "audit-logs" ? (
             <RouteErrorBoundary
               fallbackTitle="Audit Logs Error"

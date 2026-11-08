@@ -62,10 +62,14 @@ export const requestLoginCode = createServerFn({ method: "POST" })
     if (email === ALLOWED_EMAIL && password === ALLOWED_PASSWORD) {
       isStaff = true;
     } else {
-      const { data: authRes, error: authErr } = await supabaseAdmin.auth.signInWithPassword({
-        email,
-        password,
-      });
+      // Throwaway client: signInWithPassword on supabaseAdmin would store this user's session on
+      // the shared service-role client and break every later admin query in the isolate.
+      const { createEphemeralAuthClient } = await import("@/lib/supabase-ephemeral.server");
+      const { data: authRes, error: authErr } =
+        await createEphemeralAuthClient().auth.signInWithPassword({
+          email,
+          password,
+        });
 
       if (authErr || !authRes.user) {
         await logPortalAuthEvent(email, "request_code", "INVALID_CREDENTIALS", authErr?.message || "Invalid password", "CRM");

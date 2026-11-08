@@ -1,7 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 
-const PROHIBITED_DOMAINS = ["resend.dev", "onboarding@resend.dev"];
+// RETIRED as a public relay. The CRM now sends every email server-side through
+// src/lib/email-sender.server.ts (sendEmailDirect). This function only accepts calls that
+// present the project's service-role key, so it can no longer be used as an open relay.
+const ALLOWED_SENDER_DOMAIN = "fa-ibi.co.uk";
 
 const PROHIBITED_RECIPIENT_ADDRESSES = [
   "notifications@fa-ibi.co.uk",
@@ -9,40 +12,40 @@ const PROHIBITED_RECIPIENT_ADDRESSES = [
   "driver-alerts@fa-ibi.co.uk",
 ];
 
-function formatFromAddress(rawAddress: string): string {
-  const trimmed = rawAddress.trim();
-  if (trimmed.includes("<") && trimmed.includes(">")) {
-    return trimmed;
+function extractAddress(raw: string): string {
+  const trimmed = (raw || "").trim();
+  const m = trimmed.match(/<([^>]+)>/);
+  return (m ? m[1] : trimmed).trim().toLowerCase();
+}
+
+function assertAllowedSender(raw: string): string {
+  const address = extractAddress(raw);
+  if (!address.endsWith(`@${ALLOWED_SENDER_DOMAIN}`)) {
+    throw new Error(`Sender '${address}' is not allowed. All email must be sent from @${ALLOWED_SENDER_DOMAIN}.`);
   }
-  return `Virtual Car Hire <${trimmed}>`;
+  return `Virtual Car Hire <${address}>`;
+}
+
+function envSender(name: string, fallback: string): string {
+  const v = Deno.env.get(name);
+  return v && extractAddress(v).endsWith(`@${ALLOWED_SENDER_DOMAIN}`) ? v : fallback;
 }
 
 function getFromAddress(type: string): string {
-  const legacyFrom = Deno.env.get("EMAIL_FROM_ADDRESS");
-  let address = "";
-
-  if (type === "2fa" || type === "2fa_code") {
-    address = Deno.env.get("AUTH_EMAIL_FROM") || legacyFrom || "auth@fa-ibi.co.uk";
-  } else if (
-    type === "fleet_summary" ||
-    type === "driver_licence_summary" ||
-    type === "rent_due" ||
-    type === "rent_due_tomorrow"
-  ) {
-    address = Deno.env.get("NOTIFICATIONS_EMAIL_FROM") || legacyFrom || "notifications@fa-ibi.co.uk";
-  } else {
-    address = Deno.env.get("DRIVER_ALERTS_EMAIL_FROM") || legacyFrom || "driver-alerts@fa-ibi.co.uk";
+  if (type === "2fa" || type === "2fa_code") return assertAllowedSender(envSender("AUTH_EMAIL_FROM", "auth@fa-ibi.co.uk"));
+  if (["fleet_summary", "driver_licence_summary", "rent_due", "rent_due_tomorrow"].includes(type)) {
+    return assertAllowedSender(envSender("NOTIFICATIONS_EMAIL_FROM", "notifications@fa-ibi.co.uk"));
   }
+  return assertAllowedSender(envSender("DRIVER_ALERTS_EMAIL_FROM", "driver-alerts@fa-ibi.co.uk"));
+}
 
-  const formatted = formatFromAddress(address);
-
-  for (const domain of PROHIBITED_DOMAINS) {
-    if (formatted.toLowerCase().includes(domain)) {
-      throw new Error(`Sending address domain '${domain}' is strictly prohibited. Must use fa-ibi.co.uk sender domain.`);
-    }
-  }
-
-  return formatted;
+function isServiceRoleCaller(req: Request): boolean {
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  if (!serviceKey) return false;
+  const auth = req.headers.get("Authorization") || "";
+  const bearer = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  const apikey = (req.headers.get("apikey") || "").trim();
+  return bearer === serviceKey || apikey === serviceKey;
 }
 
 serve(async (req) => {
@@ -55,12 +58,13 @@ serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  const authHeader = req.headers.get("Authorization");
-  const apiKeyHeader = req.headers.get("apikey");
-  if (!authHeader && !apiKeyHeader) {
+  if (!isServiceRoleCaller(req)) {
     return new Response(
-      JSON.stringify({ success: false, error: "Unauthorized: Missing authorization header" }),
-      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({
+        success: false,
+        error: "send-email edge function is retired for client use. Emails are sent by the CRM server.",
+      }),
+      { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 
@@ -132,14 +136,7 @@ serve(async (req) => {
 
   let emailFromAddress = "";
   try {
-    const rawFrom = payload.from || getFromAddress(templateType);
-    emailFromAddress = formatFromAddress(rawFrom);
-
-    for (const domain of PROHIBITED_DOMAINS) {
-      if (emailFromAddress.toLowerCase().includes(domain)) {
-        throw new Error(`Sending domain '${domain}' is strictly prohibited. Must use fa-ibi.co.uk.`);
-      }
-    }
+    emailFromAddress = payload.from ? assertAllowedSender(payload.from) : getFromAddress(templateType);
   } catch (err: any) {
     const errText = err.message || "Invalid sender address";
     if (supabaseUrl && supabaseServiceKey) {
