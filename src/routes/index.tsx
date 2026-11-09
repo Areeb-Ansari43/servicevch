@@ -1018,7 +1018,7 @@ function PortalAccountsAdminCard({
         <div className="p-8 text-center text-xs text-[#8b95a8]">No portal accounts matching filter.</div>
       ) : (
         <div className="overflow-x-auto rounded-xl border" style={{ borderColor: T.borderSoft }}>
-          <table className="w-full text-left text-xs">
+          <table className="w-full min-w-[640px] text-left text-xs">
             <thead className="border-b bg-black/30 text-[10px] font-bold uppercase tracking-wider text-[#8b95a8]" style={{ borderColor: T.borderSoft }}>
               <tr>
                 <th className="px-4 py-3">User Email / Auth ID</th>
@@ -1255,7 +1255,7 @@ function JobRunsAdminCard() {
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full min-w-[640px] text-left text-xs">
             <thead>
               <tr className="border-b border-border/80 text-muted-foreground font-semibold">
                 <th className="pb-2">Job Name</th>
@@ -1895,7 +1895,7 @@ function AuditLogsView({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full min-w-[720px] text-left text-xs">
               <thead className="border-b bg-black/30 text-[10px] font-bold uppercase tracking-wider text-[#8b95a8]" style={{ borderColor: T.borderSoft }}>
                 <tr>
                   <th className="px-4 py-3">Timestamp</th>
@@ -2634,13 +2634,12 @@ function Sidebar({
       )}
 
       {/* Floating Panel (Expanded State) */}
-      {expanded && (
+      {/* Desktop: shown when pinned/hovered. Phone/tablet: only when opened from "More". */}
+      {(expanded || mobileOpen) && (
         <aside
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
-          className={`fixed top-3 bottom-3 left-3 z-50 flex w-[260px] flex-col rounded-[28px] border border-[var(--vch-border)] bg-[var(--vch-surface-solid)] p-3 shadow-2xl backdrop-blur-2xl transition-all duration-300
-            ${mobileOpen ? "translate-x-0" : "translate-x-0"}
-          `}
+          className={`fixed top-3 bottom-3 left-3 z-50 ${mobileOpen ? "flex" : "hidden lg:flex"} w-[260px] max-w-[calc(100vw-24px)] flex-col rounded-[28px] border border-[var(--vch-border)] bg-[var(--vch-surface-solid)] p-3 shadow-2xl backdrop-blur-2xl transition-all duration-300`}
         >
           {/* Edge Pin Toggle Handle */}
           <button
@@ -3113,7 +3112,7 @@ function Topbar({
         <Icon.Menu className="h-4 w-4" />
       </button>
       <span
-        className="inline-flex shrink-0 items-center gap-2 rounded-full px-2.5 py-1 text-[11px] font-semibold text-[#ff8a3d]"
+        className="hidden shrink-0 items-center gap-2 rounded-full px-2.5 py-1 text-[11px] font-semibold text-[#ff8a3d] sm:inline-flex"
         style={{ background: T.orangeSoft }}
       >
         <span className="relative flex h-1.5 w-1.5">
@@ -3125,8 +3124,8 @@ function Topbar({
           Live
         </span>
       </span>
-      <div className="flex min-w-0 flex-1 items-center justify-center">
-        <div className="flex items-center divide-x divide-white/[0.08] rounded-lg border border-white/[0.06] bg-white/[0.018] px-1 py-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+      <div className="flex min-w-0 flex-1 items-center justify-start overflow-x-auto [scrollbar-width:none] sm:justify-center [&::-webkit-scrollbar]:hidden">
+        <div className="flex shrink-0 items-center divide-x divide-white/[0.08] rounded-lg border border-white/[0.06] bg-white/[0.018] px-1 py-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
           {statusItems.map((item) => (
             <span
               key={item.label}
@@ -5469,7 +5468,7 @@ function DriversView({
         style={{ borderColor: T.border, background: T.panel }}
       >
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full min-w-[900px] text-left text-xs">
             <thead
               className="border-b text-[10px] uppercase tracking-wider text-[#8b95a8]"
               style={{ borderColor: T.borderSoft, background: "rgba(255,255,255,0.03)" }}
@@ -5515,7 +5514,7 @@ function DriversView({
                           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#ff6a00] to-[#ff9d4d] text-xs font-bold text-white shadow-sm">
                             {initials}
                           </div>
-                          <div>
+                          <div className="min-w-[150px]">
                             <button
                               type="button"
                               onClick={(e) => {
@@ -9174,7 +9173,8 @@ function LogsModal({
             No closed months yet. Use "End of Month" to record one.
           </div>
         ) : (
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[560px] text-sm">
           <thead
             className="text-left text-xs uppercase tracking-wider text-[#8b95a8]"
             style={{ background: T.panel2 }}
@@ -9209,6 +9209,7 @@ function LogsModal({
             ))}
           </tbody>
         </table>
+        </div>
         )}
 
         <h3 className="mb-2 mt-6 text-sm font-bold text-white">Odometer readings &amp; photos ({mine.length})</h3>
@@ -9217,7 +9218,8 @@ function LogsModal({
             No odometer photos submitted yet.
           </div>
         ) : (
-          <table className="w-full text-sm" data-odometer-readings>
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[520px] text-sm" data-odometer-readings>
             <thead className="text-left text-xs uppercase tracking-wider text-[#8b95a8]" style={{ background: T.panel2 }}>
               <tr>
                 <th className="px-3 py-2">Submitted</th>
@@ -9258,6 +9260,7 @@ function LogsModal({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>
