@@ -23,7 +23,6 @@ async function handle(request: Request): Promise<Response> {
   }
 
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { calculateNextPaymentDueDate } = await import("@/lib/fleet-data");
   const { getNextMotDate, getPcoExpiryDate } = await import("@/lib/vehicle-date-fields");
   const db = supabaseAdmin as any;
 
@@ -61,15 +60,12 @@ async function handle(request: Request): Promise<Response> {
     safe(db.from("driver_documents").select("*").eq("driver_id", driver.id)),
   ]);
 
-  // Next rent due date: same calculation the CRM and the rent-due reminder emails use.
-  const londonNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/London" }));
+  // Rent week: same rules as the CRM (Paid until the next due day arrives, then Unpaid).
+  const { rentState } = await import("@/lib/rent-cycle");
   const weeklyRent = Number(driver.weekly_rent || 0);
-  const nextDue =
-    weeklyRent > 0 && driver.rent_due_day
-      ? calculateNextPaymentDueDate(driver.start_date, driver.rent_due_day, londonNow)
-      : null;
-  const ymd = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const rent = weeklyRent > 0 && driver.rent_due_day ? rentState(driver) : null;
+  // When this week is paid, show the next due date; otherwise the date the unpaid week was due.
+  const nextDueStr = rent ? (rent.paid ? rent.nextDue : (rent.currentDue ?? rent.nextDue)) : null;
 
   // Signed links for documents (works whether or not the bucket is public).
   const docs = await Promise.all(
@@ -124,8 +120,9 @@ async function handle(request: Request): Promise<Response> {
         email: driver.email,
         weekly_rent: weeklyRent || null,
         rent_due_day: driver.rent_due_day || null,
-        next_due_date: nextDue ? ymd(nextDue) : null,
-        rent_status: driver.rent_status || null,
+        next_due_date: nextDueStr,
+        rent_status: rent ? (rent.paid ? "paid" : "unpaid") : driver.rent_status || null,
+        paid_for_week_due: driver.rent_paid_for_due_date ?? null,
         balance_due: Number(driver.balance_due || 0),
         current_mileage: Number(driver.current_mileage || 0),
         start_mileage: Number(driver.start_mileage || 0),

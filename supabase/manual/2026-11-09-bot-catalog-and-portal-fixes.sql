@@ -1,5 +1,6 @@
 -- =============================================================================
--- 2026-11-09  Bot Fleet Catalogue + Bot Instructions tables, portal odometer submissions
+-- 2026-11-09  Bot Fleet Catalogue + Bot Instructions tables, portal odometer submissions,
+--             weekly rent tracking (auto Unpaid each week + paid/missed history)
 --
 -- WHY: Settings > Bot Fleet Catalogue "Save" fails with
 --   "Could not find the table 'public.bot_fleet_catalog' in the schema cache".
@@ -263,5 +264,73 @@ BEGIN
   END IF;
 END $$;
 
--- 4. Make PostgREST see the new tables/columns immediately (fixes "not in the schema cache")
+-- 4. Weekly rent tracking
+-- Paid button marks a rent week paid; when the next due day arrives the driver goes back to
+-- Unpaid automatically, and a week that ends unpaid is logged as "missed".
+ALTER TABLE public.driver_tracks ADD COLUMN IF NOT EXISTS rent_paid_for_due_date date;
+ALTER TABLE public.driver_tracks ADD COLUMN IF NOT EXISTS rent_charged_through date;
+
+CREATE TABLE IF NOT EXISTS public.rent_week_log (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  driver_id uuid NOT NULL REFERENCES public.driver_tracks(id) ON DELETE CASCADE,
+  due_date date NOT NULL,
+  status text NOT NULL CHECK (status IN ('paid', 'missed')),
+  amount numeric(10, 2) NOT NULL DEFAULT 0,
+  recorded_at timestamptz NOT NULL DEFAULT now(),
+  recorded_by text,
+  CONSTRAINT rent_week_log_driver_due_key UNIQUE (driver_id, due_date)
+);
+CREATE INDEX IF NOT EXISTS idx_rent_week_log_driver_due ON public.rent_week_log (driver_id, due_date DESC);
+
+ALTER TABLE public.rent_week_log ENABLE ROW LEVEL SECURITY;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.rent_week_log TO authenticated;
+GRANT ALL ON public.rent_week_log TO service_role;
+DROP POLICY IF EXISTS "Staff full access on rent_week_log" ON public.rent_week_log;
+CREATE POLICY "Staff full access on rent_week_log" ON public.rent_week_log
+  FOR ALL TO authenticated USING (public.is_staff()) WITH CHECK (public.is_staff());
+
+-- One-time backfill (safe to re-run): drivers currently shown as Paid are treated as paid for
+-- their current rent week, and that week becomes the starting point for automatic charging.
+DO $$
+DECLARE
+  r record;
+  today date := (now() AT TIME ZONE 'Europe/London')::date;
+  idx int;
+  due date;
+BEGIN
+  FOR r IN
+    SELECT id, rent_due_day, rent_status, weekly_rent, rent_paid_for_due_date, rent_charged_through
+    FROM public.driver_tracks
+    WHERE deleted_at IS NULL AND COALESCE(weekly_rent, 0) > 0 AND rent_due_day IS NOT NULL
+  LOOP
+    idx := array_position(ARRAY['sunday','monday','tuesday','wednesday','thursday','friday','saturday'],
+                          lower(trim(r.rent_due_day))) - 1;
+    CONTINUE WHEN idx IS NULL;
+    due := today - ((extract(dow FROM today)::int - idx + 7) % 7);
+
+    IF r.rent_status = 'paid' AND r.rent_paid_for_due_date IS NULL THEN
+      INSERT INTO public.rent_week_log (driver_id, due_date, status, amount, recorded_by)
+      VALUES (r.id, due, 'paid', r.weekly_rent, 'backfill')
+      ON CONFLICT (driver_id, due_date) DO NOTHING;
+      UPDATE public.driver_tracks SET rent_paid_for_due_date = due WHERE id = r.id;
+    END IF;
+
+    IF r.rent_charged_through IS NULL THEN
+      UPDATE public.driver_tracks SET rent_charged_through = due WHERE id = r.id;
+    END IF;
+  END LOOP;
+END $$;
+
+-- Copy any payments recorded in the older rent_payments table (2026-10-13 SQL), if it exists.
+DO $$
+BEGIN
+  IF to_regclass('public.rent_payments') IS NOT NULL THEN
+    INSERT INTO public.rent_week_log (driver_id, due_date, status, amount, recorded_at, recorded_by)
+    SELECT driver_id, due_date, 'paid', amount, paid_at, 'rent_payments'
+    FROM public.rent_payments
+    ON CONFLICT (driver_id, due_date) DO NOTHING;
+  END IF;
+END $$;
+
+-- 5. Make PostgREST see the new tables/columns immediately (fixes "not in the schema cache")
 NOTIFY pgrst, 'reload schema';

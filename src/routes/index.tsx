@@ -60,6 +60,7 @@ import { BotFleetDataAdminCard } from "@/components/bot-fleet-card";
 import { ConversationEventsCard } from "@/components/conversation-events-card";
 import { SettingsCardBoundary } from "@/components/settings-card-boundary";
 import { EmailTestCard } from "@/components/email-test-card";
+import { RentHistoryCard } from "@/components/rent-history-card";
 import { runExpiryScanNowFn } from "@/lib/email-admin.functions";
 
 export const Route = createFileRoute("/")({
@@ -6943,6 +6944,17 @@ function DriverProfileModal({
 
           {/* Document Upload Section */}
           <DriverDocumentsSection driver={driver} toast={toast} />
+
+          {/* Weekly rent log: paid / not paid per week */}
+          <SettingsCardBoundary name="Rent history">
+            <RentHistoryCard
+              driverId={driver.id}
+              weeklyRent={driver.weekly_rent}
+              setRentWeekPaid={data.setRentWeekPaid}
+              toast={toast}
+              refreshKey={`${driver.rent_status}-${driver.rent_paid_for_due_date}-${driver.balance_due}`}
+            />
+          </SettingsCardBoundary>
 
           {/* Portal Settings Section */}
           <DriverPortalSettingsCard driver={driver} data={data} toast={toast} onCloseModal={onClose} />
