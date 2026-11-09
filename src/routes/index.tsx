@@ -8293,13 +8293,13 @@ function MileageView({
                     >
                       End of Month
                     </button>
-                    {logsCount > 0 && (
+                    {(logsCount > 0 || submissions.some((sub) => sub.driver_id === d.id)) && (
                       <button
                         onClick={() => setLogsTarget(d)}
                         className="ml-auto inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-[#1e222b]"
                         style={{ borderColor: T.border }}
                       >
-                        <Icon.Clock className="h-3.5 w-3.5" /> Logged Miles ({logsCount})
+                        <Icon.Clock className="h-3.5 w-3.5" /> Logged Miles &amp; Photos ({logsCount})
                       </button>
                     )}
                     <button
@@ -8353,7 +8353,13 @@ function MileageView({
         />
       )}
 
-      {logsTarget && <LogsModal driver={logsTarget} onClose={() => setLogsTarget(null)} />}
+      {logsTarget && (
+        <LogsModal
+          driver={logsTarget}
+          submissions={data.mileageSubmissions || []}
+          onClose={() => setLogsTarget(null)}
+        />
+      )}
 
       {submitModalOpen && (
         <SubmitMileagePhotoModal
@@ -9107,7 +9113,40 @@ function EndOfMonthModal({
   );
 }
 
-function LogsModal({ driver, onClose }: { driver: DriverTrack; onClose: () => void }) {
+function LogsModal({
+  driver,
+  onClose,
+  submissions = [],
+}: {
+  driver: DriverTrack;
+  onClose: () => void;
+  submissions?: MileageSubmission[];
+}) {
+  const norm = (r?: string | null) => (r || "").replace(/\s+/g, "").toUpperCase();
+  const mine = submissions
+    .filter((s) => (s.driver_id && s.driver_id === driver.id) || (!!s.registration && norm(s.registration) === norm(driver.registration)))
+    .sort((a, b) => (a.submitted_at < b.submitted_at ? 1 : -1));
+  // Photo that backs a monthly log: the approved reading equal to its end mileage, else the
+  // approved reading closest in time (within 5 days).
+  const photoForLog = (l: { end_mileage: number; date: string }) => {
+    const approved = mine.filter((s) => s.status === "approved" && s.photo_url);
+    const exact = approved.find((s) => s.approved_mileage === l.end_mileage);
+    if (exact) return exact.photo_url;
+    const t = new Date(l.date).getTime();
+    const near = approved
+      .map((s) => ({ s, d: Math.abs(new Date(s.approved_at || s.submitted_at).getTime() - t) }))
+      .filter((x) => x.d <= 5 * 86400000)
+      .sort((a, b) => a.d - b.d)[0];
+    return near?.s.photo_url || null;
+  };
+  const Thumb = ({ url }: { url?: string | null }) =>
+    url ? (
+      <a href={url} target="_blank" rel="noopener noreferrer" title="Open odometer photo">
+        <img src={url} alt="Odometer photo" className="h-10 w-14 rounded border border-white/10 object-cover hover:opacity-80" />
+      </a>
+    ) : (
+      <span className="text-xs text-[#5b6577]">—</span>
+    );
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-200"
@@ -9130,6 +9169,11 @@ function LogsModal({ driver, onClose }: { driver: DriverTrack; onClose: () => vo
             <Icon.X className="h-5 w-5" />
           </button>
         </div>
+        {driver.monthly_logs.length === 0 ? (
+          <div className="rounded-lg border border-dashed p-4 text-center text-xs text-[#8b95a8]" style={{ borderColor: T.border }}>
+            No closed months yet. Use "End of Month" to record one.
+          </div>
+        ) : (
         <table className="w-full text-sm">
           <thead
             className="text-left text-xs uppercase tracking-wider text-[#8b95a8]"
@@ -9142,6 +9186,7 @@ function LogsModal({ driver, onClose }: { driver: DriverTrack; onClose: () => vo
               <th className="px-3 py-2">Driven</th>
               <th className="px-3 py-2">Overage</th>
               <th className="px-3 py-2">Charge</th>
+              <th className="px-3 py-2">Photo</th>
             </tr>
           </thead>
           <tbody>
@@ -9157,10 +9202,63 @@ function LogsModal({ driver, onClose }: { driver: DriverTrack; onClose: () => vo
                 >
                   £{l.excess_charge.toFixed(2)}
                 </td>
+                <td className="px-3 py-2">
+                  <Thumb url={photoForLog(l)} />
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
+        )}
+
+        <h3 className="mb-2 mt-6 text-sm font-bold text-white">Odometer readings &amp; photos ({mine.length})</h3>
+        {mine.length === 0 ? (
+          <div className="rounded-lg border border-dashed p-4 text-center text-xs text-[#8b95a8]" style={{ borderColor: T.border }}>
+            No odometer photos submitted yet.
+          </div>
+        ) : (
+          <table className="w-full text-sm" data-odometer-readings>
+            <thead className="text-left text-xs uppercase tracking-wider text-[#8b95a8]" style={{ background: T.panel2 }}>
+              <tr>
+                <th className="px-3 py-2">Submitted</th>
+                <th className="px-3 py-2">Reading</th>
+                <th className="px-3 py-2">AI / driver</th>
+                <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2">Photo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {mine.map((sub) => (
+                <tr key={sub.id} className="border-t" style={{ borderColor: T.borderSoft }}>
+                  <td className="px-3 py-2">{new Date(sub.submitted_at).toLocaleDateString("en-GB")}</td>
+                  <td className="px-3 py-2 font-semibold">
+                    {(sub.approved_mileage ?? sub.reading_value ?? sub.ocr_mileage)?.toLocaleString() ?? "—"}
+                  </td>
+                  <td className="px-3 py-2 text-xs text-[#8b95a8]">
+                    {sub.ocr_mileage ? `AI ${sub.ocr_mileage.toLocaleString()}` : "AI —"}
+                    {sub.reading_value ? ` · driver ${sub.reading_value.toLocaleString()}` : ""}
+                  </td>
+                  <td className="px-3 py-2 text-xs">
+                    <span
+                      className={
+                        sub.status === "approved"
+                          ? "text-emerald-400"
+                          : sub.status === "rejected"
+                            ? "text-red-400"
+                            : "text-amber-300"
+                      }
+                    >
+                      {sub.status === "approved" ? "Approved" : sub.status === "rejected" ? "Rejected" : "Pending"}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2">
+                    <Thumb url={sub.photo_url} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );

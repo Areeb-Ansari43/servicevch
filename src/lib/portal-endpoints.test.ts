@@ -69,6 +69,7 @@ mock.module("@/integrations/supabase/client.server", () => ({
 
 const { Route: meRoute } = await import("@/routes/api/public/portal/me");
 const { Route: mileageRoute } = await import("@/routes/api/public/portal/mileage");
+const { Route: documentRoute } = await import("@/routes/api/public/portal/document");
 const call = (route: any, body: unknown, headers: Record<string, string> = {}) =>
   route.options.server.handlers.POST({
     request: new Request("https://hq.test/api/public/portal/x", {
@@ -179,3 +180,42 @@ describe("/api/public/portal/mileage", () => {
     expect((await call(mileageRoute, { reading: 41000, photo_base64: "not-an-image" })).status).toBe(400);
   });
 });
+
+describe("/me extra fields", () => {
+  it("returns last odometer and no monthly miles until a month-start reading exists", async () => {
+    tables.driver_tracks[0].start_mileage = 0;
+    tables.driver_tracks[0].phone = "07700 900123";
+    const d = await (await call(meRoute, {})).json();
+    expect(d.driver.last_odometer).toBe(41000);
+    expect(d.driver.miles_this_period).toBeNull();
+    expect(d.driver.phone).toBe("07700 900123");
+
+    tables.driver_tracks[0].start_mileage = 40000;
+    const d2 = await (await call(meRoute, {})).json();
+    expect(d2.driver.miles_this_period).toBe(1000);
+  });
+
+  it("includes the odometer photo for each submission", async () => {
+    tables.mileage_submissions = [{ id: "s1", driver_id: "d1", status: "approved", approved_mileage: 41000, image_path: "d1/1.jpg", submitted_at: "2026-11-09T10:00:00Z" }];
+    const d = await (await call(meRoute, {})).json();
+    expect(d.submissions[0].photo_url).toBe("https://cdn.test/mileage-photos/d1/1.jpg");
+  });
+});
+
+describe("/api/public/portal/document", () => {
+  it("stores the driver's hire agreement in their documents (same place as CRM uploads)", async () => {
+    const pdf = "data:application/pdf;base64," + btoa("%PDF-1.4 test");
+    const res = await call(documentRoute, { document_type: "contract", file_name: "Hire Agreement.pdf", file_base64: pdf });
+    expect(res.status).toBe(200);
+    expect(uploads.at(-1)).toMatchObject({ bucket: "driver-documents", type: "application/pdf" });
+    expect(uploads.at(-1)!.path).toMatch(/^d1\/contract_\d+_Hire_Agreement\.pdf$/);
+    const row = tables.driver_documents.at(-1)!;
+    expect(row).toMatchObject({ driver_id: "d1", document_type: "contract", file_name: "Hire Agreement.pdf" });
+  });
+
+  it("rejects other file types", async () => {
+    const exe = "data:application/x-msdownload;base64," + btoa("MZ");
+    expect((await call(documentRoute, { document_type: "contract", file_name: "x.exe", file_base64: exe })).status).toBe(400);
+  });
+});
+
