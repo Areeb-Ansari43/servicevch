@@ -33,7 +33,7 @@ export interface TestEmailResult {
 }
 
 /** Resolves the caller's own email and refuses driver-portal accounts. */
-async function resolveStaffEmail(context: { userId: string; claims: any }): Promise<string> {
+export async function resolveStaffEmail(context: { userId: string; claims: any }): Promise<string> {
   const email =
     typeof context.claims?.email === "string" ? context.claims.email.trim().toLowerCase() : "";
   if (!email)

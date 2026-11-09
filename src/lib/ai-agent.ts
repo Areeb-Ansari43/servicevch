@@ -1,5 +1,4 @@
 import { callGeminiProvider, callSecondaryProvider, sanitizeErrorMessage } from "@/lib/ai-providers";
-import { getVehicleWeeklyPrice, getVehicleDefaultDeposit } from "@/lib/fleet-data";
 import {
   DEFAULT_BOT_CATALOG,
   getBotCatalogFromDb,
@@ -31,6 +30,8 @@ export type FleetVehicleItem = {
   status: string;
   registration?: string;
   default_deposit?: number;
+  next_mot_date?: string | null;
+  pco_expiry_date?: string | null;
 };
 
 export type ToolCallResult = {
@@ -209,6 +210,64 @@ export function formatAvailabilityStatus(status: string): string {
   return `${status || "Available"} (Ready to rent)`;
 }
 
+type CatalogSummary = ReturnType<typeof evaluateFleetAvailability>["summaries"][number];
+
+/** Loose catalogue lookup shared by all vehicle tools (e220, "mg 5", prius, santa fe 2026...). */
+export function matchCatalogQuery(summaries: CatalogSummary[], query: string): CatalogSummary[] {
+  const qClean = String(query || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (!qClean) return [];
+  const strong: CatalogSummary[] = [];
+  const makeOnly: CatalogSummary[] = [];
+
+  for (const s of summaries) {
+    const dClean = s.catalog.display_name.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const mClean = s.catalog.model.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const kClean = s.catalog.make.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+    // If user specified year like 2026, ensure exact subversion matching
+    if (qClean.includes("2026") && !dClean.includes("2026")) continue;
+    if ((qClean.includes("2023") || qClean.includes("2024") || qClean.includes("2025")) && dClean.includes("2026")) continue;
+
+    const aliasHit = (s.catalog.aliases || []).some((al) => {
+      const alClean = al.toLowerCase().replace(/[^a-z0-9]/g, "");
+      return alClean.length > 0 && (qClean.includes(alClean) || alClean.includes(qClean));
+    });
+    if (dClean.includes(qClean) || qClean.includes(dClean) || (mClean && qClean.includes(mClean)) || aliasHit) {
+      strong.push(s);
+    } else if (kClean && qClean.includes(kClean)) {
+      makeOnly.push(s);
+    }
+  }
+  // "Toyota Auris Estate" must return the Auris, not every Toyota: a make-only hit is used
+  // only when nothing matched on model / name / alias (e.g. "any toyota?").
+  return strong.length > 0 ? strong : makeOnly;
+}
+
+function describeCatalogSummary(s: CatalogSummary) {
+  return {
+    name: s.catalog.display_name,
+    car: s.catalog.display_name,
+    weekly_rent: `£${s.catalog.weekly_rent}/week`,
+    deposit: s.catalog.deposit ? `£${s.catalog.deposit}` : "to be confirmed by team",
+    fuel_type: s.catalog.fuel_type || "to be confirmed by team",
+    year: s.catalog.year_label,
+    monthly_miles: `${s.catalog.monthly_miles} miles/month`,
+    minimum_term: `${s.catalog.minimum_term_weeks} weeks`,
+    available_now: s.isAvailable,
+    available_units: s.rentableVehicles.length,
+  };
+}
+
+function fuelTypeToGroup(fuel: string): string | undefined {
+  const f = fuel.toLowerCase().replace(/[\s_-]/g, "");
+  if (f.includes("plugin") || f.includes("phev")) return "plug_in_hybrid";
+  if (f.includes("hybrid")) return "hybrid";
+  if (f.includes("electric") || f === "ev") return "electric";
+  if (f.includes("diesel")) return "diesel";
+  if (f.includes("petrol")) return "petrol";
+  return undefined;
+}
+
 // --- Execute Tool Function Against Database Fleet ---
 export function executeToolCall(
   toolName: string,
@@ -227,8 +286,8 @@ export function executeToolCall(
     year: f.year,
     fuel_type: f.fuel_type,
     status: f.status,
-    next_mot_date: (f as any).next_mot_date,
-    pco_expiry_date: (f as any).pco_expiry_date,
+    next_mot_date: f.next_mot_date ?? null,
+    pco_expiry_date: f.pco_expiry_date ?? null,
   }));
 
   const catalogToUse = customCatalog && customCatalog.length > 0 ? customCatalog : DEFAULT_BOT_CATALOG;
@@ -306,29 +365,22 @@ export function executeToolCall(
 
   if (toolName === "find_vehicles") {
     const qRaw = String(args?.query || "").toLowerCase();
-    const qClean = qRaw.replace(/[^a-z0-9]/g, "");
 
-    let matchedSummaries = summaries.filter((s) => {
-      const dClean = s.catalog.display_name.toLowerCase().replace(/[^a-z0-9]/g, "");
-      const mClean = s.catalog.model.toLowerCase().replace(/[^a-z0-9]/g, "");
-      const kClean = s.catalog.make.toLowerCase().replace(/[^a-z0-9]/g, "");
-
-      // If user specified year like 2026, ensure exact subversion matching
-      if (qClean.includes("2026") && !dClean.includes("2026")) {
-        return false;
+    let matchedSummaries = qRaw.trim() ? matchCatalogQuery(summaries, qRaw) : [...summaries];
+    if (args?.fuel_type) {
+      const group = fuelTypeToGroup(String(args.fuel_type));
+      if (group) {
+        matchedSummaries = matchedSummaries.filter((s) =>
+          group === "hybrid"
+            ? s.catalog.fuel_group === "hybrid" || s.catalog.fuel_group === "plug_in_hybrid"
+            : s.catalog.fuel_group === group,
+        );
       }
-      if ((qClean.includes("2023") || qClean.includes("2024") || qClean.includes("2025")) && dClean.includes("2026")) {
-        return false;
-      }
-
-      if (dClean.includes(qClean) || qClean.includes(dClean) || qClean.includes(mClean) || qClean.includes(kClean)) {
-        return true;
-      }
-      return (s.catalog.aliases || []).some((al) => {
-        const alClean = al.toLowerCase().replace(/[^a-z0-9]/g, "");
-        return qClean.includes(alClean) || alClean.includes(qClean);
-      });
-    });
+    }
+    if (typeof args?.max_price === "number") {
+      matchedSummaries = matchedSummaries.filter((s) => s.catalog.weekly_rent <= args.max_price);
+    }
+    if (!qRaw.trim()) matchedSummaries.sort((a, b) => a.catalog.weekly_rent - b.catalog.weekly_rent);
 
     const items = matchedSummaries.map((s) => ({
       name: s.catalog.display_name,
@@ -355,66 +407,49 @@ export function executeToolCall(
     };
   }
 
+  // get_fleet / get_vehicle / compare_vehicles answer from the SAME catalogue as find_vehicles
+  // (Settings > Bot Fleet Catalogue), so every price, deposit, term and mileage the bot quotes
+  // is the one staff last saved there. Availability still comes from the live CRM vehicles.
   if (toolName === "get_fleet") {
-    let matches = fleet.filter((v) => v.status === "available" || v.status === "active" || v.status === "in_stock" || !v.status);
-    if (matches.length === 0) matches = fleet;
-
-    if (args?.fuel_type) {
-      const ft = String(args.fuel_type).toLowerCase();
-      matches = matches.filter((v) => v.fuel_type.toLowerCase().includes(ft));
+    const group = args?.fuel_type ? fuelTypeToGroup(String(args.fuel_type)) : undefined;
+    let entries = summaries.filter((s) => s.isAvailable);
+    if (group) {
+      entries = entries.filter((s) =>
+        group === "hybrid"
+          ? s.catalog.fuel_group === "hybrid" || s.catalog.fuel_group === "plug_in_hybrid"
+          : s.catalog.fuel_group === group,
+      );
     }
-    if (args?.max_price && typeof args.max_price === "number") {
-      matches = matches.filter((v) => (v.weekly_rent || getVehicleWeeklyPrice(`${v.make} ${v.model}`)) <= args.max_price);
+    if (typeof args?.max_price === "number") {
+      entries = entries.filter((s) => s.catalog.weekly_rent <= args.max_price);
     }
-
-    const items = matches.slice(0, 8).map((v) => ({
-      name: `${v.make} ${v.model}`,
-      year: v.year,
-      fuel_type: v.fuel_type,
-      weekly_rent: `£${v.weekly_rent || getVehicleWeeklyPrice(`${v.make} ${v.model}`)}/week`,
-      mileage_allowance: `${v.monthly_mileage_allowance || 2500} miles/month`,
-      deposit: `£${v.default_deposit || getVehicleDefaultDeposit(`${v.make} ${v.model}`)}`,
-    }));
-
-    return { result: { available_count: matches.length, vehicles: items }, updatedContext: nextContext };
+    entries.sort((a, b) => a.catalog.weekly_rent - b.catalog.weekly_rent);
+    return {
+      result: { available_count: entries.length, vehicles: entries.slice(0, 8).map(describeCatalogSummary) },
+      updatedContext: nextContext,
+    };
   }
 
   if (toolName === "get_vehicle") {
-    const search = String(args?.vehicle_name || "").toLowerCase().trim();
-    const match = fleet.find((v) => {
-      const full = `${v.make} ${v.model}`.toLowerCase();
-      return full.includes(search) || search.includes(v.model.toLowerCase());
-    });
-
-    if (!match) {
+    const name = String(args?.vehicle_name || "").trim();
+    const matches = matchCatalogQuery(summaries, name);
+    if (matches.length === 0) {
       return {
         result: {
           found: false,
-          message: `Vehicle '${args?.vehicle_name}' not found in live database fleet. A team member will confirm availability and pricing.`,
+          message: `Vehicle '${name}' is not in our fleet catalogue. A team member will confirm availability and pricing.`,
         },
         updatedContext: nextContext,
       };
     }
-
-    const weeklyPrice = match.weekly_rent || getVehicleWeeklyPrice(`${match.make} ${match.model}`);
-    const deposit = match.default_deposit || getVehicleDefaultDeposit(`${match.make} ${match.model}`);
-
     if (!nextContext.preferred_vehicles) nextContext.preferred_vehicles = [];
-    if (!nextContext.preferred_vehicles.includes(`${match.make} ${match.model}`)) {
-      nextContext.preferred_vehicles.push(`${match.make} ${match.model}`);
-    }
-
+    const primary = matches[0].catalog.display_name;
+    if (!nextContext.preferred_vehicles.includes(primary)) nextContext.preferred_vehicles.push(primary);
     return {
       result: {
         found: true,
-        name: `${match.make} ${match.model}`,
-        year: match.year,
-        fuel_type: match.fuel_type,
-        weekly_rent: `£${weeklyPrice}/week`,
-        monthly_mileage_allowance: `${match.monthly_mileage_allowance || 2500} miles/month`,
-        deposit: `£${deposit}`,
-        minimum_term: "6 weeks",
-        status: match.status || "available",
+        ...describeCatalogSummary(matches[0]),
+        ...(matches.length > 1 ? { other_versions: matches.slice(1).map(describeCatalogSummary) } : {}),
       },
       updatedContext: nextContext,
     };
@@ -423,22 +458,10 @@ export function executeToolCall(
   if (toolName === "compare_vehicles") {
     const names: string[] = Array.isArray(args?.vehicle_names) ? args.vehicle_names : [];
     const comparisons = names.map((name) => {
-      const search = name.toLowerCase().trim();
-      const match = fleet.find((v) => `${v.make} ${v.model}`.toLowerCase().includes(search) || search.includes(v.model.toLowerCase()));
-      if (!match) {
-        return { name, found: false, note: "Specs to be confirmed by team member" };
-      }
-      return {
-        name: `${match.make} ${match.model}`,
-        found: true,
-        year: match.year,
-        fuel_type: match.fuel_type,
-        weekly_rent: `£${match.weekly_rent || getVehicleWeeklyPrice(`${match.make} ${match.model}`)}/week`,
-        mileage_allowance: `${match.monthly_mileage_allowance || 2500} miles/month`,
-        deposit: `£${match.default_deposit || getVehicleDefaultDeposit(`${match.make} ${match.model}`)}`,
-      };
+      const matches = matchCatalogQuery(summaries, String(name));
+      if (matches.length === 0) return { name, found: false, note: "Not in our fleet catalogue; a team member will confirm" };
+      return { found: true, ...describeCatalogSummary(matches[0]) };
     });
-
     return { result: { comparisons }, updatedContext: nextContext };
   }
 

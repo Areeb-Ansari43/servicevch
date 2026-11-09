@@ -432,6 +432,15 @@ export async function runExpiryScan(
     // ---------------------------------------------------------------------------
     const rentDueItems: any[] = [];
 
+    // Roll rent weeks forward first (auto Unpaid + "not paid" log for weeks that ended unpaid).
+    try {
+      const { syncRentCycles } = await import("@/lib/rent-cycle.server");
+      const rentSync = await syncRentCycles(supabaseAdmin);
+      if (rentSync.skipped) console.warn("[ExpiryScan] rent week sync skipped:", rentSync.skipped);
+    } catch (err) {
+      console.warn("[ExpiryScan] rent week sync failed:", err);
+    }
+
     for (const d of drivers) {
       try {
         if (Number(d.weekly_rent || 0) > 0 && d.start_date && d.rent_due_day) {
@@ -445,6 +454,11 @@ export async function runExpiryScan(
           if (days === 1) {
             const dueStr = nextDue.toISOString().slice(0, 10);
             const driverEmail = d.email?.trim() || null;
+
+            // Already paid in advance for tomorrow's week: no reminder.
+            if (d.rent_paid_for_due_date && String(d.rent_paid_for_due_date).slice(0, 10) >= dueStr) {
+              continue;
+            }
 
             rentDueItems.push({
               driverName: d.driver_name,

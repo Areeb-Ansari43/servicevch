@@ -19,17 +19,20 @@ export function BotFleetDataAdminCard({
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [editingEntry, setEditingEntry] = useState<BotCatalogEntry | null>(null);
+  // Set when the catalogue table can't be read; the card then shows built-in defaults.
+  const [tableError, setTableError] = useState<string | null>(null);
 
   const crmVehicles: CrmVehicle[] = (vehicles || []).map((v) => ({
     id: v.id,
-    reg: v.reg,
+    // CRM vehicles use `registration` / `insurance_expiry` (PCO); raw DB rows use `reg` / `pco_expiry_date`.
+    reg: v.reg ?? v.registration,
     make: v.make,
     model: v.model,
     year: v.year,
     fuel_type: v.fuel_type,
     status: v.status,
     next_mot_date: v.next_mot_date,
-    pco_expiry_date: v.pco_expiry_date,
+    pco_expiry_date: v.pco_expiry_date ?? v.insurance_expiry ?? null,
   }));
 
   const { summaries, unmatchedCatalog, unmatchedCrmVehicles } = evaluateFleetAvailability(
@@ -44,6 +47,11 @@ export function BotFleetDataAdminCard({
   const loadCatalog = async () => {
     setLoading(true);
     try {
+      const probe = await supabase
+        .from("bot_fleet_catalog" as any)
+        .select("id")
+        .limit(1);
+      setTableError(probe.error ? probe.error.message : null);
       const data = await getBotCatalogFromDb();
       setCatalog(data);
     } catch (err: any) {
@@ -56,24 +64,30 @@ export function BotFleetDataAdminCard({
   const handleSaveEntry = async (entry: BotCatalogEntry) => {
     setSavingId(entry.display_name);
     try {
-      const { error } = await supabase.from("bot_fleet_catalog" as any).upsert({
-        display_name: entry.display_name,
-        make: entry.make,
-        model: entry.model,
-        weekly_rent: Number(entry.weekly_rent),
-        monthly_miles: Number(entry.monthly_miles),
-        deposit: entry.deposit != null ? Number(entry.deposit) : null,
-        minimum_term_weeks: Number(entry.minimum_term_weeks),
-        year_label: entry.year_label,
-        fuel_type: entry.fuel_type || null,
-        fuel_group: entry.fuel_group || null,
-        crm_year_min: entry.crm_year_min,
-        crm_year_max: entry.crm_year_max,
-        crm_regs: entry.crm_regs,
-        active: entry.active,
-        notes: entry.notes || null,
-        updated_at: new Date().toISOString(),
-      });
+      const { error } = await supabase.from("bot_fleet_catalog" as any).upsert(
+        {
+          display_name: entry.display_name,
+          make: entry.make,
+          model: entry.model,
+          weekly_rent: Number(entry.weekly_rent),
+          monthly_miles: Number(entry.monthly_miles),
+          deposit: entry.deposit != null ? Number(entry.deposit) : null,
+          minimum_term_weeks: Number(entry.minimum_term_weeks),
+          year_label: entry.year_label,
+          fuel_type: entry.fuel_type || null,
+          fuel_group: entry.fuel_group || null,
+          aliases: entry.aliases ?? [],
+          crm_make_pattern: entry.crm_make_pattern ?? null,
+          crm_model_pattern: entry.crm_model_pattern ?? null,
+          crm_year_min: entry.crm_year_min,
+          crm_year_max: entry.crm_year_max,
+          crm_regs: entry.crm_regs,
+          active: entry.active,
+          notes: entry.notes || null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "display_name" },
+      );
 
       if (error) throw error;
       toast(`Saved ${entry.display_name}`, "success");
@@ -99,6 +113,25 @@ export function BotFleetDataAdminCard({
         </div>
       </div>
 
+      {tableError && (
+        <div
+          role="alert"
+          className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-200"
+        >
+          <div className="font-bold">
+            Catalogue table not set up: showing built-in default prices
+          </div>
+          <div className="mt-1 opacity-90">
+            Saving won&apos;t work and the WhatsApp bot can&apos;t use your prices until the
+            database table exists. Run{" "}
+            <code className="font-mono">
+              supabase/manual/2026-11-09-bot-catalog-and-portal-fixes.sql
+            </code>{" "}
+            in the Supabase SQL editor. ({tableError})
+          </div>
+        </div>
+      )}
+
       {/* Fleet Availability Preview Section */}
       <div className="rounded-xl border border-white/10 bg-[#0b0f19] p-4 space-y-4">
         <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-400">
@@ -120,22 +153,20 @@ export function BotFleetDataAdminCard({
             <tbody className="divide-y divide-white/5">
               {summaries.map((s) => (
                 <tr key={s.catalog.display_name} className="hover:bg-white/[0.02]">
-                  <td className="py-2.5 pr-3 font-semibold text-white">
-                    {s.catalog.display_name}
-                  </td>
+                  <td className="py-2.5 pr-3 font-semibold text-white">{s.catalog.display_name}</td>
                   <td className="py-2.5 px-3">
-                    £{s.catalog.weekly_rent}/wk · {s.catalog.deposit ? `£${s.catalog.deposit}` : "TBC"}
+                    £{s.catalog.weekly_rent}/wk ·{" "}
+                    {s.catalog.deposit ? `£${s.catalog.deposit}` : "TBC"}
                   </td>
                   <td className="py-2.5 px-3">
                     {s.catalog.fuel_type || "TBC"} · {s.catalog.year_label}
                   </td>
-                  <td className="py-2.5 px-3">
-                    {s.matchedVehicles.length} cars
-                  </td>
+                  <td className="py-2.5 px-3">{s.matchedVehicles.length} cars</td>
                   <td className="py-2.5 px-3 font-bold">
                     {s.rentableVehicles.length > 0 ? (
                       <span className="text-emerald-400">
-                        {s.rentableVehicles.length} available ({s.rentableVehicles.map((r) => r.reg).join(", ")})
+                        {s.rentableVehicles.length} available (
+                        {s.rentableVehicles.map((r) => r.reg).join(", ")})
                       </span>
                     ) : (
                       <span className="text-rose-400">0 available</span>
@@ -144,7 +175,8 @@ export function BotFleetDataAdminCard({
                   <td className="py-2.5 pl-3 text-[11px] text-[#8b95a8]">
                     {s.exclusionReasons.length > 0 ? (
                       <span>
-                        Excluded: {s.exclusionReasons.map((e) => `${e.reg} (${e.reason})`).join(", ")}
+                        Excluded:{" "}
+                        {s.exclusionReasons.map((e) => `${e.reg} (${e.reason})`).join(", ")}
                       </span>
                     ) : s.rentableVehicles.length > 0 ? (
                       <span className="text-emerald-400/80">All rentable</span>
@@ -173,7 +205,9 @@ export function BotFleetDataAdminCard({
             )}
             {unmatchedCrmVehicles.length > 0 && (
               <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-[#8b95a8]">
-                <span className="font-bold text-slate-300">ℹ️ CRM vehicles unmatched to catalogue:</span>
+                <span className="font-bold text-slate-300">
+                  ℹ️ CRM vehicles unmatched to catalogue:
+                </span>
                 <p className="mt-1">
                   {unmatchedCrmVehicles.map((v) => `${v.make} ${v.model} (${v.reg})`).join(", ")}
                 </p>
@@ -200,9 +234,13 @@ export function BotFleetDataAdminCard({
                   <span className="text-[#ff6a00] font-semibold">£{entry.weekly_rent}/wk</span>
                 </div>
                 <div className="text-[11px] text-[#8b95a8] mt-1 space-y-0.5">
-                  <div>Deposit: {entry.deposit != null ? `£${entry.deposit}` : "TBC (Team confirms)"}</div>
+                  <div>
+                    Deposit: {entry.deposit != null ? `£${entry.deposit}` : "TBC (Team confirms)"}
+                  </div>
                   <div>Fuel: {entry.fuel_type || "TBC (Team confirms)"}</div>
-                  <div>Term: {entry.minimum_term_weeks} wks · {entry.monthly_miles} miles/mo</div>
+                  <div>
+                    Term: {entry.minimum_term_weeks} wks · {entry.monthly_miles} miles/mo
+                  </div>
                   <div>Years: {entry.year_label}</div>
                   {entry.notes && <div className="text-amber-300/80 italic">{entry.notes}</div>}
                 </div>
@@ -240,7 +278,9 @@ export function BotFleetDataAdminCard({
               </div>
 
               <div>
-                <label className="block text-[#8b95a8] mb-1">Deposit (£, leave blank for TBC)</label>
+                <label className="block text-[#8b95a8] mb-1">
+                  Deposit (£, leave blank for TBC)
+                </label>
                 <input
                   type="number"
                   value={editingEntry.deposit ?? ""}
@@ -256,7 +296,9 @@ export function BotFleetDataAdminCard({
               </div>
 
               <div>
-                <label className="block text-[#8b95a8] mb-1">Fuel Type (e.g. Plug-in-Hybrid, Electric, Diesel)</label>
+                <label className="block text-[#8b95a8] mb-1">
+                  Fuel Type (e.g. Plug-in-Hybrid, Electric, Diesel)
+                </label>
                 <input
                   type="text"
                   value={editingEntry.fuel_type ?? ""}

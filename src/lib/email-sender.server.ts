@@ -25,8 +25,10 @@ const PROHIBITED_RECIPIENT_ADDRESSES = [
   "driver-alerts@fa-ibi.co.uk",
 ];
 
-/** Email types that are staff-facing compliance digests and must be flagged high importance. */
-export const HIGH_IMPORTANCE_TYPES = new Set(["fleet_summary", "driver_licence_summary"]);
+/**
+ * Every email the CRM sends (staff digests, rent-due reminders, driver alerts, 2FA codes) is
+ * flagged high importance, as requested by the business owner.
+ */
 export const HIGH_IMPORTANCE_HEADERS = {
   Importance: "high",
   "X-Priority": "1",
@@ -234,9 +236,7 @@ export async function sendEmailDirect(options: SendEmailOptions): Promise<SendEm
   }
 
   // 5. Send via Resend
-  const emailHeaders = HIGH_IMPORTANCE_TYPES.has(emailType)
-    ? { ...HIGH_IMPORTANCE_HEADERS }
-    : undefined;
+  const emailHeaders = { ...HIGH_IMPORTANCE_HEADERS };
 
   try {
     const resendRes = await fetch("https://api.resend.com/emails", {

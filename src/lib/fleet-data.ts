@@ -5,6 +5,8 @@ import { PDF_FLEET } from "@/lib/pdf-fleet";
 import { logAuditEvent } from "@/lib/audit-logger";
 import { getVehicleDefaultDeposit } from "@/lib/contract-helpers";
 import { DRIVER_PORTAL_URL } from "@/lib/domain-config";
+import { SUPABASE_URL } from "@/integrations/supabase/config";
+import { rentState } from "@/lib/rent-cycle";
 
 export { getVehicleDefaultDeposit };
 
@@ -113,6 +115,8 @@ export type DriverTrack = {
   weekly_rent: number;
   rent_due_day: string;
   rent_status: "paid" | "unpaid";
+  /** Latest rent due date marked paid (weekly rent tracking). */
+  rent_paid_for_due_date?: string | null;
   balance_due: number;
   charges: DriverCharge[];
   monthly_logs: MonthlyLog[];
@@ -133,6 +137,8 @@ export type MileageSubmission = {
   rejected_at?: string | null;
   rejection_reason?: string | null;
   notes?: string | null;
+  /** Reading the driver typed in the portal (separate from the AI reading). */
+  reading_value?: number | null;
 };
 
 const statusToDb = (s: Vehicle["status"]): string =>
@@ -210,7 +216,11 @@ const msFromRow = (r: any): MileageSubmission => ({
   driver_id: r.driver_id ?? null,
   driver_name: r.driver_name ?? "Unknown Driver",
   registration: r.registration ?? r.reg ?? "",
-  photo_url: r.photo_url ?? "",
+  // Portal submissions may only carry image_path (website table layout): build the public URL.
+  photo_url:
+    r.photo_url ||
+    (r.image_path ? `${SUPABASE_URL}/storage/v1/object/public/mileage-photos/${r.image_path}` : ""),
+  reading_value: r.reading_value != null && !isNaN(Number(r.reading_value)) ? Number(r.reading_value) : null,
   ocr_mileage: typeof r.ocr_mileage === "number" ? r.ocr_mileage : null,
   ocr_confidence: r.ocr_confidence ?? "low",
   status: (r.status as "pending" | "approved" | "rejected") ?? "pending",
@@ -404,7 +414,18 @@ const dFromRow = (
     auth_user_id: r.auth_user_id ?? null,
     weekly_rent: Number(r.weekly_rent ?? 0),
     rent_due_day: r.rent_due_day ?? "Monday",
-    rent_status: (r.rent_status as "paid" | "unpaid") ?? "unpaid",
+    // Paid only while the current rent week is paid: flips back to Unpaid when the next due day
+    // arrives, even before the daily job has run (falls back to rent_status until the SQL is run).
+    rent_status: rentState({
+      weekly_rent: Number(r.weekly_rent ?? 0),
+      rent_due_day: r.rent_due_day,
+      start_date: r.start_date,
+      rent_status: r.rent_status,
+      rent_paid_for_due_date: r.rent_paid_for_due_date,
+    }).paid
+      ? "paid"
+      : "unpaid",
+    rent_paid_for_due_date: r.rent_paid_for_due_date ?? null,
     balance_due: Number(r.balance_due ?? 0),
     charges,
     monthly_logs: logs,
@@ -536,6 +557,18 @@ export function useFleetData() {
 
   useEffect(() => {
     void refresh();
+
+    // Roll every driver forward to the current rent week (auto Unpaid + missed-week log).
+    // Server-side and idempotent; also runs in the daily scheduled job.
+    void (async () => {
+      try {
+        const { syncRentCyclesFn } = await import("@/lib/rent.functions");
+        const r: any = await syncRentCyclesFn();
+        if (r && (r.charged > 0 || r.missed > 0)) void refresh();
+      } catch (err) {
+        console.warn("[fleet-data] rent week sync skipped:", err);
+      }
+    })();
 
     const channel = supabase
       .channel("fleet-data-sync")
@@ -1214,6 +1247,16 @@ export function useFleetData() {
       if (error) throw new Error(error.message);
 
       const existing = drivers.find((item) => item.id === d.id);
+      // Rent status changed in the form: record it in the weekly rent log too (keeps the
+      // balance exactly as typed in the form).
+      if (existing && existing.rent_status !== d.rent_status) {
+        try {
+          const { recordRentPaymentFn } = await import("@/lib/rent.functions");
+          await recordRentPaymentFn({ data: { driverId: d.id, action: d.rent_status, keepBalance: true } });
+        } catch (err) {
+          console.warn("[fleet-data] rent week log not updated:", err);
+        }
+      }
       await logAuditEvent({
         actionType: "driver_edited",
         targetTable: "driver_tracks",
@@ -1344,30 +1387,17 @@ export function useFleetData() {
   const toggleRentStatus = useCallback(
     async (driverId: string, currentStatus: "paid" | "unpaid", weeklyRent: number, currentBalance: number) => {
       const newStatus = currentStatus === "paid" ? "unpaid" : "paid";
-      let newBalance = currentBalance;
-      if (newStatus === "paid") {
-        newBalance = 0;
-      } else {
-        newBalance = currentBalance === 0 ? weeklyRent : currentBalance + weeklyRent;
-      }
-
+      // Optimistic update; the server records the rent week and recalculates the balance.
       setDrivers((prev) =>
-        prev.map((item) =>
-          item.id === driverId
-            ? { ...item, rent_status: newStatus, balance_due: newBalance }
-            : item,
-        ),
+        prev.map((item) => (item.id === driverId ? { ...item, rent_status: newStatus } : item)),
       );
 
-      const { error } = await supabase
-        .from("driver_tracks")
-        .update({
-          rent_status: newStatus,
-          balance_due: newBalance,
-        })
-        .eq("id", driverId);
-
-      if (error) throw new Error(error.message);
+      const { recordRentPaymentFn } = await import("@/lib/rent.functions");
+      const res = await recordRentPaymentFn({ data: { driverId, action: newStatus } });
+      if (!res.ok) {
+        await refresh();
+        throw new Error(res.error || "Failed to update rent status");
+      }
 
       const target = drivers.find((item) => item.id === driverId);
       await logAuditEvent({
@@ -1378,15 +1408,30 @@ export function useFleetData() {
           driver_name: target?.driver_name ?? "Driver",
           reg: target?.registration ?? null,
           previous_status: currentStatus,
-          new_status: newStatus,
+          new_status: res.status,
+          rent_week_due_date: res.dueDate,
           weekly_rent: weeklyRent,
-          new_balance_due: newBalance,
+          previous_balance_due: currentBalance,
+          new_balance_due: res.balance,
         },
       });
 
       await refresh();
+      return res;
     },
     [drivers, refresh],
+  );
+
+  /** Marks / unmarks one specific rent week (used by the driver's rent history). */
+  const setRentWeekPaid = useCallback(
+    async (driverId: string, dueDate: string, paid: boolean) => {
+      const { recordRentPaymentFn } = await import("@/lib/rent.functions");
+      const res = await recordRentPaymentFn({ data: { driverId, action: paid ? "paid" : "unpaid", dueDate } });
+      if (!res.ok) throw new Error(res.error || "Failed to update rent week");
+      await refresh();
+      return res;
+    },
+    [refresh],
   );
 
   const addDriverCharge = useCallback(
@@ -1621,6 +1666,7 @@ export function useFleetData() {
     addDepositPayment,
     toggleDepositPaidStatus,
     toggleRentStatus,
+    setRentWeekPaid,
     addDriverCharge,
     sendDriverReminder,
     generatePortalInvite,

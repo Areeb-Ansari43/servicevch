@@ -26,6 +26,7 @@ function builder(table: string) {
     insert: (row: Row) => {
       pendingInsert = { id: `id_${db.inserts.length + 1}`, ...row };
       db.inserts.push({ table, row: pendingInsert });
+      db.tables[table] = [...(db.tables[table] ?? []), { created_at: new Date().toISOString(), ...pendingInsert }];
       return b;
     },
     update: (patch: Row) => {
@@ -200,3 +201,51 @@ describe("cron + portal shared-secret checks", () => {
     expect(checkPortalSecret(req({ "X-Portal-Secret": "s3cret" })).ok).toBe(true);
   });
 });
+
+describe("rent due tomorrow", () => {
+  const tomorrowName = new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: "Europe/London" }).format(
+    new Date(Date.now() + 86400000),
+  );
+
+  it("emails the driver and sends admin a summary, both from notifications@ and high importance, once per day", async () => {
+    db.tables.vehicles = [];
+    db.tables.driver_tracks = [
+      {
+        id: "d1",
+        driver_name: "Sam Driver",
+        email: "sam@example.com",
+        reg: "AB12CDE",
+        active: true,
+        status: "active",
+        deleted_at: null,
+        weekly_rent: 260,
+        rent_due_day: tomorrowName,
+        start_date: "2026-01-05",
+        rent_status: "unpaid",
+      },
+    ];
+
+    const res = await runExpiryScan({ trigger: "manual", force: true });
+    expect(res.rentDueItems).toBe(1);
+
+    const toDriver = sent.filter((p) => p.to[0] === "sam@example.com");
+    const toAdmin = sent.filter((p) => p.to[0] === "admin@fa-ibi.co.uk");
+    expect(toDriver.length).toBe(1);
+    expect(toAdmin.length).toBe(1);
+    for (const p of [...toDriver, ...toAdmin]) {
+      expect(p.from).toBe("Virtual Car Hire <notifications@fa-ibi.co.uk>");
+      expect(p.headers).toEqual({ Importance: "high", "X-Priority": "1", "X-MSMail-Priority": "High" });
+    }
+    expect(toDriver[0].subject).toContain("rent is due tomorrow");
+    expect(toDriver[0].html).toContain("260.00");
+    expect(toAdmin[0].subject).toContain("Rent Due Tomorrow Summary");
+    expect(toAdmin[0].html).toContain("Sam Driver");
+    expect(db.inserts.some((i) => i.table === "driver_notifications" && i.row.type === "rent_due")).toBe(true);
+
+    // A second run the same day must not email the driver again.
+    sent = [];
+    await runExpiryScan({ trigger: "manual", force: true });
+    expect(sent.filter((p) => p.to[0] === "sam@example.com").length).toBe(0);
+  });
+});
+

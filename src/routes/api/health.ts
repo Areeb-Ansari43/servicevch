@@ -50,6 +50,33 @@ export const REQUIRED_SCHEMA: Record<string, string[]> = {
     "licence_expiry_date",
   ],
   vehicles: ["id", "reg", "make", "model", "next_mot_date"],
+  bot_fleet_catalog: [
+    "id",
+    "display_name",
+    "aliases",
+    "weekly_rent",
+    "deposit",
+    "monthly_miles",
+    "minimum_term_weeks",
+    "fuel_type",
+    "fuel_group",
+    "active",
+  ],
+  bot_settings: ["key", "value", "updated_at"],
+  mileage_submissions: [
+    "id",
+    "driver_id",
+    "driver_name",
+    "registration",
+    "photo_url",
+    "ocr_mileage",
+    "ocr_confidence",
+    "status",
+    "submitted_at",
+    "image_path",
+    "reading_value",
+  ],
+  driver_notifications: ["id", "driver_id", "type", "title", "message", "read", "created_at"],
 };
 
 /** Env var names the CRM needs. `required: false` = feature degrades but the app works. */
