@@ -7790,6 +7790,11 @@ function MileageView({
   const [eomTarget, setEomTarget] = useState<DriverTrack | null>(null);
   const [logsTarget, setLogsTarget] = useState<DriverTrack | null>(null);
 
+  // Collapsed by default to keep the page tidy
+  const [trackingOpen, setTrackingOpen] = useState(false);
+  const [queueOpen, setQueueOpen] = useState(false);
+  const [openSubDrivers, setOpenSubDrivers] = useState<Set<string>>(new Set());
+
   // Mileage Submissions Queue State
   const [subFilter, setSubFilter] = useState<"pending" | "approved" | "rejected" | "all">("pending");
   const [submitModalOpen, setSubmitModalOpen] = useState(false);
@@ -7883,10 +7888,29 @@ function MileageView({
       setRegText("");
       setSelected(null);
       setStartMileage("");
+      setTrackingOpen(false);
     } catch (e: any) {
       toast(e?.message ?? "Failed", "error");
     }
   };
+
+  // Group submissions by driver so the queue shows one compact row per driver.
+  const submissionGroups = (() => {
+    const groups = new Map<string, { key: string; name: string; reg: string; items: MileageSubmission[] }>();
+    for (const sub of filteredSubmissions) {
+      const key = sub.driver_id || `${sub.driver_name}|${sub.registration}`;
+      if (!groups.has(key)) groups.set(key, { key, name: sub.driver_name, reg: sub.registration, items: [] });
+      groups.get(key)!.items.push(sub);
+    }
+    return [...groups.values()];
+  })();
+  const toggleSubDriver = (key: string) =>
+    setOpenSubDrivers((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   return (
     <div className="space-y-6">
@@ -7895,9 +7919,16 @@ function MileageView({
         className="rounded-xl border p-5 sm:p-6 shadow-sm"
         style={{ borderColor: T.border, background: T.panel }}
       >
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div>
+        <div className={`${queueOpen ? "mb-4" : ""} flex flex-wrap items-center justify-between gap-3`}>
+          <button
+            type="button"
+            onClick={() => setQueueOpen((o) => !o)}
+            aria-expanded={queueOpen}
+            className="text-left"
+            data-queue-toggle
+          >
             <div className="flex items-center gap-2">
+              <span className={`inline-block text-[#8b95a8] transition-transform ${queueOpen ? "rotate-90" : ""}`}>▶</span>
               <h2 className="text-lg font-extrabold text-white">
                 Mileage Submission Review Queue
               </h2>
@@ -7908,9 +7939,11 @@ function MileageView({
               )}
             </div>
             <p className="text-xs text-[#8b95a8] mt-0.5">
-              Review driver odometer photo submissions, verify Gemini Vision OCR suggested values, and confirm automatic mileage & excess charges.
+              {queueOpen
+                ? "Click a driver to review their odometer photos, check the AI reading and approve."
+                : "Click to view submissions by driver."}
             </p>
-          </div>
+          </button>
 
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -7924,6 +7957,7 @@ function MileageView({
           </div>
         </div>
 
+        {queueOpen && (<>
         {/* Queue Filter Tabs */}
         <div className="mb-4 flex flex-wrap items-center gap-2 border-b pb-3" style={{ borderColor: T.borderSoft }}>
           <button
@@ -7983,21 +8017,76 @@ function MileageView({
               : `No ${subFilter} mileage submissions found.`}
           </div>
         ) : (
-          <div className="space-y-4">
-            {filteredSubmissions.map((sub) => (
-              <MileageSubmissionCard
-                key={sub.id}
-                submission={sub}
-                drivers={drivers}
-                data={data}
-                toast={toast}
-                onExpandPhoto={(url) => setPreviewPhotoUrl(url)}
-              />
-            ))}
+          <div className="space-y-2">
+            {submissionGroups.map((g) => {
+              const open = openSubDrivers.has(g.key);
+              const latest = g.items[0];
+              const latestReading = latest.ocr_mileage ?? latest.reading_value ?? latest.approved_mileage;
+              const pendingCount = g.items.filter((i) => i.status === "pending").length;
+              return (
+                <div
+                  key={g.key}
+                  className="rounded-xl border"
+                  style={{ borderColor: T.borderSoft, background: T.panel2 }}
+                  data-sub-driver={g.name}
+                >
+                  <button
+                    type="button"
+                    onClick={() => toggleSubDriver(g.key)}
+                    aria-expanded={open}
+                    className="flex w-full flex-wrap items-center justify-between gap-2 px-4 py-3 text-left hover:bg-white/5"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[#8b95a8] transition-transform ${open ? "rotate-90" : ""}`}>▶</span>
+                      <span className="text-sm font-bold text-white">{g.name}</span>
+                      {g.reg && <span className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[11px] text-[#cfd6e3]">{g.reg}</span>}
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-[#8b95a8]">
+                      {latestReading ? <span>Latest: {Number(latestReading).toLocaleString()} mi</span> : null}
+                      <span>{new Date(latest.submitted_at).toLocaleDateString("en-GB")}</span>
+                      {pendingCount > 0 ? (
+                        <span className="rounded-full border border-amber-500/30 bg-amber-500/20 px-2 py-0.5 font-bold text-amber-300">
+                          {pendingCount} pending
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-white/10 px-2 py-0.5">{g.items.length}</span>
+                      )}
+                    </div>
+                  </button>
+                  {open && (
+                    <div className="space-y-4 border-t p-3" style={{ borderColor: T.borderSoft }}>
+                      {g.items.map((sub) => (
+                        <MileageSubmissionCard
+                          key={sub.id}
+                          submission={sub}
+                          drivers={drivers}
+                          data={data}
+                          toast={toast}
+                          onExpandPhoto={(url) => setPreviewPhotoUrl(url)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
+        </>)}
       </div>
 
+      {!(trackingOpen || selectedDriver) ? (
+        <button
+          type="button"
+          onClick={() => setTrackingOpen(true)}
+          className="inline-flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/5"
+          style={{ borderColor: T.border, background: T.panel }}
+          data-start-tracking
+        >
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#ff6a00] text-base leading-none text-white">+</span>
+          Start tracking
+        </button>
+      ) : (
       <form
         onSubmit={submit}
         className="space-y-4 rounded-xl border p-6"
@@ -8007,22 +8096,21 @@ function MileageView({
           <h3 className="text-base font-semibold">
             {selectedDriver ? `Update Mileage / Tracking for ${selectedDriver.driver_name}` : "Start Tracking / Update Driver Mileage"}
           </h3>
-          {selectedDriver && (
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedDriver(null);
-                setDriverSearchText("");
-                setDriverName("");
-                setRegText("");
-                setSelected(null);
-                setStartMileage("");
-              }}
-              className="text-xs text-[#8b95a8] hover:text-white underline"
-            >
-              Clear selected driver
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedDriver(null);
+              setDriverSearchText("");
+              setDriverName("");
+              setRegText("");
+              setSelected(null);
+              setStartMileage("");
+              setTrackingOpen(false);
+            }}
+            className="text-xs text-[#8b95a8] hover:text-white underline"
+          >
+            Close
+          </button>
         </div>
 
         <div>
@@ -8116,6 +8204,7 @@ function MileageView({
           </button>
         </div>
       </form>
+      )}
 
       <div>
         <h3 className="mb-3 text-base font-semibold">Active Drivers ({drivers.length})</h3>
