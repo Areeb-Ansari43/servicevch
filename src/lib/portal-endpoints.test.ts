@@ -168,6 +168,59 @@ describe("/api/public/portal/mileage", () => {
     expect(row.ocr_confidence).toBe("none"); // no AI key in tests; staff still review
   });
 
+  it("emails admin@ (high importance, from notifications@) and posts to Telegram", async () => {
+    process.env.RESEND_API_KEY = "test-key";
+    process.env.TELEGRAM_BOT_TOKEN = "test-bot";
+    process.env.TELEGRAM_CHAT_ID = "123";
+    const sent: { url: string; body: any }[] = [];
+    globalThis.fetch = mock(async (url: any, init: any) => {
+      const u = String(url);
+      if (u.includes("api.resend.com") || u.includes("api.telegram.org")) {
+        sent.push({ url: u, body: JSON.parse(init.body) });
+        return new Response(JSON.stringify({ id: "re_1", ok: true }), { status: 200 });
+      }
+      return new Response("{}", { status: 500 });
+    }) as any;
+    try {
+      const res = await call(mileageRoute, { reading: 41250, photo_base64: tinyJpeg });
+      expect(res.status).toBe(200);
+      const email = sent.find((s) => s.url.includes("resend"))!.body;
+      expect(email.to).toEqual(expect.arrayContaining(["admin@fa-ibi.co.uk"]));
+      expect(email.from).toBe("Virtual Car Hire <notifications@fa-ibi.co.uk>");
+      expect(email.headers.Importance).toBe("high");
+      expect(email.subject).toContain("Sam Driver");
+      expect(email.subject).toContain("41,250");
+      const tg = sent.find((s) => s.url.includes("telegram"))!.body;
+      expect(tg.chat_id).toBe("123");
+      expect(tg.text).toContain("Sam Driver");
+      expect(tg.text).toContain("AB12CDE");
+      expect(tg.text).toContain("41,250");
+      expect(tg.text).toContain("+250 miles");
+    } finally {
+      delete process.env.RESEND_API_KEY;
+      delete process.env.TELEGRAM_BOT_TOKEN;
+      delete process.env.TELEGRAM_CHAT_ID;
+    }
+  });
+
+  it("still saves the reading when the email and Telegram alerts fail", async () => {
+    process.env.RESEND_API_KEY = "test-key";
+    process.env.TELEGRAM_BOT_TOKEN = "test-bot";
+    process.env.TELEGRAM_CHAT_ID = "123";
+    globalThis.fetch = mock(async () => {
+      throw new Error("network down");
+    }) as any;
+    try {
+      const res = await call(mileageRoute, { reading: 41250, photo_base64: tinyJpeg });
+      expect(res.status).toBe(200);
+      expect(tables.mileage_submissions).toHaveLength(1);
+    } finally {
+      delete process.env.RESEND_API_KEY;
+      delete process.env.TELEGRAM_BOT_TOKEN;
+      delete process.env.TELEGRAM_CHAT_ID;
+    }
+  });
+
   it("still saves when the table lacks the website columns", async () => {
     failColumns = ["image_path", "reading_value"];
     const res = await call(mileageRoute, { reading: 41250, photo_base64: tinyJpeg });

@@ -111,7 +111,8 @@ export function getDefaultFromAddress(type: string): string {
     type === "fleet_summary" ||
     type === "driver_licence_summary" ||
     type === "rent_due" ||
-    type === "rent_due_tomorrow"
+    type === "rent_due_tomorrow" ||
+    type === "odometer_submission"
   ) {
     address = senderOverride("NOTIFICATIONS_EMAIL_FROM") || DEFAULT_SENDERS.notifications;
   } else {
