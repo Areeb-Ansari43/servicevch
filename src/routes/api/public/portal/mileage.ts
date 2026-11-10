@@ -10,6 +10,7 @@ import { createFileRoute } from "@tanstack/react-router";
  * 3. Runs the AI odometer reader (same as the CRM's own upload form).
  * 4. Inserts a pending mileage_submissions row with everything the CRM review screen
  *    needs. Realtime makes it appear in the CRM straight away.
+ * 5. Emails admin@fa-ibi.co.uk (high importance, from notifications@) and posts to Telegram.
  */
 const MAX_BYTES = 8 * 1024 * 1024;
 const BUCKET = "mileage-photos";
@@ -118,6 +119,24 @@ async function handle(request: Request): Promise<Response> {
       { ok: false, code: "save_failed", error: "Could not save your reading. Please try again shortly." },
       500,
     );
+  }
+
+  // 4. Tell the office (email to admin@ + Telegram). Best effort; never fails the submission.
+  try {
+    const { notifyOdometerSubmission } = await import("@/lib/odometer-notify.server");
+    const prev = Number(driver.current_mileage || 0);
+    await notifyOdometerSubmission({
+      driverName: driver.driver_name || "Driver",
+      reg: driver.reg || "",
+      reading,
+      previousReading: prev > 0 ? prev : null,
+      aiReading: ocr.odometer,
+      aiConfidence: ocr.confidence,
+      photoUrl,
+      submissionId: inserted.id ?? null,
+    });
+  } catch (err) {
+    console.warn("[portal-mileage] office notification failed:", err);
   }
 
   return jsonResponse(

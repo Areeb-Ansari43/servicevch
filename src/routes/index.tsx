@@ -1018,7 +1018,7 @@ function PortalAccountsAdminCard({
         <div className="p-8 text-center text-xs text-[#8b95a8]">No portal accounts matching filter.</div>
       ) : (
         <div className="overflow-x-auto rounded-xl border" style={{ borderColor: T.borderSoft }}>
-          <table className="w-full text-left text-xs">
+          <table className="w-full min-w-[640px] text-left text-xs">
             <thead className="border-b bg-black/30 text-[10px] font-bold uppercase tracking-wider text-[#8b95a8]" style={{ borderColor: T.borderSoft }}>
               <tr>
                 <th className="px-4 py-3">User Email / Auth ID</th>
@@ -1255,7 +1255,7 @@ function JobRunsAdminCard() {
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full min-w-[640px] text-left text-xs">
             <thead>
               <tr className="border-b border-border/80 text-muted-foreground font-semibold">
                 <th className="pb-2">Job Name</th>
@@ -1895,7 +1895,7 @@ function AuditLogsView({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full min-w-[720px] text-left text-xs">
               <thead className="border-b bg-black/30 text-[10px] font-bold uppercase tracking-wider text-[#8b95a8]" style={{ borderColor: T.borderSoft }}>
                 <tr>
                   <th className="px-4 py-3">Timestamp</th>
@@ -2634,13 +2634,12 @@ function Sidebar({
       )}
 
       {/* Floating Panel (Expanded State) */}
-      {expanded && (
+      {/* Desktop: shown when pinned/hovered. Phone/tablet: only when opened from "More". */}
+      {(expanded || mobileOpen) && (
         <aside
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
-          className={`fixed top-3 bottom-3 left-3 z-50 flex w-[260px] flex-col rounded-[28px] border border-[var(--vch-border)] bg-[var(--vch-surface-solid)] p-3 shadow-2xl backdrop-blur-2xl transition-all duration-300
-            ${mobileOpen ? "translate-x-0" : "translate-x-0"}
-          `}
+          className={`fixed top-3 bottom-3 left-3 z-50 ${mobileOpen ? "flex" : "hidden lg:flex"} w-[260px] max-w-[calc(100vw-24px)] flex-col rounded-[28px] border border-[var(--vch-border)] bg-[var(--vch-surface-solid)] p-3 shadow-2xl backdrop-blur-2xl transition-all duration-300`}
         >
           {/* Edge Pin Toggle Handle */}
           <button
@@ -3113,7 +3112,7 @@ function Topbar({
         <Icon.Menu className="h-4 w-4" />
       </button>
       <span
-        className="inline-flex shrink-0 items-center gap-2 rounded-full px-2.5 py-1 text-[11px] font-semibold text-[#ff8a3d]"
+        className="hidden shrink-0 items-center gap-2 rounded-full px-2.5 py-1 text-[11px] font-semibold text-[#ff8a3d] sm:inline-flex"
         style={{ background: T.orangeSoft }}
       >
         <span className="relative flex h-1.5 w-1.5">
@@ -3125,8 +3124,8 @@ function Topbar({
           Live
         </span>
       </span>
-      <div className="flex min-w-0 flex-1 items-center justify-center">
-        <div className="flex items-center divide-x divide-white/[0.08] rounded-lg border border-white/[0.06] bg-white/[0.018] px-1 py-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+      <div className="flex min-w-0 flex-1 items-center justify-start overflow-x-auto [scrollbar-width:none] sm:justify-center [&::-webkit-scrollbar]:hidden">
+        <div className="flex shrink-0 items-center divide-x divide-white/[0.08] rounded-lg border border-white/[0.06] bg-white/[0.018] px-1 py-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
           {statusItems.map((item) => (
             <span
               key={item.label}
@@ -5469,7 +5468,7 @@ function DriversView({
         style={{ borderColor: T.border, background: T.panel }}
       >
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full min-w-[900px] text-left text-xs">
             <thead
               className="border-b text-[10px] uppercase tracking-wider text-[#8b95a8]"
               style={{ borderColor: T.borderSoft, background: "rgba(255,255,255,0.03)" }}
@@ -5515,7 +5514,7 @@ function DriversView({
                           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#ff6a00] to-[#ff9d4d] text-xs font-bold text-white shadow-sm">
                             {initials}
                           </div>
-                          <div>
+                          <div className="min-w-[150px]">
                             <button
                               type="button"
                               onClick={(e) => {
@@ -7790,6 +7789,11 @@ function MileageView({
   const [eomTarget, setEomTarget] = useState<DriverTrack | null>(null);
   const [logsTarget, setLogsTarget] = useState<DriverTrack | null>(null);
 
+  // Collapsed by default to keep the page tidy
+  const [trackingOpen, setTrackingOpen] = useState(false);
+  const [queueOpen, setQueueOpen] = useState(false);
+  const [openSubDrivers, setOpenSubDrivers] = useState<Set<string>>(new Set());
+
   // Mileage Submissions Queue State
   const [subFilter, setSubFilter] = useState<"pending" | "approved" | "rejected" | "all">("pending");
   const [submitModalOpen, setSubmitModalOpen] = useState(false);
@@ -7883,10 +7887,29 @@ function MileageView({
       setRegText("");
       setSelected(null);
       setStartMileage("");
+      setTrackingOpen(false);
     } catch (e: any) {
       toast(e?.message ?? "Failed", "error");
     }
   };
+
+  // Group submissions by driver so the queue shows one compact row per driver.
+  const submissionGroups = (() => {
+    const groups = new Map<string, { key: string; name: string; reg: string; items: MileageSubmission[] }>();
+    for (const sub of filteredSubmissions) {
+      const key = sub.driver_id || `${sub.driver_name}|${sub.registration}`;
+      if (!groups.has(key)) groups.set(key, { key, name: sub.driver_name, reg: sub.registration, items: [] });
+      groups.get(key)!.items.push(sub);
+    }
+    return [...groups.values()];
+  })();
+  const toggleSubDriver = (key: string) =>
+    setOpenSubDrivers((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   return (
     <div className="space-y-6">
@@ -7895,9 +7918,16 @@ function MileageView({
         className="rounded-xl border p-5 sm:p-6 shadow-sm"
         style={{ borderColor: T.border, background: T.panel }}
       >
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div>
+        <div className={`${queueOpen ? "mb-4" : ""} flex flex-wrap items-center justify-between gap-3`}>
+          <button
+            type="button"
+            onClick={() => setQueueOpen((o) => !o)}
+            aria-expanded={queueOpen}
+            className="text-left"
+            data-queue-toggle
+          >
             <div className="flex items-center gap-2">
+              <span className={`inline-block text-[#8b95a8] transition-transform ${queueOpen ? "rotate-90" : ""}`}>▶</span>
               <h2 className="text-lg font-extrabold text-white">
                 Mileage Submission Review Queue
               </h2>
@@ -7908,9 +7938,11 @@ function MileageView({
               )}
             </div>
             <p className="text-xs text-[#8b95a8] mt-0.5">
-              Review driver odometer photo submissions, verify Gemini Vision OCR suggested values, and confirm automatic mileage & excess charges.
+              {queueOpen
+                ? "Click a driver to review their odometer photos, check the AI reading and approve."
+                : "Click to view submissions by driver."}
             </p>
-          </div>
+          </button>
 
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -7924,6 +7956,7 @@ function MileageView({
           </div>
         </div>
 
+        {queueOpen && (<>
         {/* Queue Filter Tabs */}
         <div className="mb-4 flex flex-wrap items-center gap-2 border-b pb-3" style={{ borderColor: T.borderSoft }}>
           <button
@@ -7983,21 +8016,76 @@ function MileageView({
               : `No ${subFilter} mileage submissions found.`}
           </div>
         ) : (
-          <div className="space-y-4">
-            {filteredSubmissions.map((sub) => (
-              <MileageSubmissionCard
-                key={sub.id}
-                submission={sub}
-                drivers={drivers}
-                data={data}
-                toast={toast}
-                onExpandPhoto={(url) => setPreviewPhotoUrl(url)}
-              />
-            ))}
+          <div className="space-y-2">
+            {submissionGroups.map((g) => {
+              const open = openSubDrivers.has(g.key);
+              const latest = g.items[0];
+              const latestReading = latest.ocr_mileage ?? latest.reading_value ?? latest.approved_mileage;
+              const pendingCount = g.items.filter((i) => i.status === "pending").length;
+              return (
+                <div
+                  key={g.key}
+                  className="rounded-xl border"
+                  style={{ borderColor: T.borderSoft, background: T.panel2 }}
+                  data-sub-driver={g.name}
+                >
+                  <button
+                    type="button"
+                    onClick={() => toggleSubDriver(g.key)}
+                    aria-expanded={open}
+                    className="flex w-full flex-wrap items-center justify-between gap-2 px-4 py-3 text-left hover:bg-white/5"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[#8b95a8] transition-transform ${open ? "rotate-90" : ""}`}>▶</span>
+                      <span className="text-sm font-bold text-white">{g.name}</span>
+                      {g.reg && <span className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[11px] text-[#cfd6e3]">{g.reg}</span>}
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-[#8b95a8]">
+                      {latestReading ? <span>Latest: {Number(latestReading).toLocaleString()} mi</span> : null}
+                      <span>{new Date(latest.submitted_at).toLocaleDateString("en-GB")}</span>
+                      {pendingCount > 0 ? (
+                        <span className="rounded-full border border-amber-500/30 bg-amber-500/20 px-2 py-0.5 font-bold text-amber-300">
+                          {pendingCount} pending
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-white/10 px-2 py-0.5">{g.items.length}</span>
+                      )}
+                    </div>
+                  </button>
+                  {open && (
+                    <div className="space-y-4 border-t p-3" style={{ borderColor: T.borderSoft }}>
+                      {g.items.map((sub) => (
+                        <MileageSubmissionCard
+                          key={sub.id}
+                          submission={sub}
+                          drivers={drivers}
+                          data={data}
+                          toast={toast}
+                          onExpandPhoto={(url) => setPreviewPhotoUrl(url)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
+        </>)}
       </div>
 
+      {!(trackingOpen || selectedDriver) ? (
+        <button
+          type="button"
+          onClick={() => setTrackingOpen(true)}
+          className="inline-flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/5"
+          style={{ borderColor: T.border, background: T.panel }}
+          data-start-tracking
+        >
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#ff6a00] text-base leading-none text-white">+</span>
+          Start tracking
+        </button>
+      ) : (
       <form
         onSubmit={submit}
         className="space-y-4 rounded-xl border p-6"
@@ -8007,22 +8095,21 @@ function MileageView({
           <h3 className="text-base font-semibold">
             {selectedDriver ? `Update Mileage / Tracking for ${selectedDriver.driver_name}` : "Start Tracking / Update Driver Mileage"}
           </h3>
-          {selectedDriver && (
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedDriver(null);
-                setDriverSearchText("");
-                setDriverName("");
-                setRegText("");
-                setSelected(null);
-                setStartMileage("");
-              }}
-              className="text-xs text-[#8b95a8] hover:text-white underline"
-            >
-              Clear selected driver
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedDriver(null);
+              setDriverSearchText("");
+              setDriverName("");
+              setRegText("");
+              setSelected(null);
+              setStartMileage("");
+              setTrackingOpen(false);
+            }}
+            className="text-xs text-[#8b95a8] hover:text-white underline"
+          >
+            Close
+          </button>
         </div>
 
         <div>
@@ -8116,6 +8203,7 @@ function MileageView({
           </button>
         </div>
       </form>
+      )}
 
       <div>
         <h3 className="mb-3 text-base font-semibold">Active Drivers ({drivers.length})</h3>
@@ -8204,13 +8292,13 @@ function MileageView({
                     >
                       End of Month
                     </button>
-                    {logsCount > 0 && (
+                    {(logsCount > 0 || submissions.some((sub) => sub.driver_id === d.id)) && (
                       <button
                         onClick={() => setLogsTarget(d)}
                         className="ml-auto inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-[#1e222b]"
                         style={{ borderColor: T.border }}
                       >
-                        <Icon.Clock className="h-3.5 w-3.5" /> Logged Miles ({logsCount})
+                        <Icon.Clock className="h-3.5 w-3.5" /> Logged Miles &amp; Photos ({logsCount})
                       </button>
                     )}
                     <button
@@ -8264,7 +8352,13 @@ function MileageView({
         />
       )}
 
-      {logsTarget && <LogsModal driver={logsTarget} onClose={() => setLogsTarget(null)} />}
+      {logsTarget && (
+        <LogsModal
+          driver={logsTarget}
+          submissions={data.mileageSubmissions || []}
+          onClose={() => setLogsTarget(null)}
+        />
+      )}
 
       {submitModalOpen && (
         <SubmitMileagePhotoModal
@@ -9018,7 +9112,40 @@ function EndOfMonthModal({
   );
 }
 
-function LogsModal({ driver, onClose }: { driver: DriverTrack; onClose: () => void }) {
+function LogsModal({
+  driver,
+  onClose,
+  submissions = [],
+}: {
+  driver: DriverTrack;
+  onClose: () => void;
+  submissions?: MileageSubmission[];
+}) {
+  const norm = (r?: string | null) => (r || "").replace(/\s+/g, "").toUpperCase();
+  const mine = submissions
+    .filter((s) => (s.driver_id && s.driver_id === driver.id) || (!!s.registration && norm(s.registration) === norm(driver.registration)))
+    .sort((a, b) => (a.submitted_at < b.submitted_at ? 1 : -1));
+  // Photo that backs a monthly log: the approved reading equal to its end mileage, else the
+  // approved reading closest in time (within 5 days).
+  const photoForLog = (l: { end_mileage: number; date: string }) => {
+    const approved = mine.filter((s) => s.status === "approved" && s.photo_url);
+    const exact = approved.find((s) => s.approved_mileage === l.end_mileage);
+    if (exact) return exact.photo_url;
+    const t = new Date(l.date).getTime();
+    const near = approved
+      .map((s) => ({ s, d: Math.abs(new Date(s.approved_at || s.submitted_at).getTime() - t) }))
+      .filter((x) => x.d <= 5 * 86400000)
+      .sort((a, b) => a.d - b.d)[0];
+    return near?.s.photo_url || null;
+  };
+  const Thumb = ({ url }: { url?: string | null }) =>
+    url ? (
+      <a href={url} target="_blank" rel="noopener noreferrer" title="Open odometer photo">
+        <img src={url} alt="Odometer photo" className="h-10 w-14 rounded border border-white/10 object-cover hover:opacity-80" />
+      </a>
+    ) : (
+      <span className="text-xs text-[#5b6577]">—</span>
+    );
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-200"
@@ -9041,7 +9168,13 @@ function LogsModal({ driver, onClose }: { driver: DriverTrack; onClose: () => vo
             <Icon.X className="h-5 w-5" />
           </button>
         </div>
-        <table className="w-full text-sm">
+        {driver.monthly_logs.length === 0 ? (
+          <div className="rounded-lg border border-dashed p-4 text-center text-xs text-[#8b95a8]" style={{ borderColor: T.border }}>
+            No closed months yet. Use "End of Month" to record one.
+          </div>
+        ) : (
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[560px] text-sm">
           <thead
             className="text-left text-xs uppercase tracking-wider text-[#8b95a8]"
             style={{ background: T.panel2 }}
@@ -9053,6 +9186,7 @@ function LogsModal({ driver, onClose }: { driver: DriverTrack; onClose: () => vo
               <th className="px-3 py-2">Driven</th>
               <th className="px-3 py-2">Overage</th>
               <th className="px-3 py-2">Charge</th>
+              <th className="px-3 py-2">Photo</th>
             </tr>
           </thead>
           <tbody>
@@ -9068,10 +9202,66 @@ function LogsModal({ driver, onClose }: { driver: DriverTrack; onClose: () => vo
                 >
                   £{l.excess_charge.toFixed(2)}
                 </td>
+                <td className="px-3 py-2">
+                  <Thumb url={photoForLog(l)} />
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
+        </div>
+        )}
+
+        <h3 className="mb-2 mt-6 text-sm font-bold text-white">Odometer readings &amp; photos ({mine.length})</h3>
+        {mine.length === 0 ? (
+          <div className="rounded-lg border border-dashed p-4 text-center text-xs text-[#8b95a8]" style={{ borderColor: T.border }}>
+            No odometer photos submitted yet.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[520px] text-sm" data-odometer-readings>
+            <thead className="text-left text-xs uppercase tracking-wider text-[#8b95a8]" style={{ background: T.panel2 }}>
+              <tr>
+                <th className="px-3 py-2">Submitted</th>
+                <th className="px-3 py-2">Reading</th>
+                <th className="px-3 py-2">AI / driver</th>
+                <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2">Photo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {mine.map((sub) => (
+                <tr key={sub.id} className="border-t" style={{ borderColor: T.borderSoft }}>
+                  <td className="px-3 py-2">{new Date(sub.submitted_at).toLocaleDateString("en-GB")}</td>
+                  <td className="px-3 py-2 font-semibold">
+                    {(sub.approved_mileage ?? sub.reading_value ?? sub.ocr_mileage)?.toLocaleString() ?? "—"}
+                  </td>
+                  <td className="px-3 py-2 text-xs text-[#8b95a8]">
+                    {sub.ocr_mileage ? `AI ${sub.ocr_mileage.toLocaleString()}` : "AI —"}
+                    {sub.reading_value ? ` · driver ${sub.reading_value.toLocaleString()}` : ""}
+                  </td>
+                  <td className="px-3 py-2 text-xs">
+                    <span
+                      className={
+                        sub.status === "approved"
+                          ? "text-emerald-400"
+                          : sub.status === "rejected"
+                            ? "text-red-400"
+                            : "text-amber-300"
+                      }
+                    >
+                      {sub.status === "approved" ? "Approved" : sub.status === "rejected" ? "Rejected" : "Pending"}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2">
+                    <Thumb url={sub.photo_url} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -953,9 +953,19 @@ export function useFleetData() {
         .eq("id", submissionId);
 
       if (targetDriver) {
+        // No month-start reading recorded yet (0): this first approved reading becomes the
+        // baseline, otherwise the whole odometer would count as this month's miles.
+        // Use the previous approved odometer if there is one, else this reading.
+        const needsBaseline = !targetDriver.start_mileage || targetDriver.start_mileage <= 0;
+        const previous = Number(targetDriver.current_mileage || 0);
+        const baseline = previous > 0 && previous <= confirmedMileage ? previous : confirmedMileage;
         await supabase
           .from("driver_tracks")
-          .update({ current_mileage: confirmedMileage })
+          .update(
+            needsBaseline
+              ? { current_mileage: confirmedMileage, start_mileage: baseline }
+              : { current_mileage: confirmedMileage },
+          )
           .eq("id", targetDriver.id);
 
         if (targetDriver.vehicle_id) {

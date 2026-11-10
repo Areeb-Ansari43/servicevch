@@ -127,7 +127,15 @@ async function handle(request: Request): Promise<Response> {
         current_mileage: Number(driver.current_mileage || 0),
         start_mileage: Number(driver.start_mileage || 0),
         // Same as the CRM: miles this period = odometer now - odometer at period start.
-        miles_this_period: Math.max(0, Number(driver.current_mileage || 0) - Number(driver.start_mileage || 0)),
+        // Unknown (null) until a month-start reading exists, so the whole odometer is never
+        // shown as this month's miles.
+        miles_this_period:
+          Number(driver.start_mileage || 0) > 0
+            ? Math.max(0, Number(driver.current_mileage || 0) - Number(driver.start_mileage || 0))
+            : null,
+        last_odometer: Number(driver.current_mileage || 0) || null,
+        phone: driver.phone || null,
+        start_date: driver.start_date || null,
         allowance: driver.allowance != null ? Number(driver.allowance) : null,
         excess_rate_pence: driver.rate_pence != null ? Number(driver.rate_pence) : null,
         licence_expiry_date: driver.licence_expiry_date || null,
@@ -163,6 +171,10 @@ async function handle(request: Request): Promise<Response> {
         reading: s.reading_value ?? s.approved_mileage ?? s.ocr_mileage ?? null,
         approved_mileage: s.approved_mileage ?? null,
         rejection_reason: s.rejection_reason ?? null,
+        photo_url:
+          s.photo_url ||
+          (s.image_path ? db.storage.from("mileage-photos").getPublicUrl(s.image_path).data?.publicUrl : null) ||
+          null,
       })),
       documents: docs,
     },

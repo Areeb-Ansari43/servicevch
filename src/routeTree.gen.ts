@@ -35,6 +35,7 @@ import { Route as ApiJobsInactivityRouteImport } from './routes/api/jobs/inactiv
 import { Route as ApiAdminJobRunsRouteImport } from './routes/api/admin/job-runs'
 import { Route as ApiPublicPortalMileageRouteImport } from './routes/api/public/portal/mileage'
 import { Route as ApiPublicPortalMeRouteImport } from './routes/api/public/portal/me'
+import { Route as ApiPublicPortalDocumentRouteImport } from './routes/api/public/portal/document'
 import { Route as ApiPublicPortalAuthVerifyCodeRouteImport } from './routes/api/public/portal-auth/verify-code'
 import { Route as ApiPublicPortalAuthRequestCodeRouteImport } from './routes/api/public/portal-auth/request-code'
 import { Route as ApiPublicPortalAuthLogEventRouteImport } from './routes/api/public/portal-auth/log-event'
@@ -170,6 +171,11 @@ const ApiPublicPortalMeRoute = ApiPublicPortalMeRouteImport.update({
   path: '/api/public/portal/me',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicPortalDocumentRoute = ApiPublicPortalDocumentRouteImport.update({
+  id: '/api/public/portal/document',
+  path: '/api/public/portal/document',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicPortalAuthVerifyCodeRoute =
   ApiPublicPortalAuthVerifyCodeRouteImport.update({
     id: '/api/public/portal-auth/verify-code',
@@ -224,6 +230,7 @@ export interface FileRoutesByFullPath {
   '/api/public/portal-auth/log-event': typeof ApiPublicPortalAuthLogEventRoute
   '/api/public/portal-auth/request-code': typeof ApiPublicPortalAuthRequestCodeRoute
   '/api/public/portal-auth/verify-code': typeof ApiPublicPortalAuthVerifyCodeRoute
+  '/api/public/portal/document': typeof ApiPublicPortalDocumentRoute
   '/api/public/portal/me': typeof ApiPublicPortalMeRoute
   '/api/public/portal/mileage': typeof ApiPublicPortalMileageRoute
 }
@@ -256,6 +263,7 @@ export interface FileRoutesByTo {
   '/api/public/portal-auth/log-event': typeof ApiPublicPortalAuthLogEventRoute
   '/api/public/portal-auth/request-code': typeof ApiPublicPortalAuthRequestCodeRoute
   '/api/public/portal-auth/verify-code': typeof ApiPublicPortalAuthVerifyCodeRoute
+  '/api/public/portal/document': typeof ApiPublicPortalDocumentRoute
   '/api/public/portal/me': typeof ApiPublicPortalMeRoute
   '/api/public/portal/mileage': typeof ApiPublicPortalMileageRoute
 }
@@ -289,6 +297,7 @@ export interface FileRoutesById {
   '/api/public/portal-auth/log-event': typeof ApiPublicPortalAuthLogEventRoute
   '/api/public/portal-auth/request-code': typeof ApiPublicPortalAuthRequestCodeRoute
   '/api/public/portal-auth/verify-code': typeof ApiPublicPortalAuthVerifyCodeRoute
+  '/api/public/portal/document': typeof ApiPublicPortalDocumentRoute
   '/api/public/portal/me': typeof ApiPublicPortalMeRoute
   '/api/public/portal/mileage': typeof ApiPublicPortalMileageRoute
 }
@@ -323,6 +332,7 @@ export interface FileRouteTypes {
     | '/api/public/portal-auth/log-event'
     | '/api/public/portal-auth/request-code'
     | '/api/public/portal-auth/verify-code'
+    | '/api/public/portal/document'
     | '/api/public/portal/me'
     | '/api/public/portal/mileage'
   fileRoutesByTo: FileRoutesByTo
@@ -355,6 +365,7 @@ export interface FileRouteTypes {
     | '/api/public/portal-auth/log-event'
     | '/api/public/portal-auth/request-code'
     | '/api/public/portal-auth/verify-code'
+    | '/api/public/portal/document'
     | '/api/public/portal/me'
     | '/api/public/portal/mileage'
   id:
@@ -387,6 +398,7 @@ export interface FileRouteTypes {
     | '/api/public/portal-auth/log-event'
     | '/api/public/portal-auth/request-code'
     | '/api/public/portal-auth/verify-code'
+    | '/api/public/portal/document'
     | '/api/public/portal/me'
     | '/api/public/portal/mileage'
   fileRoutesById: FileRoutesById
@@ -420,6 +432,7 @@ export interface RootRouteChildren {
   ApiPublicPortalAuthLogEventRoute: typeof ApiPublicPortalAuthLogEventRoute
   ApiPublicPortalAuthRequestCodeRoute: typeof ApiPublicPortalAuthRequestCodeRoute
   ApiPublicPortalAuthVerifyCodeRoute: typeof ApiPublicPortalAuthVerifyCodeRoute
+  ApiPublicPortalDocumentRoute: typeof ApiPublicPortalDocumentRoute
   ApiPublicPortalMeRoute: typeof ApiPublicPortalMeRoute
   ApiPublicPortalMileageRoute: typeof ApiPublicPortalMileageRoute
 }
@@ -608,6 +621,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicPortalMeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/portal/document': {
+      id: '/api/public/portal/document'
+      path: '/api/public/portal/document'
+      fullPath: '/api/public/portal/document'
+      preLoaderRoute: typeof ApiPublicPortalDocumentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/portal-auth/verify-code': {
       id: '/api/public/portal-auth/verify-code'
       path: '/api/public/portal-auth/verify-code'
@@ -668,6 +688,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicPortalAuthLogEventRoute: ApiPublicPortalAuthLogEventRoute,
   ApiPublicPortalAuthRequestCodeRoute: ApiPublicPortalAuthRequestCodeRoute,
   ApiPublicPortalAuthVerifyCodeRoute: ApiPublicPortalAuthVerifyCodeRoute,
+  ApiPublicPortalDocumentRoute: ApiPublicPortalDocumentRoute,
   ApiPublicPortalMeRoute: ApiPublicPortalMeRoute,
   ApiPublicPortalMileageRoute: ApiPublicPortalMileageRoute,
 }
