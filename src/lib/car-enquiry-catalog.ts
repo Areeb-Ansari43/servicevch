@@ -204,3 +204,21 @@ export function selectedVehicleFromCatalog(c: BotCatalogEntry) {
     fuel: c.fuel_type || null,
   };
 }
+
+/** Car already shown in a comparison: a short confirmation instead of the full spec again. */
+export function formatShortConfirmation(c: BotCatalogEntry): string {
+  const v = selectedVehicleFromCatalog(c);
+  const bits = [v.weeklyRate, v.deposit ? `${v.deposit} deposit` : null, `${v.contractWeeks}-week minimum`]
+    .filter(Boolean)
+    .join(", ");
+  return `Great choice: ${v.displayName}, ${bits}.\n\nShall I send this to our team to arrange? Reply Yes or No.`;
+}
+
+/** Final message once the customer says Yes. */
+export function formatEnquirySubmitted(
+  v: { displayName?: string; make: string; model: string; weeklyRate: string },
+  handoffText: string,
+): string {
+  const name = v.displayName || `${v.make} ${v.model}`;
+  return `Thank you! Your enquiry for the ${name} (${v.weeklyRate}) has been sent to our team.\n\n${handoffText}`;
+}

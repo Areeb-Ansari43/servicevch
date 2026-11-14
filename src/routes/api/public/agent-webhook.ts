@@ -20,6 +20,8 @@ import {
   findCatalogSelections,
   formatCatalogDetails,
   formatCatalogFleetList,
+  formatEnquirySubmitted,
+  formatShortConfirmation,
   isCompactEligibilityAnswer,
   offerableSummaries,
   selectedVehicleFromCatalog,
@@ -150,6 +152,10 @@ type CarEligibility = {
     fuel?: string | null;
   };
   awaitingAnotherCar?: boolean;
+  /** Where the car choice is: comparison shown (pick one) or one car shown (Yes/No). */
+  carStage?: "awaiting_choice" | "awaiting_confirm";
+  /** Cars whose full details the customer has already seen. */
+  shownCars?: string[];
 };
 
 type AiResult = {
@@ -2212,18 +2218,95 @@ export async function handleAgentWebhookRequest(request: Request) {
       matched: catalogSelection.map((s) => s.catalog.display_name),
       selectedVehicleRequest,
     });
+  // One car is on screen with "Reply Yes or No": a single Yes sends it to the team.
+  const awaitingCarConfirm =
+    !option &&
+    carEligibility.carStage === "awaiting_confirm" &&
+    Boolean(carEligibility.selectedVehicle) &&
+    catalogSelection.length === 0 &&
+    (isPositiveConfirmation(content) || isNegativeConfirmation(content));
+  if (awaitingCarConfirm) {
+    const sel = carEligibility.selectedVehicle!;
+    if (isPositiveConfirmation(content)) {
+      const summary = formatCarHandoffSummary(carEligibility, content.trim());
+      const reply = formatEnquirySubmitted(sel, HANDOFF_24H);
+      const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
+      if (outbound.sent)
+        await insertWithSessionFallback(db, "messages", {
+          user_id: userId,
+          lead_id: leadId,
+          sender: "ai_agent",
+          content: reply,
+          handoff: true,
+          session_id: sessionId,
+        });
+      await db
+        .from("whatsapp_leads")
+        .update({
+          car_enquiry_data: { ...carEligibility, carStage: undefined, submitted: true },
+          status: "needs_human",
+          customer_type: "needs_human",
+          ai_paused: true,
+          closed_at: new Date().toISOString(),
+          intent: leadIntent ?? "book_car",
+          ai_summary: outbound.sent ? summary : `⚠️ WhatsApp delivery failed: ${outbound.reason}`,
+          last_message_at: new Date().toISOString(),
+        } as never)
+        .eq("id", leadId);
+      const alert = await sendTelegramAlert({
+        name: leadName,
+        phone,
+        reason: `🚗 New car enquiry: ${describeSelectedVehicle(sel)}`,
+        leadId,
+        history: [{ sender: "ai_agent", content: summary }],
+        mediaUrl,
+        closed: true,
+      });
+      return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, needs_human: true, telegram_alert: alert, outbound });
+    }
+    const reply = `No problem. ${formatCustomerFleet(catalogOffer).replace(/^Great, thank you\. /, "")}`.replace(
+      "These cars are available at the moment:",
+      "Here are the cars available if you'd like to pick another car:",
+    );
+    const nextEligibility: CarEligibility = {
+      ...carEligibility,
+      selectedVehicle: undefined,
+      carStage: undefined,
+      awaitingAnotherCar: true,
+    };
+    const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
+    if (outbound.sent)
+      await insertWithSessionFallback(db, "messages", {
+        user_id: userId,
+        lead_id: leadId,
+        sender: "ai_agent",
+        content: reply,
+        session_id: sessionId,
+      });
+    await db
+      .from("whatsapp_leads")
+      .update({ car_enquiry_data: nextEligibility, ai_summary: reply, last_message_at: new Date().toISOString() } as never)
+      .eq("id", leadId);
+    return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, needs_human: !outbound.sent });
+  }
+
   if (selectedVehicleRequest) {
-    const reply = formatCatalogDetails(catalogSelection, catalogSummaries);
+    const shown = new Set(carEligibility.shownCars ?? []);
+    const single = catalogSelection.length === 1 ? catalogSelection[0].catalog : null;
+    // Already compared: confirm briefly. New car: full details once.
+    const reply =
+      single && shown.has(single.display_name)
+        ? formatShortConfirmation(single)
+        : formatCatalogDetails(catalogSelection, catalogSummaries);
     // One car: remember it for the Yes/No step. Several: wait for the customer to pick one.
-    const selectedVehicle =
-      catalogSelection.length === 1
-        ? selectedVehicleFromCatalog(catalogSelection[0].catalog)
-        : undefined;
+    const selectedVehicle = single ? selectedVehicleFromCatalog(single) : undefined;
     const nextEligibility: CarEligibility = {
       ...carEligibility,
       completed: true,
       selectedVehicle,
       awaitingAnotherCar: false,
+      carStage: single ? "awaiting_confirm" : "awaiting_choice",
+      shownCars: [...new Set([...shown, ...catalogSelection.map((c) => c.catalog.display_name)])],
     };
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
     if (outbound.sent) {
@@ -2630,20 +2713,20 @@ export async function handleAgentWebhookRequest(request: Request) {
       };
       next.keyEvidenceVerification = next.keyVideoVerification;
     }
-    const vehicleVerified = next.vehiclePhotoVerification?.status === "verified";
-    const keyEvidenceVerified =
-      next.keyEvidenceVerification?.status === "verified" ||
-      next.keyVideoVerification?.status === "received_pending_review";
-    const mediaComplete = Boolean(
-      next.vehiclePhotoUrl && vehicleVerified && next.keyEvidenceUrl && keyEvidenceVerified,
+    // Customer flow: car photo -> "thank you, now the key" -> key photo/video -> "thank you, done".
+    // The AI photo check is passed to the team in the alert; it never blocks the customer.
+    const isVideo = normalizedMediaType === "video";
+    const newVehiclePhoto = Boolean(mediaUrl && !breakdownData.vehiclePhotoUrl && next.vehiclePhotoUrl === mediaUrl);
+    const newKeyEvidence = Boolean(
+      mediaUrl && next.vehiclePhotoUrl && !breakdownData.keyEvidenceUrl && next.keyEvidenceUrl === mediaUrl,
     );
-    if (
-      mediaComplete &&
-      next.keyMediaChecked &&
-      isPositiveClosure(content) &&
-      lastAgentMessage.toLowerCase().includes("is that all for today")
-    ) {
-      const summary = `Emergency breakdown case\n\nGarage: ${AUTO_SURGEON_ADDRESS}\nMap: ${AUTO_SURGEON_MAP}\nVehicle photo: Verified\nKey evidence: ${next.keyVideoUrl ? "Video received" : "Photo verified"}`;
+    const aiCheckText = (v?: BreakdownVerification) =>
+      v ? `${v.status === "verified" ? "looks right" : v.status === "error" ? "not checked" : "please check"} (${v.reason})` : null;
+    const { notifyBreakdown } = await import("@/lib/breakdown-notify.server");
+    const customerName = leadName && leadName !== "Unknown" ? leadName : "A customer";
+
+    if (newKeyEvidence) {
+      const summary = `Emergency breakdown case\n\nGarage: ${AUTO_SURGEON_ADDRESS}\nMap: ${AUTO_SURGEON_MAP}\nCar photo: received\nKey evidence: ${next.keyVideoUrl ? "video received" : "photo received"}`;
       const { error: caseError } = await db.from("accident_cases").insert({
         user_id: userId,
         source_lead_id: leadId,
@@ -2660,12 +2743,9 @@ export async function handleAgentWebhookRequest(request: Request) {
         status: "open",
       } as never);
       if (caseError)
-        console.error("[agent-webhook] breakdown case insert failed", {
-          leadId,
-          error: caseError.message,
-        });
+        console.error("[agent-webhook] breakdown case insert failed", { leadId, error: caseError.message });
       const reply =
-        "✅ Thank you. The breakdown case and key media have been saved for our team. This conversation is now closed.";
+        "✅ That's fine, thank you very much. Our team has been told your vehicle and key are at The Auto Surgeon and will contact you shortly.";
       const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
       if (outbound.sent)
         await insertWithSessionFallback(db, "messages", {
@@ -2679,7 +2759,7 @@ export async function handleAgentWebhookRequest(request: Request) {
       await db
         .from("whatsapp_leads")
         .update({
-          breakdown_data: { ...next, closed: true },
+          breakdown_data: { ...next, keyMediaChecked: true, closed: true },
           status: "closed",
           ai_paused: true,
           closed_at: new Date().toISOString(),
@@ -2687,45 +2767,22 @@ export async function handleAgentWebhookRequest(request: Request) {
           last_message_at: new Date().toISOString(),
         } as never)
         .eq("id", leadId);
-      const alert = await sendTelegramAlert({
-        name: leadName,
-        phone,
-        reason: caseError
-          ? "Breakdown case requires manual CRM review"
-          : "Breakdown media verified and customer confirmed closure",
+      const alerts = await notifyBreakdown({
+        stage: "complete",
+        customerName,
+        phone: phone ?? chatId,
+        vehiclePhotoUrl: next.vehiclePhotoUrl,
+        keyEvidenceUrl: next.keyEvidenceUrl,
+        keyIsVideo: isVideo,
+        aiCheck: aiCheckText(next.keyEvidenceVerification),
         leadId,
-        history: [
-          ...history,
-          { sender: "ai_agent", content: summary },
-          { sender: "ai_agent", content: reply },
-        ],
-        mediaUrl,
-        closed: true,
       });
-      return json({
-        ok: true,
-        lead_id: leadId,
-        reply: outbound.sent ? reply : null,
-        outbound,
-        telegram_alert: alert,
-        breakdown_case_saved: !caseError,
-      });
+      return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, alerts, breakdown_case_saved: !caseError });
     }
-    next.keyMediaChecked = mediaComplete;
-    const currentVerification =
-      normalizedMediaType === "image"
-        ? next.vehiclePhotoUrl === mediaUrl
-          ? next.vehiclePhotoVerification
-          : next.keyEvidenceVerification
-        : next.keyVideoVerification;
-    const reply =
-      currentVerification &&
-      currentVerification.status !== "verified" &&
-      currentVerification.status !== "received_pending_review"
-        ? `📷 Evidence received. ${currentVerification.reason}\n\nPlease resend a clear image showing ${next.vehiclePhotoUrl === mediaUrl ? "the vehicle reasonably parked in front of The Auto Surgeon" : "the key being placed in the letter box"}. I will check it again before continuing.`
-        : mediaComplete
-          ? "✅ I have checked the vehicle photo and received the key photo/video. Both pieces of evidence are saved. Is that all for today? Reply Yes or No."
-          : `🛠️ Emergency Breakdown\n\nI still need ${!next.vehiclePhotoUrl ? "one clear photo of the vehicle parked in front of The Auto Surgeon" : !next.keyEvidenceUrl ? "a photo or video showing the key being placed in the letter box" : "a clearer piece of evidence"}. Please send the missing file here.`;
+
+    const reply = newVehiclePhoto
+      ? "👍 Thank you, that's fine. We've got the photo of your vehicle at the garage.\n\nLast step: please send a photo or video of the key being placed in the letter box."
+      : `🛠️ Emergency Breakdown\n\nPlease send ${!next.vehiclePhotoUrl ? "one clear photo of the vehicle parked in front of The Auto Surgeon" : "a photo or video showing the key being placed in the letter box"}.`;
     const outbound = await sendWhatsAppText({ phone: phone ?? chatId, text: reply });
     if (outbound.sent)
       await insertWithSessionFallback(db, "messages", {
@@ -2743,25 +2800,18 @@ export async function handleAgentWebhookRequest(request: Request) {
         last_message_at: new Date().toISOString(),
       } as never)
       .eq("id", leadId);
-    const alert = outbound.sent
-      ? { sent: false, reason: "not_needed" }
-      : await sendTelegramAlert({
-          name: leadName,
-          phone,
-          reason: `WhatsApp Cloud API reply failed: ${outbound.reason}`,
+    // Car is at the garage: tell the office straight away so they can check and contact the customer.
+    const alerts = newVehiclePhoto
+      ? await notifyBreakdown({
+          stage: "parked",
+          customerName,
+          phone: phone ?? chatId,
+          vehiclePhotoUrl: next.vehiclePhotoUrl,
+          aiCheck: aiCheckText(next.vehiclePhotoVerification),
           leadId,
-          history: [...history, { sender: "ai_agent", content: reply }],
-          mediaUrl,
-          closed: false,
-        });
-    return json({
-      ok: true,
-      lead_id: leadId,
-      reply: outbound.sent ? reply : null,
-      outbound,
-      telegram_alert: alert,
-      breakdown_media_complete: mediaComplete,
-    });
+        })
+      : null;
+    return json({ ok: true, lead_id: leadId, reply: outbound.sent ? reply : null, outbound, alerts });
   }
 
   // Accident prompt precedence is authoritative. A lead may carry stale
