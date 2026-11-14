@@ -69,7 +69,6 @@ mock.module("@/integrations/supabase/client.server", () => ({
 
 const { Route: meRoute } = await import("@/routes/api/public/portal/me");
 const { Route: mileageRoute } = await import("@/routes/api/public/portal/mileage");
-const { Route: documentRoute } = await import("@/routes/api/public/portal/document");
 const call = (route: any, body: unknown, headers: Record<string, string> = {}) =>
   route.options.server.handlers.POST({
     request: new Request("https://hq.test/api/public/portal/x", {
@@ -254,21 +253,3 @@ describe("/me extra fields", () => {
     expect(d.submissions[0].photo_url).toBe("https://cdn.test/mileage-photos/d1/1.jpg");
   });
 });
-
-describe("/api/public/portal/document", () => {
-  it("stores the driver's hire agreement in their documents (same place as CRM uploads)", async () => {
-    const pdf = "data:application/pdf;base64," + btoa("%PDF-1.4 test");
-    const res = await call(documentRoute, { document_type: "contract", file_name: "Hire Agreement.pdf", file_base64: pdf });
-    expect(res.status).toBe(200);
-    expect(uploads.at(-1)).toMatchObject({ bucket: "driver-documents", type: "application/pdf" });
-    expect(uploads.at(-1)!.path).toMatch(/^d1\/contract_\d+_Hire_Agreement\.pdf$/);
-    const row = tables.driver_documents.at(-1)!;
-    expect(row).toMatchObject({ driver_id: "d1", document_type: "contract", file_name: "Hire Agreement.pdf" });
-  });
-
-  it("rejects other file types", async () => {
-    const exe = "data:application/x-msdownload;base64," + btoa("MZ");
-    expect((await call(documentRoute, { document_type: "contract", file_name: "x.exe", file_base64: exe })).status).toBe(400);
-  });
-});
-

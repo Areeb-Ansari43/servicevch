@@ -6172,12 +6172,16 @@ function DriverDocumentsSection({
   const [selectedUnlinkedDocId, setSelectedUnlinkedDocId] = useState<string>("");
   const [attachingDoc, setAttachingDoc] = useState(false);
 
+  // The four documents the driver sees in the portal (My Account).
   const docTypes: { type: DriverDocument["document_type"]; label: string }[] = [
-    { type: "contract", label: "Contract" },
     { type: "permission_letter", label: "Permission Letter" },
-    { type: "vehicle_schedule", label: "Vehicle Schedule" },
-    { type: "pco_licence", label: "PCO Licence" },
+    { type: "contract", label: "Contract" },
+    { type: "vehicle_schedule", label: "Driver Schedule" },
+    { type: "pco_licence", label: "Car PCO Licence" },
   ];
+  const [submitType, setSubmitType] = useState<DriverDocument["document_type"]>("permission_letter");
+  const [submitFile, setSubmitFile] = useState<File | null>(null);
+  const submitInputRef = useRef<HTMLInputElement | null>(null);
 
   const fetchDocs = useCallback(async () => {
     try {
@@ -6241,8 +6245,8 @@ function DriverDocumentsSection({
           : docToAttach.document_type === "contract"
             ? "Contract"
             : docToAttach.document_type === "vehicle_schedule"
-              ? "Vehicle Schedule"
-              : "PCO Licence";
+              ? "Driver Schedule"
+              : "Car PCO Licence";
 
       toast(`Linked ${typeLabel} (${docToAttach.file_name}) to ${driver.driver_name}`);
       setSelectedUnlinkedDocId("");
@@ -6286,7 +6290,21 @@ function DriverDocumentsSection({
 
       if (dbErr) throw dbErr;
 
-      toast(`Uploaded ${file.name}`);
+      // Let the driver know in the portal (best effort).
+      const label = docTypes.find((d) => d.type === docType)?.label || "Document";
+      try {
+        await supabase.from("driver_notifications" as any).insert({
+          driver_id: driver.id,
+          type: "document",
+          title: `New document: ${label}`,
+          message: `Your ${label.toLowerCase()} is ready. You can view it in your Driver Portal under My Account.`,
+          read: false,
+        } as any);
+      } catch {
+        // the document is saved either way
+      }
+
+      toast(`${label} sent to ${driver.driver_name}'s portal`);
       await fetchDocs();
     } catch (err: any) {
       toast(err?.message || "Failed to upload document", "error");
@@ -6315,8 +6333,53 @@ function DriverDocumentsSection({
   return (
     <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: T.borderSoft, background: T.panel }}>
       <div className="flex items-center justify-between">
-        <div className="font-bold text-white text-xs">Driver Documents & Portal Attachments</div>
-        <span className="text-[10px] text-[#8b95a8]">Syncs live with Driver Portal</span>
+        <div className="font-bold text-white text-xs">Driver Documents</div>
+        <span className="text-[10px] text-[#8b95a8]">Shown in the driver's portal (My Account)</span>
+      </div>
+
+      {/* Submit a document: goes straight to the driver's portal */}
+      <div className="rounded-lg border p-3 space-y-2 text-xs" style={{ borderColor: "#ff6a00", background: "rgba(255,106,0,0.06)" }}>
+        <div className="font-semibold text-white">Submit a document</div>
+        <p className="text-[11px] text-[#8b95a8]">
+          Choose the document type and the file. The driver sees it in their portal straight away and gets a notification.
+        </p>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <select
+            value={submitType}
+            onChange={(e) => setSubmitType(e.target.value as DriverDocument["document_type"])}
+            className="rounded border bg-[#142131] px-2.5 py-2 text-xs text-white focus:border-[#ff6a00] focus:outline-none sm:w-48"
+            style={{ borderColor: T.borderSoft }}
+          >
+            {docTypes.map((d) => (
+              <option key={d.type} value={d.type}>
+                {d.label}
+              </option>
+            ))}
+          </select>
+          <label className="flex-1 min-w-0 cursor-pointer rounded border bg-[#142131] px-2.5 py-2 text-xs text-[#c9d1dc] truncate" style={{ borderColor: T.borderSoft }}>
+            <input
+              ref={submitInputRef}
+              type="file"
+              accept="application/pdf,image/*,.doc,.docx"
+              className="hidden"
+              onChange={(e) => setSubmitFile(e.target.files?.[0] || null)}
+            />
+            {submitFile ? `📄 ${submitFile.name}` : "Choose a file (PDF or photo)…"}
+          </label>
+          <button
+            type="button"
+            disabled={!submitFile || uploadingDoc !== null}
+            onClick={async () => {
+              if (!submitFile) return;
+              await handleUpload(submitType, submitFile);
+              setSubmitFile(null);
+              if (submitInputRef.current) submitInputRef.current.value = "";
+            }}
+            className="shrink-0 rounded bg-[#ff6a00] px-4 py-2 text-xs font-bold text-white hover:bg-[#e05d00] disabled:opacity-50"
+          >
+            {uploadingDoc ? "Sending..." : "Submit a document"}
+          </button>
+        </div>
       </div>
 
       {/* Recently Generated Letters Dropdown (VCHLetter Integration) */}
@@ -6349,8 +6412,8 @@ function DriverDocumentsSection({
                   : doc.document_type === "contract"
                     ? "Contract"
                     : doc.document_type === "vehicle_schedule"
-                      ? "Vehicle Schedule"
-                      : "PCO Licence";
+                      ? "Driver Schedule"
+                      : "Car PCO Licence";
 
               const dateStr = new Date(doc.created_at).toLocaleDateString("en-GB", {
                 day: "numeric",
@@ -6453,7 +6516,7 @@ function DriverDocumentsSection({
                     />
                     <span className="flex items-center justify-center gap-1 w-full rounded border border-[#ff6a00]/40 bg-[#ff6a00]/10 px-2.5 py-1.5 text-[11px] font-bold text-[#ff8a3d] hover:bg-[#ff6a00]/20 transition-colors">
                       <Icon.Plus className="h-3 w-3" />
-                      {isUploading ? "Uploading..." : `Upload ${label}`}
+                      {isUploading ? "Sending..." : `Submit ${label}`}
                     </span>
                   </label>
                 </div>
