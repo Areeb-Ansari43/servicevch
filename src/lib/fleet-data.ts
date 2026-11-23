@@ -104,6 +104,8 @@ export type DriverTrack = {
   excess_rate: number;
   start_date: string;
   licence_expiry_date?: string | null;
+  /** Driving licence number (field 5 on a UK photocard). */
+  licence_number?: string | null;
   deleted_at?: string | null;
   status: DriverStatus;
   contract_length_weeks?: number;
@@ -404,6 +406,7 @@ const dFromRow = (
     excess_rate: Number(r.rate_pence ?? 20),
     start_date: r.start_date ?? new Date().toISOString().slice(0, 10),
     licence_expiry_date: r.licence_expiry_date ?? null,
+    licence_number: r.licence_number ?? null,
     deleted_at: r.deleted_at ?? null,
     status: statusVal,
     contract_length_weeks: Number(r.contract_length_weeks ?? 6),
@@ -823,6 +826,7 @@ export function useFleetData() {
         phone: d.phone?.trim() || null,
         start_date: d.start_date,
         licence_expiry_date: d.licence_expiry_date || null,
+        licence_number: d.licence_number?.trim() || null,
         start_mileage: d.start_mileage,
         current_mileage: d.start_mileage,
         contract_length_weeks: d.contract_length_weeks ?? 6,
@@ -836,8 +840,14 @@ export function useFleetData() {
         status: d.status || "active",
       };
       let { error } = await (supabase.from("driver_tracks") as any).insert(driverPayload);
+      // Licence number column not added yet (supabase/manual/2026-11-23-driver-licence-number.sql):
+      // save everything else rather than failing.
+      if (error && /licence_number/i.test(error.message)) {
+        const { licence_number: _ln, ...withoutLicence } = driverPayload;
+        ({ error } = await (supabase.from("driver_tracks") as any).insert(withoutLicence));
+      }
       if (error && /email|phone|column|contract_length_weeks|deposit_total/i.test(error.message)) {
-        const { contract_length_weeks: _c, deposit_total: _d, email: _email, phone: _phone, ...legacyPayload } = driverPayload;
+        const { contract_length_weeks: _c, deposit_total: _d, email: _email, phone: _phone, licence_number: _l, ...legacyPayload } = driverPayload;
         ({ error } = await (supabase.from("driver_tracks") as any).insert(legacyPayload));
       }
       if (error) throw new Error(error.message);
@@ -1217,6 +1227,7 @@ export function useFleetData() {
                 registration: d.registration,
                 start_date: d.start_date,
                 licence_expiry_date: d.licence_expiry_date || null,
+                licence_number: d.licence_number?.trim() || null,
                 contract_length_weeks: d.contract_length_weeks ?? 6,
                 deposit_total: d.deposit_total ?? 0,
                 allowance: d.allowance,
@@ -1239,6 +1250,7 @@ export function useFleetData() {
         reg: d.registration,
         start_date: d.start_date,
         licence_expiry_date: d.licence_expiry_date || null,
+        licence_number: d.licence_number?.trim() || null,
         contract_length_weeks: d.contract_length_weeks ?? 6,
         deposit_total: d.deposit_total ?? 0,
         allowance: d.allowance,
@@ -1250,8 +1262,12 @@ export function useFleetData() {
         status: d.status || "active",
       };
       let { error } = await supabase.from("driver_tracks").update(payload).eq("id", d.id);
+      if (error && /licence_number/i.test(error.message)) {
+        const { licence_number: _ln, ...withoutLicence } = payload;
+        ({ error } = await (supabase.from("driver_tracks") as any).update(withoutLicence).eq("id", d.id));
+      }
       if (error && /email|phone|column|contract_length_weeks|deposit_total/i.test(error.message)) {
-        const { contract_length_weeks: _c, deposit_total: _d, email: _email, phone: _phone, ...legacyPayload } = payload;
+        const { contract_length_weeks: _c, deposit_total: _d, email: _email, phone: _phone, licence_number: _l, ...legacyPayload } = payload;
         ({ error } = await supabase.from("driver_tracks").update(legacyPayload).eq("id", d.id));
       }
       if (error) throw new Error(error.message);
