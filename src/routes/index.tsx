@@ -61,6 +61,7 @@ import { ConversationEventsCard } from "@/components/conversation-events-card";
 import { SettingsCardBoundary } from "@/components/settings-card-boundary";
 import { EmailTestCard } from "@/components/email-test-card";
 import { RentHistoryCard } from "@/components/rent-history-card";
+import { LicenceScanner, type LicenceValues } from "@/components/licence-scanner";
 import { runExpiryScanNowFn } from "@/lib/email-admin.functions";
 
 export const Route = createFileRoute("/")({
@@ -5816,6 +5817,37 @@ function AddDriverModal({
   const [vehicleId, setVehicleId] = useState("");
   const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
   const [licenceExpiry, setLicenceExpiry] = useState("");
+  const [licenceNumber, setLicenceNumber] = useState("");
+  // Fields filled from the licence photo: "read" (green) or "check" (amber) until edited.
+  const [fromLicence, setFromLicence] = useState<Record<string, "read" | "check">>({});
+  const applyLicence = useCallback((v: LicenceValues) => {
+    const next: Record<string, "read" | "check"> = {};
+    if (v.fullName) {
+      setName(v.fullName);
+      next.name = v.check.fullName ? "check" : "read";
+    }
+    if (v.expiryDate) {
+      setLicenceExpiry(v.expiryDate);
+      next.expiry = v.check.expiryDate ? "check" : "read";
+    }
+    if (v.licenceNumber) {
+      setLicenceNumber(v.licenceNumber);
+      next.number = v.check.licenceNumber ? "check" : "read";
+    }
+    setFromLicence(next);
+  }, []);
+  const ring = (key: string) =>
+    fromLicence[key] === "check"
+      ? " ring-2 ring-amber-400/70"
+      : fromLicence[key] === "read"
+        ? " ring-2 ring-emerald-500/50"
+        : "";
+  const edited = (key: string) =>
+    setFromLicence((prev) => {
+      if (!prev[key]) return prev;
+      const { [key]: _gone, ...rest } = prev;
+      return rest;
+    });
   const [weeklyRent, setWeeklyRent] = useState("200");
   const [rentDueDay, setRentDueDay] = useState("Monday");
   const [rentStatus, setRentStatus] = useState<"paid" | "unpaid">("unpaid");
@@ -5845,6 +5877,7 @@ function AddDriverModal({
         excess_rate: parseInt(excessRate) || 20,
         start_date: startDate,
         licence_expiry_date: licenceExpiry || null,
+        licence_number: licenceNumber.trim().toUpperCase() || null,
         weekly_rent: rentAmt,
         rent_due_day: rentDueDay,
         rent_status: rentStatus,
@@ -5877,12 +5910,16 @@ function AddDriverModal({
           </button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3 text-xs">
+          <LicenceScanner onRead={applyLicence} />
           <Field label="Full Name *">
             <input
               required
               value={name}
-              onChange={(e) => setName(e.target.value)}
-              className={inputCls}
+              onChange={(e) => {
+                setName(e.target.value);
+                edited("name");
+              }}
+              className={inputCls + ring("name")}
               placeholder="e.g. John Smith"
             />
           </Field>
@@ -5945,11 +5982,27 @@ function AddDriverModal({
               <input
                 type="date"
                 value={licenceExpiry}
-                onChange={(e) => setLicenceExpiry(e.target.value)}
-                className={inputCls}
+                onChange={(e) => {
+                  setLicenceExpiry(e.target.value);
+                  edited("expiry");
+                }}
+                className={inputCls + ring("expiry")}
               />
             </Field>
           </Grid2>
+          <Field label="Driving Licence Number">
+            <input
+              value={licenceNumber}
+              onChange={(e) => {
+                setLicenceNumber(e.target.value.toUpperCase());
+                edited("number");
+              }}
+              className={inputCls + " font-mono tracking-wider" + ring("number")}
+              placeholder="e.g. MORGA753116SM9IJ"
+              maxLength={24}
+              autoComplete="off"
+            />
+          </Field>
           <Grid2>
             <Field label="Weekly Rent (£)">
               <input
@@ -6707,6 +6760,7 @@ function DriverProfileModal({
   const [vehicleId, setVehicleId] = useState(driver.vehicle_id);
   const [startDate, setStartDate] = useState(driver.start_date || new Date().toISOString().slice(0, 10));
   const [licenceExpiry, setLicenceExpiry] = useState(driver.licence_expiry_date || "");
+  const [licenceNumber, setLicenceNumber] = useState(driver.licence_number || "");
   const [contractWeeks, setContractWeeks] = useState(String(driver.contract_length_weeks ?? 6));
   const [saving, setSaving] = useState(false);
   const [sendingReminder, setSendingReminder] = useState<string | null>(null);
@@ -6724,6 +6778,7 @@ function DriverProfileModal({
     setVehicleId(driver.vehicle_id);
     setStartDate(driver.start_date || new Date().toISOString().slice(0, 10));
     setLicenceExpiry(driver.licence_expiry_date || "");
+    setLicenceNumber(driver.licence_number || "");
     setContractWeeks(String(driver.contract_length_weeks ?? 6));
   }, [driver]);
 
@@ -6763,6 +6818,7 @@ function DriverProfileModal({
         registration: selectedVehicle ? selectedVehicle.registration : driver.registration,
         start_date: startDate,
         licence_expiry_date: licenceExpiry || null,
+        licence_number: licenceNumber.trim().toUpperCase() || null,
         contract_length_weeks: parseInt(contractWeeks) || 6,
       });
       onClose();
@@ -6961,6 +7017,28 @@ function DriverProfileModal({
                 />
               </Field>
             </Grid2>
+            <Field label="Driving Licence Number">
+              <input
+                value={licenceNumber}
+                onChange={(e) => setLicenceNumber(e.target.value.toUpperCase())}
+                className={inputCls + " font-mono tracking-wider"}
+                placeholder="e.g. MORGA753116SM9IJ"
+                maxLength={24}
+                autoComplete="off"
+              />
+            </Field>
+            <details className="rounded-lg border border-white/10 p-2 text-xs">
+              <summary className="cursor-pointer font-semibold text-[#ff8a3d]">Update from a licence photo</summary>
+              <div className="pt-2">
+                <LicenceScanner
+                  onRead={(v) => {
+                    if (v.expiryDate) setLicenceExpiry(v.expiryDate);
+                    if (v.licenceNumber) setLicenceNumber(v.licenceNumber);
+                  }}
+                />
+                <p className="mt-1 text-[11px] text-[#8b95a8]">Fills the expiry date and licence number. The name is left as it is.</p>
+              </div>
+            </details>
             <Grid2>
               <Field label="Contract Length (Weeks)">
                 <input
