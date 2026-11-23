@@ -260,7 +260,7 @@ function VehicleDetailPage() {
       : "—";
 
   return (
-    <div className="min-h-screen text-[var(--vch-text)]" style={{ background: T.bg }}>
+    <div className="vch-app min-h-screen text-[var(--vch-text)]" style={{ background: T.bg }}>
       <div className="mx-auto max-w-[1120px] px-4 py-5 sm:px-6 sm:py-8">
         <button
           onClick={() => navigate({ to: "/vehicles" })}

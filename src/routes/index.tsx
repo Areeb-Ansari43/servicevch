@@ -2328,13 +2328,15 @@ export function FleetShell({ view }: { view: View }) {
       />
       <div className={`relative z-10 ml-0 transition-all duration-350 ease-out ${isPinned ? "lg:ml-[280px]" : "lg:ml-[80px]"} pb-24 lg:pb-6`}>
         <Topbar vehicles={data.vehicles} goto={go} onMenu={() => setMobileNavOpen(true)} />
-        <main className="mx-auto w-full max-w-[1400px] p-3 sm:p-5 xl:p-6">
+        <main key={view} className="vch-enter mx-auto w-full max-w-[1400px] p-3 sm:p-5 xl:p-6">
           {data.loading ? (
-            <div
-              className="rounded-xl border p-12 text-center text-sm"
-              style={{ borderColor: T.border, background: T.panel, color: T.muted }}
-            >
-              Loading fleet data…
+            <div className="space-y-4" aria-busy="true" aria-label="Loading fleet data">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                {[0, 1, 2, 3].map((i) => (
+                  <div key={i} className="vch-skeleton h-24 rounded-xl" />
+                ))}
+              </div>
+              <div className="vch-skeleton h-72 rounded-xl" />
             </div>
           ) : view === "dashboard" ? (
             <Dashboard
@@ -3178,7 +3180,7 @@ function Topbar({
       className="sticky top-0 z-20 flex h-[56px] items-center gap-3 border-b px-3 sm:px-6 xl:px-8"
       style={{
         borderColor: T.border,
-        background: "rgba(8,11,19,0.88)",
+        background: "color-mix(in srgb, var(--vch-surface-solid) 88%, transparent)",
         backdropFilter: "blur(20px)",
       }}
     >
@@ -3986,7 +3988,7 @@ function Kpi({ label, value, accent }: { label: string; value: string | number; 
       className="group relative overflow-hidden rounded-2xl border p-4 shadow-[0_12px_35px_rgba(0,0,0,0.16)] transition hover:-translate-y-0.5"
       style={{
         borderColor: T.border,
-        background: "linear-gradient(145deg, rgba(21,28,43,0.96), rgba(13,18,30,0.96))",
+        background: "linear-gradient(145deg, var(--vch-surface-2), var(--vch-surface))",
       }}
     >
       <div className="flex items-start justify-between gap-2">
@@ -3996,12 +3998,15 @@ function Kpi({ label, value, accent }: { label: string; value: string | number; 
         >
           <KpiIcon className="h-5 w-5" />
         </div>
-        <span className="text-[10px] uppercase tracking-[0.14em] text-[#718096]">Live</span>
+        <span className="text-[10px] uppercase tracking-[0.14em] text-[var(--vch-text-soft)]">Live</span>
       </div>
       <div className="relative z-10 mt-4 text-[10px] uppercase tracking-[0.14em] text-[#8b95a8]">
         {label}
       </div>
-      <div className="relative z-10 mt-1 text-3xl font-bold" style={{ color: accent }}>
+      <div
+        className="relative z-10 mt-1 text-3xl font-bold"
+        style={{ color: accent === "#e7eaf0" ? "var(--vch-text)" : accent }}
+      >
         {value}
       </div>
       <KpiIcon className="pointer-events-none absolute -bottom-3 -right-2 h-24 w-24 opacity-[0.06]" />
@@ -6816,6 +6821,15 @@ function DriverProfileModal({
   const [saving, setSaving] = useState(false);
   const [sendingReminder, setSendingReminder] = useState<string | null>(null);
   const [customMsgModalOpen, setCustomMsgModalOpen] = useState(false);
+  type ProfileTab = "details" | "rent" | "documents" | "portal" | "messages";
+  const [tab, setTab] = useState<ProfileTab>("details");
+  const tabs: { id: ProfileTab; label: string }[] = [
+    { id: "details", label: "Details" },
+    { id: "rent", label: "Rent" },
+    { id: "documents", label: "Documents" },
+    { id: "portal", label: "Portal" },
+    { id: "messages", label: "Messages" },
+  ];
 
   const selectedVehicle = vehicles.find((v) => v.id === vehicleId);
 
@@ -6898,7 +6912,7 @@ function DriverProfileModal({
       onClick={onClose}
     >
       <div
-        className="my-auto max-h-[85vh] sm:max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-white/15 bg-[#10141d] p-4 sm:p-6 shadow-2xl animate-in zoom-in-95 duration-200 space-y-5"
+        className="vch-sheet my-auto max-h-[88vh] sm:max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-white/15 bg-[#10141d] p-4 sm:p-6 shadow-2xl space-y-5"
         style={{ borderColor: T.border }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -6918,8 +6932,41 @@ function DriverProfileModal({
           </button>
         </div>
 
+        {/* Key facts */}
+        <div className="grid grid-cols-3 gap-2 text-center">
+          {[
+            ["Weekly rent", driver.weekly_rent ? `£${driver.weekly_rent}` : "—"],
+            ["Balance", `£${Number(driver.balance_due || 0).toFixed(2)}`],
+            ["Rent day", driver.rent_due_day || "—"],
+          ].map(([k, v]) => (
+            <div key={k} className="rounded-xl border px-2 py-2.5" style={{ borderColor: T.borderSoft, background: T.panel }}>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-[#8b95a8]">{k}</div>
+              <div className="mt-0.5 truncate text-sm font-bold text-white">{v}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Tabs: one topic at a time instead of one long page */}
+        <div className="-mx-1 flex gap-1 overflow-x-auto px-1" role="tablist" aria-label="Driver profile sections">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.id}
+              onClick={() => setTab(t.id)}
+              className={`vch-press shrink-0 rounded-lg px-3.5 py-2 text-xs font-semibold transition-colors ${
+                tab === t.id ? "bg-[#ff6a00] text-white" : "text-[#8b95a8] hover:bg-white/[0.06] hover:text-white"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
         {/* Quick Alert Reminders */}
-        <div className="rounded-xl border p-4 space-y-2.5" style={{ borderColor: T.borderSoft, background: T.panel }}>
+        {tab === "messages" && (
+        <div className="vch-enter rounded-xl border p-4 space-y-2.5" style={{ borderColor: T.borderSoft, background: T.panel }}>
           <div className="text-xs font-bold uppercase tracking-wider text-[#ff8a3d]">Quick Alert & Reminder Actions</div>
           <div className="flex flex-wrap gap-2">
             <button
@@ -6972,8 +7019,11 @@ function DriverProfileModal({
             Sends a direct notification to the driver's portal dashboard and an email copy if connected.
           </p>
         </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+          {tab === "details" && (
+          <div key="details" className="vch-enter space-y-4">
           <Grid2>
             <Field label="Full Name *">
               <input
@@ -7133,10 +7183,19 @@ function DriverProfileModal({
             </Grid2>
           </div>
 
+          </div>
+          )}
+
           {/* Document Upload Section */}
-          <DriverDocumentsSection driver={driver} toast={toast} />
+          {tab === "documents" && (
+            <div key="documents" className="vch-enter">
+              <DriverDocumentsSection driver={driver} toast={toast} />
+            </div>
+          )}
 
           {/* Weekly rent log: paid / not paid per week */}
+          {tab === "rent" && (
+          <div key="rent" className="vch-enter">
           <SettingsCardBoundary name="Rent history">
             <RentHistoryCard
               driverId={driver.id}
@@ -7146,9 +7205,15 @@ function DriverProfileModal({
               refreshKey={`${driver.rent_status}-${driver.rent_paid_for_due_date}-${driver.balance_due}`}
             />
           </SettingsCardBoundary>
+          </div>
+          )}
 
           {/* Portal Settings Section */}
-          <DriverPortalSettingsCard driver={driver} data={data} toast={toast} onCloseModal={onClose} />
+          {tab === "portal" && (
+            <div key="portal" className="vch-enter">
+              <DriverPortalSettingsCard driver={driver} data={data} toast={toast} onCloseModal={onClose} />
+            </div>
+          )}
 
           <div className="flex justify-end gap-2 border-t pt-4" style={{ borderColor: T.border }}>
             <button
@@ -7157,15 +7222,17 @@ function DriverProfileModal({
               className="rounded-lg border px-4 py-2 hover:bg-white/10"
               style={{ borderColor: T.border }}
             >
-              Cancel
+              {tab === "details" ? "Cancel" : "Close"}
             </button>
-            <button
-              type="submit"
-              disabled={saving || !name.trim()}
-              className="rounded-lg bg-[#ff6a00] px-4 py-2 font-semibold text-white hover:bg-[#e05d00] disabled:opacity-50"
-            >
-              {saving ? "Saving…" : "Save Profile"}
-            </button>
+            {tab === "details" && (
+              <button
+                type="submit"
+                disabled={saving || !name.trim()}
+                className="vch-press rounded-lg bg-[#ff6a00] px-4 py-2 font-semibold text-white hover:bg-[#e05d00] disabled:opacity-50"
+              >
+                {saving ? "Saving…" : "Save Profile"}
+              </button>
+            )}
           </div>
         </form>
 

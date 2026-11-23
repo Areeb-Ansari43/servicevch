@@ -1,7 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 
 export type ThemeMode = "dark" | "light" | "system";
-export type ThemePreset = "midnight" | "graphite" | "light" | "ocean";
+export type ThemePreset = "midnight" | "graphite" | "carbon" | "light" | "porcelain" | "ocean";
 export type AccentColor = "orange" | "blue" | "emerald" | "violet" | "rose" | "gold";
 
 export interface UserAppearanceSettings {
@@ -99,7 +99,7 @@ export const THEME_PRESET_CONFIGS: Record<
 > = {
   midnight: {
     name: "Midnight",
-    description: "Current dark navy and deep black aesthetic",
+    description: "Deep navy, the original look",
     dark: {
       bg: "linear-gradient(160deg, #05070c 0%, #0a0e18 45%, #080b13 100%)",
       surface: "rgba(255, 255, 255, 0.055)",
@@ -129,7 +129,7 @@ export const THEME_PRESET_CONFIGS: Record<
   },
   graphite: {
     name: "Graphite",
-    description: "Neutral dark grey with clean monochrome tones",
+    description: "Neutral charcoal grey",
     dark: {
       bg: "linear-gradient(160deg, #121316 0%, #181a20 45%, #13151a 100%)",
       surface: "rgba(255, 255, 255, 0.065)",
@@ -157,9 +157,39 @@ export const THEME_PRESET_CONFIGS: Record<
       sidebarBg: "#ffffff",
     },
   },
+  carbon: {
+    name: "Carbon",
+    description: "True black, made for OLED screens",
+    dark: {
+      bg: "linear-gradient(160deg, #000000 0%, #07080a 100%)",
+      surface: "rgba(255, 255, 255, 0.045)",
+      surfaceHover: "rgba(255, 255, 255, 0.08)",
+      surface2: "rgba(255, 255, 255, 0.08)",
+      surfaceSolid: "#0b0c0f",
+      border: "rgba(255, 255, 255, 0.10)",
+      borderSoft: "rgba(255, 255, 255, 0.06)",
+      text: "#f5f5f7",
+      textMuted: "#a1a1aa",
+      textSoft: "#71717a",
+      sidebarBg: "#050506",
+    },
+    light: {
+      bg: "linear-gradient(160deg, #f4f4f5 0%, #e4e4e7 100%)",
+      surface: "#ffffff",
+      surfaceHover: "#fafafa",
+      surface2: "#f4f4f5",
+      surfaceSolid: "#ffffff",
+      border: "#d4d4d8",
+      borderSoft: "#e4e4e7",
+      text: "#09090b",
+      textMuted: "#52525b",
+      textSoft: "#71717a",
+      sidebarBg: "#ffffff",
+    },
+  },
   light: {
     name: "Light",
-    description: "Clean white and soft grey high-contrast workspace",
+    description: "Bright white and slate",
     dark: {
       bg: "linear-gradient(160deg, #1e293b 0%, #0f172a 100%)",
       surface: "rgba(255, 255, 255, 0.08)",
@@ -187,9 +217,39 @@ export const THEME_PRESET_CONFIGS: Record<
       sidebarBg: "#ffffff",
     },
   },
+  porcelain: {
+    name: "Porcelain",
+    description: "Warm white and stone, easy on the eyes",
+    dark: {
+      bg: "linear-gradient(160deg, #141210 0%, #1b1815 100%)",
+      surface: "rgba(255, 240, 220, 0.05)",
+      surfaceHover: "rgba(255, 240, 220, 0.09)",
+      surface2: "rgba(255, 240, 220, 0.09)",
+      surfaceSolid: "#1d1a17",
+      border: "rgba(255, 240, 220, 0.12)",
+      borderSoft: "rgba(255, 240, 220, 0.07)",
+      text: "#f5efe6",
+      textMuted: "#b4a99a",
+      textSoft: "#8a7f71",
+      sidebarBg: "#161411",
+    },
+    light: {
+      bg: "linear-gradient(160deg, #faf8f5 0%, #f3efe9 100%)",
+      surface: "#fffdfa",
+      surfaceHover: "#faf6f0",
+      surface2: "#f4efe8",
+      surfaceSolid: "#fffdfa",
+      border: "#e2d9cc",
+      borderSoft: "#ece5da",
+      text: "#1c1917",
+      textMuted: "#57534e",
+      textSoft: "#78716c",
+      sidebarBg: "#fbf8f3",
+    },
+  },
   ocean: {
     name: "Ocean",
-    description: "Rich oceanic dark blue tailored for premium car-hire",
+    description: "Calm deep blue",
     dark: {
       bg: "linear-gradient(160deg, #031326 0%, #071d36 45%, #04162c 100%)",
       surface: "rgba(224, 242, 254, 0.07)",
@@ -198,9 +258,9 @@ export const THEME_PRESET_CONFIGS: Record<
       surfaceSolid: "#0b2447",
       border: "rgba(224, 242, 254, 0.15)",
       borderSoft: "rgba(224, 242, 254, 0.08)",
-      text: "#e0f2fe",
-      textMuted: "#7dd3fc",
-      textSoft: "#38bdf8",
+      text: "#e6f1fb",
+      textMuted: "#94b8d4",
+      textSoft: "#6a8aa8",
       sidebarBg: "#06182e",
     },
     light: {
@@ -220,7 +280,8 @@ export const THEME_PRESET_CONFIGS: Record<
 };
 
 export function getEffectiveMode(mode: ThemeMode, preset: ThemePreset): "dark" | "light" {
-  if (preset === "light" && mode !== "dark") return "light";
+  // Light-first themes are light unless dark mode is chosen
+  if ((preset === "light" || preset === "porcelain") && mode !== "dark") return "light";
   if (mode === "dark") return "dark";
   if (mode === "light") return "light";
   if (typeof window !== "undefined" && window.matchMedia) {
@@ -238,6 +299,10 @@ export function applyThemeToDocument(settings: UserAppearanceSettings): void {
   const accent = ACCENT_SWATCHES[settings.accentColor] || ACCENT_SWATCHES.orange;
 
   const root = document.documentElement;
+
+  // Colours fade only while the theme is switching (not on every hover).
+  root.classList.add("vch-theme-switching");
+  window.setTimeout(() => root.classList.remove("vch-theme-switching"), 320);
 
   root.setAttribute("data-mode", settings.mode);
   root.setAttribute("data-effective-mode", effectiveMode);
@@ -322,7 +387,7 @@ export function loadSavedAppearance(): UserAppearanceSettings {
 
   return {
     mode: ["dark", "light", "system"].includes(savedMode) ? savedMode : DEFAULT_APPEARANCE.mode,
-    themePreset: ["midnight", "graphite", "light", "ocean"].includes(savedPreset)
+    themePreset: (Object.keys(THEME_PRESET_CONFIGS) as string[]).includes(savedPreset)
       ? savedPreset
       : DEFAULT_APPEARANCE.themePreset,
     accentColor: ["orange", "blue", "emerald", "violet", "rose", "gold"].includes(savedAccent)

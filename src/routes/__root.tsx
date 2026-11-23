@@ -89,7 +89,7 @@ const themeInitScript = `(function(){
     var accent = localStorage.getItem('vch_theme_accent') || 'orange';
 
     var effectiveMode = mode;
-    if (preset === 'light' && mode !== 'dark') effectiveMode = 'light';
+    if ((preset === 'light' || preset === 'porcelain') && mode !== 'dark') effectiveMode = 'light';
     else if (mode === 'system') {
       effectiveMode = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
     }
@@ -107,8 +107,16 @@ const themeInitScript = `(function(){
         dark: { bg: 'linear-gradient(160deg, #1e293b 0%, #0f172a 100%)', surface: 'rgba(255, 255, 255, 0.08)', surface2: 'rgba(255, 255, 255, 0.14)', surfaceSolid: '#1e293b', border: 'rgba(255, 255, 255, 0.16)', borderSoft: 'rgba(255, 255, 255, 0.10)', text: '#f8fafc', textMuted: '#94a3b8', sidebarBg: '#0f172a' },
         light: { bg: 'linear-gradient(160deg, #f8fafc 0%, #f1f5f9 100%)', surface: '#ffffff', surface2: '#f1f5f9', surfaceSolid: '#ffffff', border: '#cbd5e1', borderSoft: '#e2e8f0', text: '#0f172a', textMuted: '#334155', sidebarBg: '#ffffff' }
       },
+      carbon: {
+        dark: { bg: 'linear-gradient(160deg, #000000 0%, #07080a 100%)', surface: 'rgba(255, 255, 255, 0.045)', surface2: 'rgba(255, 255, 255, 0.08)', surfaceSolid: '#0b0c0f', border: 'rgba(255, 255, 255, 0.10)', borderSoft: 'rgba(255, 255, 255, 0.06)', text: '#f5f5f7', textMuted: '#a1a1aa', sidebarBg: '#050506' },
+        light: { bg: 'linear-gradient(160deg, #f4f4f5 0%, #e4e4e7 100%)', surface: '#ffffff', surface2: '#f4f4f5', surfaceSolid: '#ffffff', border: '#d4d4d8', borderSoft: '#e4e4e7', text: '#09090b', textMuted: '#52525b', sidebarBg: '#ffffff' }
+      },
+      porcelain: {
+        dark: { bg: 'linear-gradient(160deg, #141210 0%, #1b1815 100%)', surface: 'rgba(255, 240, 220, 0.05)', surface2: 'rgba(255, 240, 220, 0.09)', surfaceSolid: '#1d1a17', border: 'rgba(255, 240, 220, 0.12)', borderSoft: 'rgba(255, 240, 220, 0.07)', text: '#f5efe6', textMuted: '#b4a99a', sidebarBg: '#161411' },
+        light: { bg: 'linear-gradient(160deg, #faf8f5 0%, #f3efe9 100%)', surface: '#fffdfa', surface2: '#f4efe8', surfaceSolid: '#fffdfa', border: '#e2d9cc', borderSoft: '#ece5da', text: '#1c1917', textMuted: '#57534e', sidebarBg: '#fbf8f3' }
+      },
       ocean: {
-        dark: { bg: 'linear-gradient(160deg, #031326 0%, #071d36 45%, #04162c 100%)', surface: 'rgba(224, 242, 254, 0.07)', surface2: 'rgba(224, 242, 254, 0.12)', surfaceSolid: '#0b2447', border: 'rgba(224, 242, 254, 0.15)', borderSoft: 'rgba(224, 242, 254, 0.08)', text: '#e0f2fe', textMuted: '#7dd3fc', sidebarBg: '#06182e' },
+        dark: { bg: 'linear-gradient(160deg, #031326 0%, #071d36 45%, #04162c 100%)', surface: 'rgba(224, 242, 254, 0.07)', surface2: 'rgba(224, 242, 254, 0.12)', surfaceSolid: '#0b2447', border: 'rgba(224, 242, 254, 0.15)', borderSoft: 'rgba(224, 242, 254, 0.08)', text: '#e6f1fb', textMuted: '#94b8d4', sidebarBg: '#06182e' },
         light: { bg: 'linear-gradient(160deg, #f0f9ff 0%, #e0f2fe 100%)', surface: '#ffffff', surface2: '#e0f2fe', surfaceSolid: '#ffffff', border: '#93c5fd', borderSoft: '#bae6fd', text: '#0c4a6e', textMuted: '#0369a1', sidebarBg: '#f0f9ff' }
       }
     };
