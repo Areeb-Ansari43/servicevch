@@ -4,6 +4,7 @@ import { getNextMotDate, getPcoExpiryDate } from "@/lib/vehicle-date-fields";
 import { PDF_FLEET } from "@/lib/pdf-fleet";
 import { logAuditEvent } from "@/lib/audit-logger";
 import { getVehicleDefaultDeposit } from "@/lib/contract-helpers";
+import { MODEL_TERMS } from "@/lib/fleet-sheet";
 import { DRIVER_PORTAL_URL } from "@/lib/domain-config";
 import { SUPABASE_URL } from "@/integrations/supabase/config";
 import { rentState } from "@/lib/rent-cycle";
@@ -24,6 +25,10 @@ export type Vehicle = {
   insurance_expiry: string;
   notes: string;
   default_deposit?: number;
+  /** Weekly rent saved on the vehicle (vehicles.weekly_price). */
+  weekly_price?: number | null;
+  /** Monthly mileage allowance saved on the vehicle. */
+  monthly_allowance?: number | null;
 };
 
 export type DriverDocument = {
@@ -191,6 +196,8 @@ const vFromRow = (r: any): Vehicle => ({
   insurance_expiry: getPcoExpiryDate(r),
   notes: r.notes ?? "",
   default_deposit: Number(r.default_deposit ?? getVehicleDefaultDeposit(r.make, r.model)),
+  weekly_price: r.weekly_price != null ? Number(r.weekly_price) : null,
+  monthly_allowance: r.monthly_mileage_allowance != null ? Number(r.monthly_mileage_allowance) : null,
 });
 
 const sFromRow = (r: any): ServiceRecord => ({
@@ -301,20 +308,11 @@ export function getVehicleWeeklyPrice(make?: string | null, model?: string | nul
   if (!make && !model) return 200;
   const combined = `${make ?? ""} ${model ?? ""}`.toLowerCase();
 
-  if (/eqe/i.test(combined)) return 440;
+  // Sheet 2 of the fleet price sheet (VCH_Car_Fleet_01092026)
+  const sheet = MODEL_TERMS.find((m) => m.match.test(combined));
+  if (sheet) return sheet.rent;
   if (/eqs/i.test(combined)) return 500;
   if (/v-class|vclass/i.test(combined)) return 450;
-  if (/vito/i.test(combined)) return 380;
-  if (/e300|e\s*300/i.test(combined)) return 340;
-  if (/e220|e\s*220/i.test(combined)) return 310;
-  if (/tourneo/i.test(combined)) return 410;
-  if (/i-pace|ipace/i.test(combined)) return 330;
-  if (/model 3|model3/i.test(combined)) return 260;
-  if (/corolla/i.test(combined)) return 220;
-  if (/auris/i.test(combined)) return 210;
-  if (/prius/i.test(combined)) return 200;
-  if (/ioniq/i.test(combined)) return 220;
-  if (/mg5|mg 5/i.test(combined)) return 200;
   if (/multivan/i.test(combined)) return 350;
 
   const mClean = (make ?? "").toLowerCase();

@@ -62,6 +62,8 @@ import { SettingsCardBoundary } from "@/components/settings-card-boundary";
 import { EmailTestCard } from "@/components/email-test-card";
 import { RentHistoryCard } from "@/components/rent-history-card";
 import { LicenceScanner, type LicenceValues } from "@/components/licence-scanner";
+import { VehicleSearch } from "@/components/vehicle-search";
+import { carTermsFor } from "@/lib/fleet-sheet";
 import { runExpiryScanNowFn } from "@/lib/email-admin.functions";
 
 export const Route = createFileRoute("/")({
@@ -5851,17 +5853,21 @@ function AddDriverModal({
   const [weeklyRent, setWeeklyRent] = useState("200");
   const [rentDueDay, setRentDueDay] = useState("Monday");
   const [rentStatus, setRentStatus] = useState<"paid" | "unpaid">("unpaid");
-  const [balanceDue, setBalanceDue] = useState("200");
   const [depositTotal, setDepositTotal] = useState("500");
   const [allowance, setAllowance] = useState("5000");
   const [excessRate, setExcessRate] = useState("20");
   const [saving, setSaving] = useState(false);
+  const [vehicleMissing, setVehicleMissing] = useState(false);
 
   const selectedVehicle = vehicles.find((v) => v.id === vehicleId);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !selectedVehicle) return;
+    if (!selectedVehicle) {
+      setVehicleMissing(true);
+      return;
+    }
+    if (!name.trim()) return;
     setSaving(true);
     try {
       const rentAmt = parseFloat(weeklyRent) || 0;
@@ -5881,7 +5887,8 @@ function AddDriverModal({
         weekly_rent: rentAmt,
         rent_due_day: rentDueDay,
         rent_status: rentStatus,
-        balance_due: parseFloat(balanceDue) ?? rentAmt,
+        // A new driver owes their first week's rent.
+        balance_due: rentAmt,
         deposit_total: parseFloat(depositTotal) || 0,
       });
       onClose();
@@ -5932,9 +5939,9 @@ function AddDriverModal({
               placeholder="e.g. driver@example.com"
             />
           </Field>
-          <Field label="Phone Number *">
+          <Field label="Phone Number (optional)">
             <input
-              required
+              type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               className={inputCls}
@@ -5942,25 +5949,27 @@ function AddDriverModal({
             />
           </Field>
           <Field label="Linked Vehicle *">
-            <DarkSelect
+            <VehicleSearch
+              vehicles={vehicles}
               value={vehicleId}
+              invalid={vehicleMissing}
               onChange={(val) => {
                 setVehicleId(val);
+                setVehicleMissing(false);
                 const newV = vehicles.find((v) => v.id === val);
                 if (newV) {
-                  const price = getVehicleWeeklyPrice(newV.make, newV.model);
-                  setWeeklyRent(String(price));
-                  setBalanceDue(String(price));
-                  const defDep = newV.default_deposit ?? getVehicleDefaultDeposit(newV.make, newV.model);
+                  // Each car's own terms from the price sheet (Sheet 1 rent, Sheet 2 allowance, 20p/mile)
+                  const t = carTermsFor(newV);
+                  const rent = t.weeklyRent ?? getVehicleWeeklyPrice(newV.make, newV.model);
+                  setWeeklyRent(String(rent));
+                  if (t.monthlyAllowance) setAllowance(String(t.monthlyAllowance));
+                  setExcessRate(String(t.excessRatePence));
+                  const defDep = t.deposit ?? newV.default_deposit ?? getVehicleDefaultDeposit(newV.make, newV.model);
                   setDepositTotal(String(defDep));
                 }
               }}
-              placeholder="Choose a vehicle…"
-              options={vehicles.map((v) => ({
-                value: v.id,
-                label: `${v.registration} — ${simplifyVehicleName(v)}`,
-              }))}
             />
+            {vehicleMissing && <p className="mt-1 text-[11px] text-red-300">Search for and pick the driver's car.</p>}
           </Field>
           <Grid2>
             <Field label="Rent Start Date">
@@ -6026,15 +6035,6 @@ function AddDriverModal({
                   { value: "Saturday", label: "Saturday" },
                   { value: "Sunday", label: "Sunday" },
                 ]}
-              />
-            </Field>
-            <Field label="Total Balance Due (£)">
-              <input
-                type="number"
-                step="0.01"
-                value={balanceDue}
-                onChange={(e) => setBalanceDue(e.target.value)}
-                className={inputCls}
               />
             </Field>
           </Grid2>
