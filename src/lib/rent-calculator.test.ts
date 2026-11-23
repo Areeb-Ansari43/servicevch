@@ -10,12 +10,12 @@ describe("Vehicle Weekly Rent Price Auto-Fill", () => {
     expect(getVehicleWeeklyPrice("Tesla", "Model 3 Long Range")).toBe(260);
   });
 
-  test("returns correct weekly rent price for Toyota Corolla Estate", () => {
-    expect(getVehicleWeeklyPrice("Toyota", "Corolla Estate Hybrid")).toBe(220);
+  test("returns the price sheet rent for Toyota Corolla (£210)", () => {
+    expect(getVehicleWeeklyPrice("Toyota", "Corolla Estate Hybrid")).toBe(210);
   });
 
-  test("returns correct weekly rent price for Mercedes E220d", () => {
-    expect(getVehicleWeeklyPrice("Mercedes-Benz", "E 220 D SE AUTO")).toBe(310);
+  test("returns the price sheet rent for Mercedes E220d (£270)", () => {
+    expect(getVehicleWeeklyPrice("Mercedes-Benz", "E 220 D SE AUTO")).toBe(270);
   });
 
   test("returns default £200 for unknown vehicles", () => {
