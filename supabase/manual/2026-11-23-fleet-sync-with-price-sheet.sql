@@ -1,5 +1,6 @@
 -- Fleet sync with the price sheet (VCH_Car_Fleet_01092026.numbers, 92 cars).
--- Run once in the Supabase SQL Editor. Safe to run again (it only changes what still differs).
+-- Run once in the Supabase SQL Editor (paste the whole file, then Run).
+-- Everything is one block: it all happens or nothing does. Safe to run again.
 --
 -- What it does:
 --   1. Adds every car on the sheet that is missing from the CRM.
@@ -14,16 +15,21 @@
 --   5. Widens the WhatsApp bot catalogue's year ranges to the years on the sheet.
 -- The last result table lists everything it did.
 
+DO $sync$
+BEGIN
 -- Columns this uses (already there if earlier migrations ran; added if not)
 ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS weekly_price numeric(10,2);
 ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS monthly_mileage_allowance integer DEFAULT 5000;
 ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS default_deposit numeric(10,2);
 ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS minimum_contract_weeks integer DEFAULT 6;
 
-DROP TABLE IF EXISTS fleet_sync_report;
-CREATE TEMP TABLE fleet_sync_report (action text, reg text, detail text);
+-- Result of this run (read by the SELECT at the end). RLS on with no policies: not visible
+-- through the website/API, only here in the SQL Editor.
+DROP TABLE IF EXISTS public.fleet_sync_report;
+CREATE TABLE public.fleet_sync_report (action text, reg text, detail text);
+ALTER TABLE public.fleet_sync_report ENABLE ROW LEVEL SECURITY;
 
-BEGIN;
+DROP TABLE IF EXISTS fleet_sheet, crm, sheet_match, not_on_sheet;
 
 CREATE TEMP TABLE fleet_sheet (
   reg text PRIMARY KEY, make text, model text, year int, fuel text,
@@ -125,7 +131,7 @@ INSERT INTO fleet_sheet VALUES
   ('BK76WGD', 'Ford', 'Tourneo Custom', 2025, 'Electric', 430, 5000, 500, 6, 'Ford Tourneo Custom', ARRAY[]::text[]);
 
 -- CRM regs, normalised (no spaces, upper case)
-CREATE OR REPLACE TEMP VIEW crm AS
+CREATE TEMP TABLE crm ON COMMIT DROP AS
   SELECT v.*, upper(regexp_replace(v.reg, '\s+', '', 'g')) AS nreg FROM public.vehicles v;
 
 -- Sheet car -> CRM car (exact reg, or a one-character typo for the two odd sheet regs)
@@ -139,7 +145,7 @@ CREATE TEMP TABLE sheet_match ON COMMIT DROP AS
     LIMIT 1
   ) c ON true;
 
-INSERT INTO fleet_sync_report
+INSERT INTO public.fleet_sync_report
   SELECT 'check reg', m.crm_reg, 'Sheet says ' || m.sheet_reg || ', CRM has ' || m.crm_reg || ' - kept the CRM car. Please fix the sheet.'
   FROM sheet_match m WHERE m.crm_reg <> m.sheet_reg;
 
@@ -153,7 +159,7 @@ added AS (
   WHERE NOT EXISTS (SELECT 1 FROM sheet_match m WHERE m.sheet_reg = s.reg)
   RETURNING reg, make, model
 )
-INSERT INTO fleet_sync_report SELECT 'added', reg, make || ' ' || model FROM added;
+INSERT INTO public.fleet_sync_report SELECT 'added', reg, make || ' ' || model FROM added;
 
 -- 2. Rent, allowance, deposit and term for every car on the sheet
 UPDATE public.vehicles v SET
@@ -170,6 +176,7 @@ WHERE upper(regexp_replace(v.reg, '\s+', '', 'g')) = s.reg
 -- 3. Cars not on the sheet
 CREATE TABLE IF NOT EXISTS public.vehicles_removed_backup (LIKE public.vehicles);
 ALTER TABLE public.vehicles_removed_backup ADD COLUMN IF NOT EXISTS removed_at timestamptz DEFAULT now();
+ALTER TABLE public.vehicles_removed_backup ENABLE ROW LEVEL SECURITY;
 
 CREATE TEMP TABLE not_on_sheet ON COMMIT DROP AS
   SELECT c.id, c.nreg,
@@ -186,7 +193,7 @@ UPDATE public.vehicles v SET status = 'off_road',
 FROM not_on_sheet n
 WHERE v.id = n.id AND (n.has_drivers OR n.has_services) AND coalesce(v.status, '') <> 'off_road';
 
-INSERT INTO fleet_sync_report
+INSERT INTO public.fleet_sync_report
   SELECT 'kept (off road)', n.nreg,
          'Not on the sheet but has ' ||
          concat_ws(' and ', CASE WHEN n.has_drivers THEN 'driver records' END, CASE WHEN n.has_services THEN 'service history' END) ||
@@ -203,7 +210,7 @@ WITH removed AS (
   WHERE v.id = n.id AND NOT n.has_drivers AND NOT n.has_services
   RETURNING v.reg, v.make, v.model
 )
-INSERT INTO fleet_sync_report SELECT 'removed', reg, make || ' ' || model || ' (copy in vehicles_removed_backup)' FROM removed;
+INSERT INTO public.fleet_sync_report SELECT 'removed', reg, make || ' ' || model || ' (copy in vehicles_removed_backup)' FROM removed;
 
 -- 5. Bot catalogue year ranges = years on the sheet
 UPDATE public.bot_fleet_catalog b SET crm_year_min = y.lo, crm_year_max = y.hi
@@ -226,13 +233,14 @@ FROM (VALUES
 ) AS y(name, lo, hi)
 WHERE b.display_name = y.name AND (b.crm_year_min IS DISTINCT FROM y.lo OR b.crm_year_max IS DISTINCT FROM y.hi);
 
-INSERT INTO fleet_sync_report
+INSERT INTO public.fleet_sync_report
   SELECT 'summary', NULL,
     (SELECT count(*) FROM public.vehicles)::text || ' cars in the CRM now; ' ||
     (SELECT count(*) FROM fleet_sheet)::text || ' on the sheet.';
 
-COMMIT;
+END
+$sync$;
 
 -- What happened
-SELECT action, reg, detail FROM fleet_sync_report ORDER BY
+SELECT action, reg, detail FROM public.fleet_sync_report ORDER BY
   CASE action WHEN 'summary' THEN 0 WHEN 'check reg' THEN 1 WHEN 'kept (off road)' THEN 2 WHEN 'removed' THEN 3 ELSE 4 END, reg;
