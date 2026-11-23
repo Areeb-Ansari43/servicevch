@@ -4,6 +4,8 @@ export type AuditActionType =
   | "driver_created"
   | "driver_edited"
   | "driver_deleted"
+  | "driver_restored"
+  | "driver_purged"
   | "rent_updated"
   | "charge_added"
   | "invite_sent"

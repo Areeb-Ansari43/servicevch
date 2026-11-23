@@ -110,7 +110,7 @@ export const listPortalAuthUsers = createServerFn({ method: "GET" })
 /**
   Delete or revoke a portal account.
   If permanent === true: calls Supabase Auth Admin deleteUser capability to revoke access permanently.
-  If permanent === false: soft-deletes driver track (retaining auth_user_id) for 48h recovery window.
+  If permanent === false: soft-deletes driver track (retaining auth_user_id) for 30 days (then purged by the daily job).
   Logs action to audit_logs.
  */
 export const deletePortalAccount = createServerFn({ method: "POST" })
@@ -187,7 +187,7 @@ export const deletePortalAccount = createServerFn({ method: "POST" })
 
       return { success: true, authUserId: data.authUserId, permanent: true };
     } else {
-      // Soft-delete: mark deleted_at and set active = false on driver_tracks, retaining auth_user_id for 48h recovery
+      // Soft-delete: mark deleted_at and set active = false on driver_tracks, retaining auth_user_id for 30 days
       if (targetDriverId) {
         await context.supabase
           .from("driver_tracks")
@@ -208,7 +208,7 @@ export const deletePortalAccount = createServerFn({ method: "POST" })
           driver_id: targetDriverId ?? null,
           driver_name: targetDriverName ?? null,
           auth_user_id: data.authUserId,
-          recovery_window: "48h",
+          recovery_window: "30 days",
         },
       } as never);
 
@@ -217,7 +217,7 @@ export const deletePortalAccount = createServerFn({ method: "POST" })
   });
 
 /**
-  Restore a soft-deleted driver and their portal account access within the 48-hour recovery window.
+  Restore a soft-deleted driver and their portal account access within 30 days of deletion.
  */
 export const restoreDriverAccount = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

@@ -1621,9 +1621,19 @@ function UserSettingsView({
 
 function AuditLogsView({
   toast,
+  deletedDrivers = [],
+  restoreDriver,
 }: {
   toast: (m: string, t?: Toast["type"]) => void;
+  deletedDrivers?: DriverTrack[];
+  restoreDriver?: (id: string) => Promise<void>;
 }) {
+  const [restoring, setRestoring] = useState<string | null>(null);
+  const daysLeft = (deletedAt?: string | null) => {
+    if (!deletedAt) return 30;
+    const left = 30 - Math.floor((Date.now() - new Date(deletedAt).getTime()) / 86400000);
+    return Math.max(0, left);
+  };
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -1740,6 +1750,14 @@ function AuditLogsView({
         colorCls = "border-red-500/30 bg-red-500/10 text-red-300";
         label = "Driver Deleted";
         break;
+      case "driver_restored":
+        colorCls = "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
+        label = "Driver Restored";
+        break;
+      case "driver_purged":
+        colorCls = "border-zinc-500/30 bg-zinc-500/10 text-zinc-300";
+        label = "Permanently Deleted (30 days)";
+        break;
       case "rent_updated":
         colorCls = "border-amber-500/30 bg-amber-500/10 text-amber-300";
         label = "Rent Status Updated";
@@ -1823,6 +1841,63 @@ function AuditLogsView({
           Refresh Logs
         </button>
       </div>
+
+      {/* Deleted drivers: restorable for 30 days, then removed for good by the daily job */}
+      {deletedDrivers.length > 0 && (
+        <section
+          className="rounded-2xl border p-4"
+          style={{ borderColor: "rgba(245,158,11,0.3)", background: "rgba(245,158,11,0.05)" }}
+        >
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 text-sm font-bold text-amber-200">
+              <Icon.RotateCcw className="h-4 w-4" /> Deleted drivers
+            </h2>
+            <span className="text-[11px] text-[#9aa5b8]">
+              Kept for 30 days, then permanently deleted with their records and portal login.
+            </span>
+          </div>
+          <ul className="divide-y divide-white/5">
+            {deletedDrivers.map((d) => {
+              const left = daysLeft(d.deleted_at);
+              return (
+                <li key={d.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-white">{d.driver_name}</div>
+                    <div className="text-[11px] text-[#8b95a8]">
+                      {d.registration || "No car"}
+                      {d.deleted_at ? ` · deleted ${new Date(d.deleted_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}` : ""}
+                      {" · "}
+                      <span className={left <= 3 ? "font-semibold text-red-300" : "text-amber-200"}>
+                        {left === 0 ? "removed at the next daily cleanup" : `${left} day${left === 1 ? "" : "s"} left`}
+                      </span>
+                    </div>
+                  </div>
+                  {restoreDriver && (
+                    <button
+                      type="button"
+                      disabled={restoring === d.id}
+                      onClick={async () => {
+                        setRestoring(d.id);
+                        try {
+                          await restoreDriver(d.id);
+                          toast(`${d.driver_name} restored, with portal access`);
+                        } catch (err: any) {
+                          toast(err?.message || "Could not restore the driver", "error");
+                        } finally {
+                          setRestoring(null);
+                        }
+                      }}
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/25 disabled:opacity-50"
+                    >
+                      <Icon.RotateCcw className="h-3.5 w-3.5" /> {restoring === d.id ? "Restoring…" : "Restore"}
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       {/* FILTER BAR */}
       <div
@@ -2352,7 +2427,7 @@ export function FleetShell({ view }: { view: View }) {
               fallbackTitle="Audit Logs Error"
               fallbackMessage="An error occurred while loading system audit logs."
             >
-              <AuditLogsView toast={toast} />
+              <AuditLogsView toast={toast} deletedDrivers={data.deletedDrivers} restoreDriver={data.restoreDriver} />
             </RouteErrorBoundary>
           ) : null}
         </main>
@@ -5373,10 +5448,14 @@ function DriversView({
   });
 
   const handleDelete = async (driver: DriverTrack) => {
-    if (confirm(`Are you sure you want to delete driver "${driver.driver_name}"?`)) {
+    if (
+      confirm(
+        `Delete driver "${driver.driver_name}"?\n\nYou can restore them from the Audit Log for 30 days. After that they are deleted for good.`,
+      )
+    ) {
       try {
         await data.deleteDriver(driver.id);
-        toast(`Driver ${driver.driver_name} deleted`, "info");
+        toast(`${driver.driver_name} deleted. Restore from the Audit Log within 30 days.`, "info");
       } catch (err: any) {
         toast(err?.message ?? "Failed to delete driver", "error");
       }
@@ -5673,48 +5752,6 @@ function DriversView({
           </table>
         </div>
       </div>
-
-      {/* Recently Deleted Drivers — 48-Hour Recovery Window */}
-      {data.deletedDrivers && data.deletedDrivers.length > 0 && (
-        <div className="rounded-xl border p-4 space-y-2.5" style={{ borderColor: "rgba(245,158,11,0.3)", background: "rgba(245,158,11,0.05)" }}>
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
-              <Icon.RotateCcw className="h-3.5 w-3.5" /> Recently Deleted Drivers (48-Hour Recovery Window)
-            </h3>
-            <span className="text-[10px] text-[#8b95a8]">{data.deletedDrivers.length} in recovery window</span>
-          </div>
-          <div className="space-y-2">
-            {data.deletedDrivers.map((d) => (
-              <div key={d.id} className="flex items-center justify-between rounded-lg border p-2.5 text-xs" style={{ borderColor: T.borderSoft, background: T.panel2 }}>
-                <div>
-                  <span className="font-bold text-white">{d.driver_name}</span>{" "}
-                  <span className="text-[#8b95a8]">({d.registration || "No reg"})</span>
-                  {d.email && <span className="text-[#8b95a8] ml-2">· {d.email}</span>}
-                  {d.deleted_at && (
-                    <span className="text-[10px] text-[#8b95a8] ml-2 block sm:inline">
-                      Deleted: {new Date(d.deleted_at).toLocaleString("en-GB")}
-                    </span>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      await data.restoreDriver(d.id);
-                      toast(`Restored driver ${d.driver_name} and reactivated portal access`);
-                    } catch (err: any) {
-                      toast(err?.message || "Failed to restore driver", "error");
-                    }
-                  }}
-                  className="inline-flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1 text-[11px] font-bold text-emerald-300 hover:bg-emerald-500/25 transition-colors shrink-0"
-                >
-                  <Icon.RotateCcw className="h-3 w-3" /> Restore Driver & Portal Access
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Add Driver Modal */}
       {addModalOpen && (

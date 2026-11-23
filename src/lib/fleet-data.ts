@@ -528,9 +528,14 @@ export function useFleetData() {
       return dFromRow(r, logsByTrack.get(r.id) ?? [], chargesList, depositPaymentsList);
     });
 
-    // Active drivers vs soft-deleted drivers (48-hour recovery window)
+    // Active drivers vs soft-deleted drivers (restorable for 30 days)
     const active = allDriverTracks.filter((d) => !d.deleted_at && d.active !== false);
-    const softDeleted = allDriverTracks.filter((d) => Boolean(d.deleted_at) || d.active === false);
+    const cutoff = Date.now() - 30 * 86400000;
+    const softDeleted = allDriverTracks
+      .filter((d) => Boolean(d.deleted_at) || d.active === false)
+      // Older than 30 days: waiting for the daily cleanup, no longer restorable
+      .filter((d) => !d.deleted_at || new Date(d.deleted_at).getTime() >= cutoff)
+      .sort((a, b) => String(b.deleted_at ?? "").localeCompare(String(a.deleted_at ?? "")));
 
     const loadedVehicles = (vRes.data ?? []).map(vFromRow);
     if (loadedVehicles.length === 0 && typeof window !== "undefined" && (window as any).__MOCK_AUTH__) {
@@ -1606,7 +1611,7 @@ export function useFleetData() {
         .eq("id", id)
         .maybeSingle();
 
-      // Soft-delete driver track retaining auth_user_id for 48-hour recovery window
+      // Soft-delete: restorable from the Audit Log for 30 days, then purged by the daily job
       await supabase
         .from("driver_tracks")
         .update({
@@ -1631,7 +1636,7 @@ export function useFleetData() {
           driver_name: target?.driver_name ?? track?.driver_name ?? null,
           reg: target?.registration ?? null,
           auth_user_id: target?.auth_user_id ?? track?.auth_user_id ?? null,
-          recovery_window: "48h",
+          recovery_window: "30 days",
         },
       });
 
