@@ -1055,37 +1055,79 @@ export function useFleetData() {
       photo_url: string;
       ocr_mileage?: number | null;
       ocr_confidence?: "high" | "low" | "none" | null;
+      /** Reading entered (or confirmed) by staff. */
+      reading_value?: number | null;
       notes?: string | null;
     }) => {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id || null;
+
+      // Store the photo in the mileage-photos bucket (not as text in the row), like portal uploads.
+      let photoUrl = sub.photo_url;
+      let imagePath: string | null = null;
+      const m = /^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i.exec(sub.photo_url || "");
+      if (m) {
+        try {
+          const bin = atob(m[2]);
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          const ext = /png/i.test(m[1]) ? "png" : /webp/i.test(m[1]) ? "webp" : "jpg";
+          const path = `${sub.driver_id || "staff"}/${Date.now()}.${ext}`;
+          const { error: upErr } = await supabase.storage
+            .from("mileage-photos")
+            .upload(path, bytes, { contentType: m[1].toLowerCase(), upsert: false });
+          if (!upErr) {
+            imagePath = path;
+            photoUrl = supabase.storage.from("mileage-photos").getPublicUrl(path).data.publicUrl;
+          } else {
+            console.warn("[fleet-data] odometer photo upload failed, keeping it inline:", upErr.message);
+          }
+        } catch (err) {
+          console.warn("[fleet-data] odometer photo upload failed, keeping it inline:", err);
+        }
+      }
+
       const newSub: MileageSubmission = {
         id: crypto.randomUUID(),
         driver_id: sub.driver_id ?? null,
         driver_name: sub.driver_name,
         registration: sub.registration,
-        photo_url: sub.photo_url,
+        photo_url: photoUrl,
         ocr_mileage: sub.ocr_mileage ?? null,
         ocr_confidence: sub.ocr_confidence ?? "low",
         status: "pending",
         submitted_at: new Date().toISOString(),
         notes: sub.notes ?? null,
-      };
+        reading_value: sub.reading_value ?? null,
+      } as MileageSubmission;
 
       setMileageSubmissions((prev) => [newSub, ...prev]);
 
-      const { data: userData } = await supabase.auth.getUser();
-      const userId = userData.user?.id || null;
-
-      await supabase.from("mileage_submissions").insert({
+      const base = {
         ...(userId ? { user_id: userId } : {}),
         driver_id: sub.driver_id || null,
         driver_name: sub.driver_name,
         registration: sub.registration,
-        photo_url: sub.photo_url,
+        photo_url: photoUrl,
         ocr_mileage: sub.ocr_mileage || null,
         ocr_confidence: sub.ocr_confidence || "low",
         status: "pending",
         notes: sub.notes || null,
-      } as any);
+      };
+      const extra = {
+        ...(imagePath ? { image_path: imagePath } : {}),
+        ...(sub.reading_value ? { reading_value: sub.reading_value } : {}),
+      };
+      let { error } = await (supabase.from("mileage_submissions") as any).insert({ ...base, ...extra });
+      if (error && /column|schema cache/i.test(error.message)) {
+        ({ error } = await (supabase.from("mileage_submissions") as any).insert({
+          ...base,
+          notes: [sub.notes, sub.reading_value ? `Reading entered: ${sub.reading_value.toLocaleString("en-GB")} miles` : null]
+            .filter(Boolean)
+            .join(" · ") || null,
+        }));
+      }
+      if (error) throw new Error(error.message);
 
       await refresh();
       return newSub;

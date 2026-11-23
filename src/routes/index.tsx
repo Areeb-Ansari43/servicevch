@@ -63,6 +63,7 @@ import { EmailTestCard } from "@/components/email-test-card";
 import { RentHistoryCard } from "@/components/rent-history-card";
 import { LicenceScanner, type LicenceValues } from "@/components/licence-scanner";
 import { VehicleSearch } from "@/components/vehicle-search";
+import { OdometerScanner } from "@/components/odometer-scanner";
 import { carTermsFor } from "@/lib/fleet-sheet";
 import { runExpiryScanNowFn } from "@/lib/email-admin.functions";
 
@@ -8892,56 +8893,13 @@ function SubmitMileagePhotoModal({
   onClose: () => void;
 }) {
   const [selectedDriverId, setSelectedDriverId] = useState<string>(drivers[0]?.id || "");
-  const [photoUrl, setPhotoUrl] = useState<string>("");
   const [photoPreview, setPhotoPreview] = useState<string>("");
-  const [analyzing, setAnalyzing] = useState(false);
   const [ocrResult, setOcrResult] = useState<{ odometer: number | null; confidence: "high" | "low" | "none" } | null>(null);
+  const [reading, setReading] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [notes, setNotes] = useState("");
 
   const selectedDriver = drivers.find((d) => d.id === selectedDriverId);
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64 = reader.result as string;
-        setPhotoPreview(base64);
-        void runOcr(base64);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleUrlBlur = () => {
-    if (photoUrl.trim() && photoUrl !== photoPreview) {
-      setPhotoPreview(photoUrl.trim());
-      void runOcr(photoUrl.trim());
-    }
-  };
-
-  const runOcr = async (imageSource: string) => {
-    setAnalyzing(true);
-    setOcrResult(null);
-    try {
-      const res = await fetch("/api/public/ocr-odometer", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photo_url: imageSource }),
-      });
-      if (res.ok) {
-        const body = await res.json();
-        setOcrResult({
-          odometer: typeof body.odometer === "number" ? body.odometer : null,
-          confidence: body.confidence || "none",
-        });
-      }
-    } catch {
-      // ignore
-    } finally {
-      setAnalyzing(false);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -8949,26 +8907,34 @@ function SubmitMileagePhotoModal({
       toast("Please select a driver", "error");
       return;
     }
-    const finalPhoto = photoPreview || photoUrl.trim();
-    if (!finalPhoto) {
-      toast("Please provide an odometer photo or file", "error");
+    if (!photoPreview) {
+      toast("Please add a photo of the dashboard", "error");
+      return;
+    }
+    const readingNum = reading.trim() ? Math.round(Number(reading.replace(/[^0-9.]/g, ""))) : null;
+    if (reading.trim() && (!readingNum || readingNum <= 0)) {
+      toast("Please enter a valid odometer reading", "error");
       return;
     }
 
+    setSubmitting(true);
     try {
       await data.addMileageSubmission({
         driver_id: selectedDriver.id,
         driver_name: selectedDriver.driver_name,
         registration: selectedDriver.registration,
-        photo_url: finalPhoto,
+        photo_url: photoPreview,
         ocr_mileage: ocrResult?.odometer ?? null,
-        ocr_confidence: ocrResult?.confidence ?? "low",
+        ocr_confidence: ocrResult?.confidence ?? "none",
+        reading_value: readingNum,
         notes,
       });
       toast(`Odometer photo submitted for review (${selectedDriver.driver_name})`);
       onClose();
     } catch (e: any) {
       toast(e?.message ?? "Failed to submit photo", "error");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -8986,7 +8952,7 @@ function SubmitMileagePhotoModal({
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h2 className="text-lg font-extrabold text-white">Submit Odometer Photo</h2>
-            <p className="text-xs text-[#8b95a8]">Upload dashboard image for automatic Gemini OCR extraction</p>
+            <p className="text-xs text-[#8b95a8]">Drop a dashboard photo and the AI reads the odometer for you.</p>
           </div>
           <button onClick={onClose} className="text-[#8b95a8] hover:text-white">
             <Icon.X className="h-5 w-5" />
@@ -9009,59 +8975,30 @@ function SubmitMileagePhotoModal({
             </select>
           </div>
 
-          <div>
-            <Label>Upload Photo / Image File</Label>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleFileChange}
-              className="block w-full text-xs text-[#8b95a8] file:mr-3 file:rounded-md file:border-0 file:bg-[#ff6a00] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-[#e05d00] cursor-pointer"
-            />
-          </div>
+          <OdometerScanner
+            onScan={(scan) => {
+              setPhotoPreview(scan.dataUrl);
+              setOcrResult({ odometer: scan.odometer, confidence: scan.confidence });
+              if (scan.odometer) setReading(String(scan.odometer));
+            }}
+          />
 
-          <Field label="OR Photo URL">
+          <Field label="Odometer reading (miles)">
             <input
-              type="url"
-              placeholder="https://..."
-              value={photoUrl}
-              onChange={(e) => setPhotoUrl(e.target.value)}
-              onBlur={handleUrlBlur}
-              className={inputCls}
+              inputMode="numeric"
+              placeholder="Filled in from the photo, or type it"
+              value={reading}
+              onChange={(e) => setReading(e.target.value.replace(/[^0-9]/g, ""))}
+              className={
+                inputCls +
+                (ocrResult?.odometer && reading === String(ocrResult.odometer)
+                  ? ocrResult.confidence === "high"
+                    ? " ring-2 ring-emerald-500/50"
+                    : " ring-2 ring-amber-400/70"
+                  : "")
+              }
             />
           </Field>
-
-          {photoPreview && (
-            <div className="space-y-2">
-              <div className="text-xs font-medium text-[#8b95a8]">Image Preview</div>
-              <div className="relative overflow-hidden rounded-lg border border-white/10 bg-black/50 max-h-48 flex items-center justify-center p-2">
-                <img src={photoPreview} alt="Preview" className="max-h-44 object-contain rounded" />
-              </div>
-            </div>
-          )}
-
-          {analyzing && (
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-center text-xs font-semibold text-amber-300 animate-pulse flex items-center justify-center gap-2">
-              <Icon.Clock className="h-4 w-4 animate-spin" />
-              Analyzing photo with Gemini Vision OCR...
-            </div>
-          )}
-
-          {ocrResult && !analyzing && (
-            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300 space-y-1">
-              <div className="font-bold flex items-center gap-1.5">
-                <span>✨ OCR Analysis Complete</span>
-              </div>
-              {ocrResult.odometer ? (
-                <p>
-                  Extracted Odometer: <span className="font-bold text-white">{ocrResult.odometer.toLocaleString()} mi</span> (High Confidence)
-                </p>
-              ) : (
-                <p className="text-amber-300">
-                  ⚠️ Confidence low or image unclear — field will be left blank for staff manual entry.
-                </p>
-              )}
-            </div>
-          )}
 
           <Field label="Notes / Comments (Optional)">
             <input
@@ -9084,10 +9021,10 @@ function SubmitMileagePhotoModal({
             </button>
             <button
               type="submit"
-              disabled={analyzing || (!photoPreview && !photoUrl.trim())}
+              disabled={submitting || !photoPreview}
               className="rounded-lg bg-[#ff6a00] px-4 py-2 text-xs font-bold text-white hover:bg-[#e05d00] disabled:opacity-50 transition-colors"
             >
-              Submit Photo for Review
+              {submitting ? "Submitting…" : "Submit for review"}
             </button>
           </div>
         </form>
