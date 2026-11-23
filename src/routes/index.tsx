@@ -5428,6 +5428,19 @@ function DriversView({
   const [previewDriver, setPreviewDriver] = useState<DriverTrack | null>(null);
   const [inviteModalDriver, setInviteModalDriver] = useState<DriverTrack | null>(null);
 
+  // /drivers?driver=<id> opens that driver's profile (links from the vehicle page)
+  const openedFromLink = useRef(false);
+  useEffect(() => {
+    if (openedFromLink.current || typeof window === "undefined") return;
+    const id = new URLSearchParams(window.location.search).get("driver");
+    if (!id) return;
+    const d = drivers.find((x) => x.id === id);
+    if (d) {
+      openedFromLink.current = true;
+      setProfileDriver(d);
+    }
+  }, [drivers]);
+
   const totalDrivers = drivers.length;
   const activeDrivers = drivers.filter((d) => d.status === "active" || (!d.status && d.active !== false)).length;
   const inactiveDrivers = drivers.filter((d) => d.status === "inactive" || d.active === false).length;

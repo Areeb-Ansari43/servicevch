@@ -234,3 +234,70 @@ html.light .vch-glow {
     animation: none !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Motion (dashboard: quick and quiet). ease-out for things arriving, short
+   durations, transform/opacity only, and nothing loops for attention.
+   --------------------------------------------------------------------------- */
+:root {
+  --vch-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --vch-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+/* Content arriving: fade + 8px rise + slight blur */
+@keyframes vch-enter {
+  from { opacity: 0; transform: translateY(8px); filter: blur(4px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+.vch-enter { animation: vch-enter 320ms var(--vch-ease-out) both; }
+
+/* Sections of a page arrive one after another (30-60ms apart) */
+.vch-stagger > * { animation: vch-enter 360ms var(--vch-ease-out) both; }
+.vch-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.vch-stagger > *:nth-child(2) { animation-delay: 50ms; }
+.vch-stagger > *:nth-child(3) { animation-delay: 100ms; }
+.vch-stagger > *:nth-child(4) { animation-delay: 140ms; }
+.vch-stagger > *:nth-child(5) { animation-delay: 180ms; }
+.vch-stagger > *:nth-child(n + 6) { animation-delay: 210ms; }
+
+/* Menus and popovers grow from where they open */
+@keyframes vch-pop {
+  from { opacity: 0; transform: scale(0.96) translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+.vch-pop { animation: vch-pop 160ms var(--vch-ease-out) both; }
+
+/* A picture settling into place (vehicle hero) */
+@keyframes vch-float-in {
+  from { opacity: 0; transform: translateX(24px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+.vch-float-in { animation: vch-float-in 600ms var(--vch-ease-out) 120ms both; }
+
+/* Buttons press, linked cards lift */
+.vch-press { transition: transform 120ms var(--vch-ease-out), background-color 160ms, color 160ms, border-color 160ms; }
+.vch-press:active { transform: scale(0.97); }
+.vch-lift { transition: transform 180ms var(--vch-ease-out), box-shadow 180ms var(--vch-ease-out), border-color 180ms; }
+.vch-lift:hover { transform: translateY(-2px); box-shadow: 0 10px 24px -14px rgba(0, 0, 0, 0.6); border-color: var(--vch-accent-soft); }
+.vch-card { transition: border-color 200ms, box-shadow 200ms; }
+
+/* Loading placeholder (a soft sweep, stops once content arrives) */
+@keyframes vch-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+.vch-skeleton {
+  background: linear-gradient(90deg, var(--vch-surface) 25%, var(--vch-surface-2) 50%, var(--vch-surface) 75%);
+  background-size: 200% 100%;
+  animation: vch-shimmer 1.4s linear infinite;
+}
+
+/* Dialogs: backdrop fades, panel rises */
+@keyframes vch-sheet {
+  from { opacity: 0; transform: translateY(16px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+.vch-sheet { animation: vch-sheet 260ms var(--vch-ease-out) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .vch-enter, .vch-stagger > *, .vch-pop, .vch-float-in, .vch-sheet { animation: none !important; }
+  .vch-press:active, .vch-lift:hover { transform: none; }
+  .vch-skeleton { animation: none; }
+}
