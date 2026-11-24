@@ -66,6 +66,7 @@ import { VehicleSearch } from "@/components/vehicle-search";
 import { OdometerScanner } from "@/components/odometer-scanner";
 import { RentPaidDialog } from "@/components/rent-paid-dialog";
 import { PORTAL_ENABLED } from "@/lib/features";
+import { serviceDue } from "@/lib/service-due";
 import { RentLoggedList } from "@/components/rent-logged-list";
 import { Check as LucideCheck, ChevronDown as LucideChevronDown } from "lucide-react";
 import { carTermsFor } from "@/lib/fleet-sheet";
@@ -4314,7 +4315,15 @@ function VehiclesList({
               <div
                 key={v.id}
                 className="group relative flex min-h-[365px] flex-col overflow-hidden rounded-2xl border p-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:border-[#ff6a00]/60 hover:shadow-xl hover:shadow-orange-500/10 sm:min-h-[385px]"
-                style={{ borderColor: T.border, background: T.panel }}
+                style={{
+                  borderColor:
+                    serviceDue(v)?.state === "overdue"
+                      ? "rgba(239,68,68,0.55)"
+                      : serviceDue(v)?.state === "soon"
+                        ? "rgba(251,191,36,0.55)"
+                        : T.border,
+                  background: T.panel,
+                }}
               >
                 {artwork ? (
                   <div
@@ -4342,6 +4351,22 @@ function VehiclesList({
                   <UKPlate reg={v.registration} size="sm" />
                   <StatusBadge status={v.status} />
                 </div>
+                {(() => {
+                  const due = serviceDue(v);
+                  if (!due || due.state === "ok") return null;
+                  return (
+                    <div
+                      className={`relative z-10 mb-2 inline-flex w-fit items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                        due.state === "overdue"
+                          ? "bg-red-500/15 text-red-300 ring-1 ring-red-500/40"
+                          : "bg-amber-400/15 text-amber-200 ring-1 ring-amber-400/40"
+                      }`}
+                      title={due.label}
+                    >
+                      <Icon.Wrench className="h-3 w-3" /> {due.label}
+                    </div>
+                  );
+                })()}
                 {(() => {
                   const simp = simplifyVehicleName(v);
                   return (
@@ -5797,6 +5822,7 @@ function DriversView({
             const bits = [
               res.advanceWeeks ? `${res.advanceWeeks} week${res.advanceWeeks === 1 ? "" : "s"} paid ahead` : null,
               opts.depositPaid ? `£${opts.depositPaid} deposit recorded` : null,
+              opts.extraCharge ? `£${opts.extraCharge.amount} ${opts.extraCharge.description} recorded` : null,
             ].filter(Boolean);
             toast(`${paidDriver.driver_name}: rent paid, balance £0${bits.length ? ` · ${bits.join(" · ")}` : ""}`);
           }}

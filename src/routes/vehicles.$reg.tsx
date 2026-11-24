@@ -23,6 +23,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useFleetData, type DriverTrack, type Vehicle } from "@/lib/fleet-data";
 import { carTermsFor } from "@/lib/fleet-sheet";
 import { simplifyVehicleName, vehicleArtworkPath } from "@/lib/vehicle-display";
+import { serviceDue } from "@/lib/service-due";
 import { exportVehiclePdf } from "@/lib/pdf-export";
 import { UKPlate, StatusBadge, daysUntil, T, EditVehicleModal, regSlug } from "@/routes/index";
 import { NotFoundPanel } from "@/components/not-found-panel";
@@ -426,7 +427,7 @@ function VehicleDetailPage() {
             {/* Key dates */}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <DateCard label="Next MOT" date={vehicle.next_mot_date} icon={CalendarCheck} />
-              <DateCard label="Next service" date={vehicle.next_service_date} icon={Wrench} />
+              <ServiceCard vehicle={vehicle} />
               <DateCard
                 label="PCO licence expiry"
                 date={vehicle.insurance_expiry}
@@ -706,6 +707,43 @@ function EmptyState({ icon: IconCmp, text }: { icon: LucideIcon; text: string })
         <IconCmp className="h-5 w-5" />
       </span>
       {text}
+    </div>
+  );
+}
+
+function ServiceCard({ vehicle }: { vehicle: Vehicle }) {
+  const due = serviceDue(vehicle);
+  const tone =
+    due?.state === "overdue"
+      ? "text-red-300 bg-red-500/10"
+      : due?.state === "soon"
+        ? "text-amber-200 bg-amber-500/10"
+        : "text-emerald-300 bg-emerald-500/10";
+  const main = vehicle.next_service_mileage
+    ? `${Number(vehicle.next_service_mileage).toLocaleString("en-GB")} mi`
+    : vehicle.next_service_date
+      ? new Date(`${vehicle.next_service_date}T12:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+      : "Not set";
+  return (
+    <div
+      className="vch-card flex items-center gap-3 rounded-2xl border p-4"
+      style={{
+        borderColor: due?.state === "overdue" ? "rgba(239,68,68,0.5)" : due?.state === "soon" ? "rgba(251,191,36,0.5)" : T.border,
+        background: T.panel,
+      }}
+    >
+      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white/[0.05] text-[#ff8a3d]">
+        <Wrench className="h-5 w-5" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--vch-text-muted)]">Next service</span>
+        <span className="mt-0.5 block truncate text-base font-bold">{main}</span>
+      </span>
+      {due && (
+        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${tone}`}>
+          {due.state === "overdue" ? "Overdue" : due.state === "soon" ? "Due soon" : due.milesLeft !== null ? `${due.milesLeft.toLocaleString("en-GB")} mi` : `${due.daysLeft}d`}
+        </span>
+      )}
     </div>
   );
 }

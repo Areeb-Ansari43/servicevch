@@ -1,5 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { getRuntimeEnv } from "@/integrations/supabase/config";
 
 /**
  * Public Gemini Vision OCR endpoint for vehicle odometer reading extraction.
@@ -107,57 +106,27 @@ export async function parseOdometerPhoto(
     return { ok: false, odometer: null, confidence: "none", reason: "empty_image_data" };
   }
 
-  const apiKey = (
-    getRuntimeEnv("GEMINI_API_KEY") ??
-    getRuntimeEnv("GOOGLE_API_KEY") ??
-    getRuntimeEnv("GOOGLE_GEMINI_API_KEY") ??
-    getRuntimeEnv("VITE_GEMINI_API_KEY") ??
-    ""
-  ).trim();
-
-  if (!apiKey) {
+  const { geminiImageJson, geminiApiKey } = await import("@/lib/gemini-vision.server");
+  if (!geminiApiKey()) {
     return { ok: false, odometer: null, confidence: "none", reason: "gemini_api_key_missing" };
   }
 
-  const models = [...new Set([(getRuntimeEnv("GEMINI_MODEL") ?? "gemini-2.5-flash").trim(), "gemini-2.0-flash"])];
-
   // First clear read wins; an unsure read is kept and the next model gets a chance to do better.
-  let best: OcrResult | null = null;
-  for (const model of models) {
-    try {
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey,
-        },
-        signal: AbortSignal.timeout(15000),
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: ODOMETER_PROMPT }, { inlineData: { mimeType, data: base64Data } }] }],
-          generationConfig: {
-            responseMimeType: "application/json",
-            temperature: 0,
-            // No "thinking" on 2.5 models: much faster, and not needed to read digits
-            ...(/2\.5/.test(model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
-          },
-        }),
-      });
-      if (!response.ok) continue;
-      const data = (await response.json()) as {
-        candidates?: { content?: { parts?: { text?: string }[] } }[];
-      };
-      const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
-      const cleaned = text.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
-      const read = interpretOdometerRead(JSON.parse(cleaned) as RawRead);
-      if (read.confidence === "high") return read;
-      if (!best || (best.odometer == null && read.odometer != null)) best = read;
-    } catch {
-      // try next model
-    }
-  }
-
-  return best ?? { ok: false, odometer: null, confidence: "none", reason: "ocr_failed" };
+  const res = await geminiImageJson({
+    prompt: ODOMETER_PROMPT,
+    mimeType,
+    base64: base64Data,
+    timeoutMs: 20000,
+    accept: (json) => {
+      try {
+        return interpretOdometerRead(json as RawRead).confidence === "high";
+      } catch {
+        return false;
+      }
+    },
+  });
+  if (!res.ok) return { ok: false, odometer: null, confidence: "none", reason: `ocr_failed_${res.reason}` };
+  return interpretOdometerRead(res.json as RawRead);
 }
 
 async function handleOcr(request: Request) {

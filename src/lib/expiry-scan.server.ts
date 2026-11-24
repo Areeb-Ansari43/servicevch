@@ -27,6 +27,18 @@ import {
 } from "@/lib/email-sender.server";
 
 export const STAFF_ALERT_RECIPIENTS = "admin@fa-ibi.co.uk";
+
+/**
+ * Automatic emails to drivers (vehicle expiry notices, "rent due tomorrow" reminders) are off:
+ * only staff get the daily emails (rent due tomorrow digest, fleet-wide licence expiry summary).
+ * Set the DRIVER_EMAILS_ENABLED env var to "true" to send them to drivers again.
+ */
+export function driverEmailsEnabled(): boolean {
+  const v =
+    (typeof process !== "undefined" ? process.env?.DRIVER_EMAILS_ENABLED : undefined) ??
+    (globalThis as any).__env__?.DRIVER_EMAILS_ENABLED;
+  return String(v ?? "").trim().toLowerCase() === "true";
+}
 export const EXPIRY_JOB_NAME = "expiry-alerts";
 
 export type ExpiryScanTrigger = "cron" | "manual" | "watchdog";
@@ -314,8 +326,10 @@ export async function runExpiryScan(
 
             const driverRes = await send({
               recipient: driverEmail || "none",
-              skip: !driverEmail,
-              skipReason: `Driver ${assignedDriver.driver_name} has no email on file`,
+              skip: !driverEmail || !driverEmailsEnabled(),
+              skipReason: !driverEmailsEnabled()
+                ? "Driver emails are switched off (staff get the summary)"
+                : `Driver ${assignedDriver.driver_name} has no email on file`,
               subject: `Important Notice: Upcoming Vehicle Expiry for ${v.reg}`,
               emailType: "driver_alert",
               html,
@@ -501,7 +515,7 @@ export async function runExpiryScan(
               });
 
               // Send driver-facing rent reminder email if driver has email on file
-              if (driverEmail) {
+              if (driverEmail && driverEmailsEnabled()) {
                 const templateData = {
                   recipientName: d.driver_name,
                   headline: "Rent due tomorrow",
@@ -538,7 +552,7 @@ export async function runExpiryScan(
                 // Log skipped driver without blocking staff email
                 totalSkipped++;
                 console.info(
-                  `[ExpiryScan] Driver ${d.driver_name} has no email on file. Skipped direct email, included in staff summary.`,
+                  `[ExpiryScan] ${driverEmail ? "Driver emails are off" : "No email on file"} for ${d.driver_name}. Included in the staff summary only.`,
                 );
               }
             } else {

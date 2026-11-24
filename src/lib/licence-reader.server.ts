@@ -1,4 +1,3 @@
-import { getRuntimeEnv } from "@/integrations/supabase/config";
 import {
   assessLicenceRead,
   type LicenceReadResult,
@@ -18,15 +17,6 @@ const PROMPT =
   '"date_of_birth": "DD.MM.YYYY"|null, "expiry_date": "DD.MM.YYYY"|null, "licence_number": string|null}. ' +
   "Use null for anything you cannot read with certainty. Set readable=false if the photo is blurred, cut off or has glare over these fields.";
 
-function apiKey(): string {
-  return (
-    getRuntimeEnv("GEMINI_API_KEY") ??
-    getRuntimeEnv("GOOGLE_API_KEY") ??
-    getRuntimeEnv("GOOGLE_GEMINI_API_KEY") ??
-    ""
-  ).trim();
-}
-
 export async function readDrivingLicence(dataUrl: string): Promise<LicenceReadResult> {
   const fail = (error: string): LicenceReadResult => ({
     ok: false,
@@ -44,52 +34,23 @@ export async function readDrivingLicence(dataUrl: string): Promise<LicenceReadRe
   if (!/^(image\/(jpeg|jpg|png|webp|heic|heif)|application\/pdf)$/.test(mimeType)) {
     return fail("Please use a photo (JPG, PNG, HEIC) or a PDF of the licence.");
   }
-  const key = apiKey();
-  if (!key)
+  const { geminiImageJson, geminiApiKey } = await import("@/lib/gemini-vision.server");
+  if (!geminiApiKey())
     return fail(
       "Licence reading isn't set up yet (GEMINI_API_KEY is missing). Please type the details in.",
     );
 
-  const models = [(getRuntimeEnv("GEMINI_MODEL") ?? "gemini-2.5-flash").trim(), "gemini-2.0-flash"];
-  for (const model of [...new Set(models)]) {
-    try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: PROMPT }, { inlineData: { mimeType, data: m[2] } }] }],
-            generationConfig: {
-              responseMimeType: "application/json",
-              temperature: 0,
-              // Speed: 2.5 models "think" by default, which adds seconds and isn't needed to copy
-              // printed text.
-              ...(/2\.5/.test(model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
-            },
-          }),
-          // Give up after 15s so the backup model gets its turn
-          signal: AbortSignal.timeout(15000),
-        },
-      );
-      if (!res.ok) {
-        console.warn(`[licence-reader] ${model} returned ${res.status}`);
-        continue;
-      }
-      const data = (await res.json()) as {
-        candidates?: { content?: { parts?: { text?: string }[] } }[];
-      };
-      const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
-      const raw = JSON.parse(
-        text
-          .replace(/^```json\s*/i, "")
-          .replace(/\s*```$/i, "")
-          .trim(),
-      ) as RawLicenceRead;
-      return assessLicenceRead(raw);
-    } catch {
-      console.warn(`[licence-reader] ${model} could not be read`);
-    }
-  }
-  return fail("The licence couldn't be read right now. Please try again or type the details in.");
+  const res = await geminiImageJson({ prompt: PROMPT, mimeType, base64: m[2], timeoutMs: 20000 });
+  if (res.ok) return assessLicenceRead(res.json as RawLicenceRead);
+  const why =
+    res.reason === "timeout"
+      ? "the AI took too long"
+      : res.reason === "http_429"
+        ? "the AI is busy (too many requests)"
+        : res.reason === "http_403" || res.reason === "http_401"
+          ? "the AI key was refused"
+          : res.reason === "http_404"
+            ? "the AI model wasn't found"
+            : `AI error ${res.reason}`;
+  return fail(`The licence couldn't be read (${why}). Please try again or type the details in.`);
 }

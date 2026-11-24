@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { getLeadConversation, sendHumanReply, setLeadAiMode } from "@/lib/chat.functions";
@@ -27,6 +28,49 @@ function formatMessageTime(dateStr: string): string {
   } catch {
     return "";
   }
+}
+
+function dayLabel(dateStr: string): string {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "";
+  const today = new Date();
+  const y = new Date(today);
+  y.setDate(today.getDate() - 1);
+  const same = (a: Date, b: Date) => a.toDateString() === b.toDateString();
+  if (same(d, today)) return "Today";
+  if (same(d, y)) return "Yesterday";
+  return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: today.getFullYear() === d.getFullYear() ? undefined : "numeric" });
+}
+
+/** Three bouncing dots, like WhatsApp's "typing…". */
+export function TypingDots({ className = "" }: { className?: string }) {
+  return (
+    <span className={`inline-flex items-center gap-1 ${className}`} aria-hidden="true">
+      <span className="vch-typing-dot h-2 w-2 rounded-full bg-[#8696a0]" />
+      <span className="vch-typing-dot h-2 w-2 rounded-full bg-[#8696a0] [animation-delay:0.15s]" />
+      <span className="vch-typing-dot h-2 w-2 rounded-full bg-[#8696a0] [animation-delay:0.3s]" />
+    </span>
+  );
+}
+
+/**
+ * Is the AI likely writing a reply right now? Uses the live ai_status when the database has it;
+ * otherwise: the last message is from the customer, it arrived in the last 45 seconds and the AI
+ * isn't paused.
+ */
+export function aiLikelyTyping(
+  messages: { sender: string; created_at: string }[],
+  aiPaused: boolean,
+  aiStatus: string | null,
+  now = Date.now(),
+): boolean {
+  if (aiPaused) return false;
+  if (aiStatus === "typing") return true;
+  if (aiStatus && aiStatus !== "typing") return false;
+  const last = messages[messages.length - 1];
+  if (!last || last.sender !== "customer") return false;
+  const age = now - new Date(last.created_at).getTime();
+  return age >= 0 && age < 45_000;
 }
 
 function ReadReceipt({ status }: { status?: string | null }) {
@@ -83,31 +127,53 @@ const ReplyForm = React.memo(function ReplyForm({
 }) {
   const [reply, setReply] = useState("");
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const submit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     const content = reply.trim();
     if (!content || busy) return;
     setReply("");
+    if (taRef.current) taRef.current.style.height = "";
     await onSend(content);
   };
 
   return (
     <form
       onSubmit={submit}
-      className="flex items-center gap-2 border-t border-[#222d34] bg-[#111b21] px-4 py-3 sm:px-6"
+      className="flex items-end gap-2 border-t border-[#222d34] bg-[#111b21] px-3 py-3 sm:px-5"
     >
-      <input
+      <textarea
+        ref={taRef}
+        rows={1}
         value={reply}
-        onChange={(e) => setReply(e.target.value)}
-        placeholder="Type a message as human agent…"
-        className="flex-1 rounded-lg border border-[#2a3942] bg-[#202c33] px-4 py-2.5 text-sm text-[#e9edef] placeholder:text-[#8696a0] focus:border-[#00a884] focus:outline-none"
+        onChange={(e) => {
+          setReply(e.target.value);
+          e.target.style.height = "";
+          e.target.style.height = `${Math.min(e.target.scrollHeight, 140)}px`;
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            void submit();
+          }
+        }}
+        placeholder="Type a reply… (Enter to send, Shift+Enter for a new line)"
+        aria-label="Reply message"
+        className="max-h-36 min-h-[44px] flex-1 resize-none rounded-3xl border border-[#2a3942] bg-[#202c33] px-4 py-2.5 text-sm leading-6 text-[#e9edef] placeholder:text-[#8696a0] focus:border-[#00a884] focus:outline-none"
       />
       <button
         type="submit"
         disabled={busy || !reply.trim()}
-        className="rounded-lg bg-[#00a884] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#008f6f] disabled:opacity-50"
+        aria-label="Send reply"
+        className="vch-press grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#00a884] text-white transition hover:bg-[#008f6f] disabled:opacity-40"
       >
-        Send
+        {busy ? (
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+        ) : (
+          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden="true">
+            <path d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12.6 2-12.6 2z" />
+          </svg>
+        )}
       </button>
     </form>
   );
@@ -134,6 +200,13 @@ export function LeadThread({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [pending, setPending] = useState<ThreadMessage[]>([]);
+  const [unseen, setUnseen] = useState(0);
+  const [, setTick] = useState(0);
+  const seenIdsRef = useRef<Set<string>>(new Set());
+  const [freshIds, setFreshIds] = useState<Set<string>>(new Set());
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const isInitialLoadRef = useRef(true);
@@ -150,33 +223,60 @@ export function LeadThread({
     return scrollHeight - scrollTop - clientHeight < 120;
   }, []);
 
+  const scrollToBottom = useCallback((smooth = false) => {
+    requestAnimationFrame(() => {
+      const el = scrollRef.current;
+      if (el) el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+    });
+    setUnseen(0);
+  }, []);
+
+  const loadingRef = useRef(false);
   const load = useCallback(
     async (silent = false) => {
+      if (silent && loadingRef.current) return; // a poll is already in flight
+      loadingRef.current = true;
       if (!silent) setLoading(true);
       try {
         const result = await loadConversation({ data: { leadId } });
         const fetchedMessages = result.messages as ThreadMessage[];
+        const first = isInitialLoadRef.current;
+        const nearBottom = isNearBottom();
 
-        const shouldScroll = isInitialLoadRef.current || isNearBottom();
+        // Which messages are new since the last load (they get the pop-in animation).
+        const seen = seenIdsRef.current;
+        const added = fetchedMessages.filter((m) => !seen.has(m.id));
+        fetchedMessages.forEach((m) => seen.add(m.id));
 
-        setMessages(fetchedMessages);
-
-        if (shouldScroll) {
-          requestAnimationFrame(() => {
-            if (scrollRef.current) {
-              scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-            }
-          });
+        setMessages((prev) => {
+          if (
+            prev.length === fetchedMessages.length &&
+            prev.every((m, i) => m.id === fetchedMessages[i].id && m.status === fetchedMessages[i].status)
+          )
+            return prev; // nothing changed: no re-render
+          return fetchedMessages;
+        });
+        if (added.length) {
+          // Drop optimistic bubbles once the real message has arrived.
+          setPending((p) => p.filter((x) => !added.some((a) => a.sender === "human" && a.content.trim() === x.content.trim())));
+          if (!first) {
+            setFreshIds(new Set(added.map((m) => m.id)));
+            if (!nearBottom) setUnseen((n) => n + added.length);
+          }
         }
+        if (first || (added.length && nearBottom)) scrollToBottom(!first);
         isInitialLoadRef.current = false;
       } catch (error) {
-        if (!silent) setMessages([]);
-        toast((error as Error).message || "Could not load conversation history", "error");
+        if (!silent) {
+          setMessages([]);
+          toastRef.current((error as Error).message || "Could not load conversation history", "error");
+        }
       } finally {
+        loadingRef.current = false;
         if (!silent) setLoading(false);
       }
     },
-    [leadId, loadConversation, toast, isNearBottom],
+    [leadId, loadConversation, isNearBottom, scrollToBottom],
   );
 
   // Handle leadId change
@@ -184,6 +284,9 @@ export function LeadThread({
     if (prevLeadIdRef.current !== leadId) {
       prevLeadIdRef.current = leadId;
       isInitialLoadRef.current = true;
+      seenIdsRef.current = new Set();
+      setPending([]);
+      setUnseen(0);
       setLoading(true);
     }
     load(false);
@@ -215,26 +318,39 @@ export function LeadThread({
         }
       });
 
-    // Polling fallback every 3 seconds for messages & typing status
-    const interval = setInterval(async () => {
+    // Polling fallback: every 2.5s while the tab is visible (realtime may not be enabled for
+    // the messages table), and straight away when the tab comes back into view.
+    const poll = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
       void load(true);
-      const { data } = await (supabase.from("whatsapp_leads") as any)
-        .select("ai_status")
-        .eq("id", leadId)
-        .maybeSingle();
-      if (data) {
-        setAiStatus(data.ai_status);
-      }
-    }, 3000);
+      setTick((t) => t + 1); // re-evaluates the typing indicator's 45s window
+    };
+    const interval = setInterval(poll, 2500);
+    const onVisible = () => document.visibilityState === "visible" && void load(true);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
 
     return () => {
       clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
       supabase.removeChannel(channel);
     };
   }, [leadId, load]);
 
   const handleSend = async (content: string) => {
     setBusy(true);
+    const temp: ThreadMessage = {
+      id: `pending-${Date.now()}`,
+      sender: "human",
+      content,
+      media_url: null,
+      handoff: false,
+      created_at: new Date().toISOString(),
+      status: "sending",
+    };
+    setPending((p) => [...p, temp]);
+    scrollToBottom(true);
     try {
       const res = await send({ data: { leadId, content } });
       toast(
@@ -252,11 +368,15 @@ export function LeadThread({
         }
       });
     } catch (err) {
+      setPending((p) => p.map((x) => (x.id === temp.id ? { ...x, status: "failed" } : x)));
       toast((err as Error).message || "Failed to send reply", "error");
     } finally {
       setBusy(false);
     }
   };
+
+  const shown = pending.length ? [...messages, ...pending] : messages;
+  const typing = !loading && aiLikelyTyping(messages, aiPaused, aiStatus);
 
   const toggleAi = async () => {
     setBusy(true);
@@ -271,9 +391,9 @@ export function LeadThread({
     }
   };
 
-  return (
+  const view = (
     <div
-      className="fixed inset-0 z-[95] flex items-center justify-center bg-slate-950/80 p-3 backdrop-blur-md sm:p-6"
+      className="fixed inset-0 z-[105] flex items-center justify-center bg-slate-950/80 p-3 backdrop-blur-md sm:p-6"
       onClick={onClose}
     >
       <div
@@ -294,10 +414,10 @@ export function LeadThread({
                     ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                     : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
                 }`}
-                title={isLive ? "Connected to Supabase Realtime" : "Polling fallback active"}
+                title={isLive ? "New messages appear instantly" : "Checking for new messages every few seconds"}
               >
                 <span className={`h-1.5 w-1.5 rounded-full ${isLive ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`} />
-                {isLive ? "Live" : "Polling"}
+                {isLive ? "Live" : "Auto-refresh"}
               </span>
             </div>
             <div className="text-[11px] text-[#8696a0]">
@@ -324,131 +444,175 @@ export function LeadThread({
         </div>
 
         {/* WhatsApp Chat Messages Container */}
+        <div className="relative flex min-h-0 flex-1 flex-col">
         <div
           ref={scrollRef}
-          className="flex-1 space-y-3 overflow-y-auto px-4 py-4 sm:px-6"
+          onScroll={() => unseen && isNearBottom() && setUnseen(0)}
+          className="flex-1 overflow-y-auto px-3 py-4 sm:px-6"
+          aria-live="polite"
           style={{
             backgroundImage:
-              "radial-gradient(circle at center, rgba(255,255,255,0.015) 1px, transparent 1px)",
+              "radial-gradient(circle at center, rgba(255,255,255,0.02) 1px, transparent 1px)",
             backgroundSize: "20px 20px",
           }}
         >
           {loading ? (
-            <p className="text-xs text-[#8696a0]">Loading conversation…</p>
-          ) : messages.length === 0 ? (
-            <p className="text-xs text-[#8696a0]">No messages logged for this lead yet.</p>
+            <div className="space-y-3">
+              {[60, 40, 70, 50].map((w, i) => (
+                <div key={i} className={`flex ${i % 2 ? "justify-end" : "justify-start"}`}>
+                  <div className="vch-skeleton h-12 rounded-2xl" style={{ width: `${w}%` }} />
+                </div>
+              ))}
+            </div>
+          ) : shown.length === 0 ? (
+            <div className="grid h-full place-items-center text-center">
+              <p className="rounded-full bg-[#182229] px-4 py-2 text-xs text-[#8696a0]">
+                No messages for this lead yet. New messages appear here automatically.
+              </p>
+            </div>
           ) : (
-            messages.map((m) => {
+            shown.map((m, i) => {
+              const prev = shown[i - 1];
               const effectiveSender =
                 m.content.trim() === AI_FALLBACK_TEXT ? "ai_agent" : m.sender;
+              const prevSender = prev
+                ? prev.content.trim() === AI_FALLBACK_TEXT
+                  ? "ai_agent"
+                  : prev.sender
+                : null;
               const isOutgoing = effectiveSender === "ai_agent" || effectiveSender === "human" || effectiveSender === "user";
-
+              const newDay = !prev || new Date(prev.created_at).toDateString() !== new Date(m.created_at).toDateString();
+              const grouped =
+                !newDay &&
+                prevSender === effectiveSender &&
+                new Date(m.created_at).getTime() - new Date(prev!.created_at).getTime() < 5 * 60_000;
               const senderLabel =
                 effectiveSender === "ai_agent"
                   ? "AI Agent"
                   : effectiveSender === "human"
-                    ? "You (human)"
-                    : "Customer";
+                    ? "You"
+                    : contactName || "Customer";
+              const fresh = freshIds.has(m.id) || m.id.startsWith("pending-");
 
               return (
-                <div
-                  key={m.id}
-                  className={`flex flex-col ${isOutgoing ? "items-end" : "items-start"}`}
-                >
-                  <div
-                    className={`relative max-w-[85%] px-3.5 py-2 text-[13.5px] leading-relaxed shadow-sm sm:max-w-[75%] ${
-                      isOutgoing
-                        ? "rounded-2xl rounded-tr-xs bg-[#005c4b] text-[#e9edef]"
-                        : "rounded-2xl rounded-tl-xs bg-[#202c33] text-[#e9edef]"
-                    }`}
-                  >
-                    {/* Header line showing sender label */}
-                    <div className="mb-0.5 text-[10px] font-bold tracking-wider opacity-80">
-                      {isOutgoing ? (
-                        <span className="text-[#d1f4cc]">{senderLabel}</span>
-                      ) : (
-                        <span className="text-[#25d366]">{senderLabel}</span>
-                      )}
-                      {m.handoff ? " · handoff" : ""}
+                <React.Fragment key={m.id}>
+                  {newDay && (
+                    <div className="sticky top-0 z-[1] my-3 flex justify-center">
+                      <span className="rounded-lg bg-[#182229]/95 px-3 py-1 text-[11px] font-medium text-[#8696a0] shadow">
+                        {dayLabel(m.created_at)}
+                      </span>
                     </div>
+                  )}
+                  <div
+                    className={`flex flex-col ${isOutgoing ? "items-end" : "items-start"} ${grouped ? "mt-0.5" : "mt-3"} ${fresh ? "vch-msg-in" : ""}`}
+                  >
+                    <div
+                      className={`relative max-w-[85%] px-3 py-1.5 text-[14px] leading-relaxed shadow-sm sm:max-w-[70%] ${
+                        isOutgoing
+                          ? `rounded-2xl ${grouped ? "" : "rounded-tr-md"} ${effectiveSender === "ai_agent" ? "bg-[#0a4a3e]" : "bg-[#005c4b]"} text-[#e9edef]`
+                          : `rounded-2xl ${grouped ? "" : "rounded-tl-md"} bg-[#202c33] text-[#e9edef]`
+                      } ${m.status === "failed" ? "ring-1 ring-red-400/60" : ""} ${m.status === "sending" ? "opacity-70" : ""}`}
+                    >
+                      {!grouped && (
+                        <div className="mb-0.5 flex items-center gap-1.5 text-[11px] font-semibold">
+                          {effectiveSender === "ai_agent" ? (
+                            <span className="rounded bg-[#00a884]/20 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-[#25d366]">
+                              AI
+                            </span>
+                          ) : null}
+                          <span className={isOutgoing ? "text-[#d1f4cc]" : "text-[#53bdeb]"}>{senderLabel}</span>
+                          {m.handoff ? <span className="text-amber-300">· handoff</span> : null}
+                        </div>
+                      )}
 
-                    {/* Message content */}
-                    <div className="whitespace-pre-wrap break-words">{m.content}</div>
+                      {/* Message content */}
+                      <div className="whitespace-pre-wrap break-words">{m.content}</div>
 
                     {/* Media Attachments */}
-                    {m.media_url && (
-                      <div className="mt-2">
-                        {(m.media_type ?? "").toLowerCase() === "video" ? (
-                          <video
-                            src={m.media_url}
-                            controls
-                            className="max-h-52 max-w-full rounded-lg"
-                            preload="metadata"
-                          />
-                        ) : (m.media_type ?? "").toLowerCase() === "audio" ? (
-                          <audio
-                            src={m.media_url}
-                            controls
-                            className="max-w-full"
-                            preload="metadata"
-                          />
-                        ) : (m.media_type ?? "").toLowerCase() === "image" ||
-                          (m.media_mime_type ?? "").startsWith("image/") ? (
-                          <button
-                            type="button"
-                            onClick={() => setPreviewImage(m.media_url)}
-                            className="block max-w-full cursor-zoom-in rounded-lg text-left focus:outline-none focus:ring-2 focus:ring-[#00a884]"
-                            aria-label="View image full screen"
-                          >
-                            <img
+                      {m.media_url && (
+                        <div className="mt-2">
+                          {(m.media_type ?? "").toLowerCase() === "video" ? (
+                            <video
                               src={m.media_url}
-                              alt="WhatsApp attachment — click to view full screen"
-                              className="max-h-48 max-w-full rounded-lg object-contain transition hover:brightness-110"
-                              loading="lazy"
+                              controls
+                              className="max-h-52 max-w-full rounded-lg"
+                              preload="metadata"
                             />
-                          </button>
-                        ) : (
-                          <a
-                            href={m.media_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex rounded-full border border-white/20 px-3 py-1 text-xs text-[#d1f4cc] hover:bg-white/10"
-                          >
-                            Open WhatsApp attachment
-                          </a>
-                        )}
-                      </div>
-                    )}
+                          ) : (m.media_type ?? "").toLowerCase() === "audio" ? (
+                            <audio
+                              src={m.media_url}
+                              controls
+                              className="max-w-full"
+                              preload="metadata"
+                            />
+                          ) : (m.media_type ?? "").toLowerCase() === "image" ||
+                            (m.media_mime_type ?? "").startsWith("image/") ? (
+                            <button
+                              type="button"
+                              onClick={() => setPreviewImage(m.media_url)}
+                              className="block max-w-full cursor-zoom-in rounded-lg text-left focus:outline-none focus:ring-2 focus:ring-[#00a884]"
+                              aria-label="View image full screen"
+                            >
+                              <img
+                                src={m.media_url}
+                                alt="WhatsApp attachment — click to view full screen"
+                                className="max-h-48 max-w-full rounded-lg object-contain transition hover:brightness-110"
+                                loading="lazy"
+                              />
+                            </button>
+                          ) : (
+                            <a
+                              href={m.media_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex rounded-full border border-white/20 px-3 py-1 text-xs text-[#d1f4cc] hover:bg-white/10"
+                            >
+                              Open WhatsApp attachment
+                            </a>
+                          )}
+                        </div>
+                      )}
 
-                    {/* Timestamp & Read Receipt Checkmarks */}
-                    <div className="mt-1 flex items-center justify-end gap-0.5 text-[10px] text-[#8696a0]">
-                      <span>{formatMessageTime(m.created_at)}</span>
-                      {isOutgoing && <ReadReceipt status={m.status} />}
+                      {/* Timestamp & Read Receipt Checkmarks */}
+                      <div className="mt-0.5 flex items-center justify-end gap-0.5 text-[10px] text-[#8696a0]">
+                        <span>
+                          {m.status === "sending"
+                            ? "Sending…"
+                            : m.status === "failed"
+                              ? "Not sent"
+                              : formatMessageTime(m.created_at)}
+                        </span>
+                        {isOutgoing && m.status !== "sending" && <ReadReceipt status={m.status} />}
+                      </div>
                     </div>
                   </div>
-                </div>
+                </React.Fragment>
               );
             })
           )}
 
-          {/* Animated AI Typing Indicator */}
-          {aiStatus === "typing" && !aiPaused && (
-            <div className="flex flex-col items-start">
-              <div className="relative max-w-[75%] rounded-2xl rounded-tl-xs bg-[#202c33] px-4 py-2.5 shadow-sm text-[#e9edef]">
-                <div className="mb-1 text-[10px] font-bold tracking-wider text-[#25d366]">
-                  AI Agent
-                </div>
-                <div className="flex items-center gap-1.5 py-0.5">
-                  <span className="text-xs text-[#8696a0] font-medium">AI is typing</span>
-                  <span className="flex items-center gap-0.5 ml-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-[#00a884] animate-bounce [animation-delay:-0.3s]" />
-                    <span className="h-1.5 w-1.5 rounded-full bg-[#00a884] animate-bounce [animation-delay:-0.15s]" />
-                    <span className="h-1.5 w-1.5 rounded-full bg-[#00a884] animate-bounce" />
-                  </span>
-                </div>
+          {/* Typing indicator: the AI is writing a reply */}
+          {typing && (
+            <div className="vch-msg-in mt-3 flex items-end gap-2" aria-label="AI is typing">
+              <div className="rounded-2xl rounded-tl-md bg-[#202c33] px-4 py-3 shadow-sm">
+                <TypingDots />
               </div>
+              <span className="pb-1 text-[11px] text-[#8696a0]">AI is typing…</span>
             </div>
           )}
+        </div>
+
+        {unseen > 0 && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
+            <button
+              type="button"
+              onClick={() => scrollToBottom(true)}
+              className="vch-pop pointer-events-auto rounded-full bg-[#00a884] px-4 py-1.5 text-xs font-bold text-white shadow-lg"
+            >
+              {unseen} new message{unseen === 1 ? "" : "s"} ↓
+            </button>
+          </div>
+        )}
         </div>
 
         {/* WhatsApp Reply Form */}
@@ -482,4 +646,6 @@ export function LeadThread({
       )}
     </div>
   );
+  // Rendered at the top of the page so the sidebar and page layers can't sit on top of it.
+  return typeof document !== "undefined" ? createPortal(view, document.body) : view;
 }

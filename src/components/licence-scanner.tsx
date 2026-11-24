@@ -86,7 +86,7 @@ export function LicenceScanner({ onRead }: { onRead: (v: LicenceValues) => void 
         const res = (await readFn({ data: { file: dataUrl } })) as LicenceReadResult | undefined;
         if (!res || typeof res !== "object" || !res.fullName) {
           throw new Error(
-            "The licence couldn't be read right now. Please try again or type the details in.",
+            "The licence reader didn't answer (server error). Please try again or type the details in.",
           );
         }
         setResult(res);
