@@ -2,17 +2,19 @@
 -- Run in the Supabase SQL Editor: paste the whole file, then Run.
 -- One block: it all happens or nothing does. Safe to run again (nothing is added twice).
 --
--- What it does, for each car on the sheet that is in the CRM:
+-- What it does:
+--   0. Adds any car on the sheet that is not in the CRM yet.
+-- Then, for each car on the sheet:
 --   1. Adds its service history (421 jobs from the "most recent service" column and the
 --      service notes), each marked "[From mileage sheet]" in the notes. A job already in the CRM
 --      for the same car, date, type and description is skipped.
---   2. Sets its mileage to the latest monthly reading (only if higher than the CRM's).
+--   2. Sets its mileage to the latest reading: the monthly readings or the mileage in brackets
+--      next to a service, whichever is higher (only if higher than the CRM's).
 --   3. Saves "Next Service Due (Mileage)" so the Vehicles page can show Service due soon /
 --      Service overdue badges.
 --   4. Sets the current driver's starting mileage to the "on hire day" mileage where the CRM
 --      has none yet.
--- Cars on the sheet that are not in the CRM, and notes that could not be dated, are listed
--- in the result table instead.
+-- Notes that could not be dated are listed in the result table to check by hand.
 
 DO $svc$
 BEGIN
@@ -46,7 +48,7 @@ INSERT INTO sheet_cars VALUES
   ('BU19ACJ', 157053, 160000, 155273, '2026-10-05', 'Zubair'),
   ('RO68NXP', 203528, 201000, 203528, '2026-10-05', 'Omar'),
   ('WH74EJF', 31506, NULL, 31506, '2026-11-05', 'Rachid Qist'),
-  ('PO18UTT', 254960, 265000, 254960, '2026-11-05', 'Shankey Sapra'),
+  ('PO18UTT', 255547, 265000, 254960, '2026-11-05', 'Shankey Sapra'),
   ('KN73XLB', 92786, NULL, 65494, '2026-07-06', 'Obaid'),
   ('YG71LCZ', 142151, NULL, 142151, '2026-11-06', 'Hirantha Patabendi'),
   ('LB76BWF', 155, 25000, 155, '2026-11-06', 'Suleiman'),
@@ -56,7 +58,7 @@ INSERT INTO sheet_cars VALUES
   ('YF22UWK', 113046, NULL, 113046, '2026-11-09', 'Tahar Mokhtari'),
   ('FX19FXC', 222910, 225000, 220118, '2026-10-09', 'Robert'),
   ('LM68KRJ', 336048, 342000, 299089, '2026-02-09', 'SADIQUL'),
-  ('LT69GSZ', 248499, 258000, 176027, '2026-01-09', 'BALAL'),
+  ('LT69GSZ', 248571, 258000, 176027, '2026-01-09', 'BALAL'),
   ('LR69UCG', 192489, 195000, 189446, '2026-10-09', 'Abdullahi'),
   ('AK69CKJ', 243867, 242000, 240871, '2026-10-09', 'Abdishakur'),
   ('BN68NHP', 227950, 227000, 227950, '2026-11-09', 'Vishnu Mohan'),
@@ -86,7 +88,7 @@ INSERT INTO sheet_cars VALUES
   ('LM68KRU', 335552, 328000, 324978, '2026-09-18', 'Merhawi'),
   ('WN20EJA', 195202, NULL, 190721, '2026-10-19', 'Ryan'),
   ('FL70EUV', 120024, 122000, 53306, '2024-10-19', 'HAMEED'),
-  ('LL68CRV', 298808, 309000, 289370, '2026-06-19', 'Varun Bagga'),
+  ('LL68CRV', 299369, 309000, 289370, '2026-06-19', 'Varun Bagga'),
   ('KO18HKE', 277781, 281000, 277781, '2026-10-19', 'Abdul Qudus'),
   ('KF19UCJ', 278569, 287000, 278569, '2026-11-20', 'Abdul Rafeek'),
   ('MJ69YPN', 147061, NULL, 140000, NULL, 'Ahmed'),
@@ -113,13 +115,12 @@ INSERT INTO sheet_cars VALUES
   ('YF22UVZ', 109429, NULL, 109429, '2026-10-27', 'Mohamed Nuur'),
   ('LM68KRG', 313987, 317000, 313987, '2026-10-27', 'Rizwan Sheikh'),
   ('HX19VZG', 151027, 157000, 138203, '2026-08-28', 'Mariyan'),
-  ('HX19VZG', 151027, 144000, 138203, '2026-08-28', 'Mariyan'),
   ('LR16VTY', 262489, 268000, 258306, '2026-08-28', 'Abdul Rafeek'),
   ('KU73MVW', 81170, NULL, 12760, '2024-10-29', 'GARY'),
   ('LD20FCE', 175138, NULL, 125229, '2025-10-29', 'ABDU'),
   ('LB69OFY', 132036, NULL, 132036, '2026-10-30', 'Quancheng'),
   ('MD25DDZ', 46743, 57000, 46743, '2026-10-30', 'Anil Singh'),
-  ('CA19UTF', 196429, 207000, 143380, '2025-09-30', 'KHADER'),
+  ('CA19UTF', 196735, 207000, 143380, '2025-09-30', 'KHADER'),
   ('EF70ZYB', 126018, 131000, 54988, '2024-10-31', 'FADEL BABA'),
   ('YH71JHL', 146066, NULL, 146066, '2026-10-21', 'Returned 06/11/26'),
   ('GX70UBD', 119070, NULL, 119070, '2026-10-12', 'At Landrover'),
@@ -169,7 +170,7 @@ INSERT INTO sheet_jobs VALUES
   ('WR16UED', '2026-06-07', 'Tyres', NULL, '2 front tyres change new one'),
   ('WR16UED', '2026-07-10', 'Service', 357484, 'service done / oil filter/ air filter/ cavan filter/ oil change'),
   ('WR16UED', '2026-08-24', 'Tyres', NULL, 'Driver back tyre changed 215-65-16c'),
-  ('WR16UED', '2026-09-24', 'Service', 307208, 'Service done Oil/Oil filter/Air filter/Driver front, passenger front and drive back light bulbs changed at 307208 mileage'),
+  ('WR16UED', '2026-09-24', 'Service', 370208, 'Service (sheet said 24/09/28, taken as 2026); Service done Oil/Oil filter/Air filter/Driver front, passenger front and drive back light bulbs changed at 307208 mileage'),
   ('WD19SNN', '2025-06-25', 'Service', 158951, 'Service'),
   ('WD19SNN', '2025-12-19', 'Service', 170212, 'Full service done'),
   ('WD19SNN', '2026-01-22', 'Wipers', NULL, 'wiper changed'),
@@ -409,7 +410,7 @@ INSERT INTO sheet_jobs VALUES
   ('SF19WPW', '2025-12-30', 'Bulbs', NULL, 'Bulb holder change'),
   ('SF19WPW', '2026-02-09', 'Service', 242910, 'service done and 2 new tyres back side changed'),
   ('SF19WPW', '2026-05-30', 'Service', 256814, 'Timing chain kit+Vacuum pump replace+Fuel filter+EGR cooler clean+Vacuum line all clean+Oil and oil filter radiator mounting change+Radiator bottom bracket metal bar+Fuel filter at 256814 mileage'),
-  ('SF19WPW', '2026-08-14', 'Service', 270800, 'Service done oil/oil filter only air filter left at 270800 mileage'),
+  ('SF19WPW', '2026-08-14', 'Service', 270800, 'Service (sheet said 14/08/36, taken as 2026); Service done oil/oil filter only air filter left at 270800 mileage'),
   ('SF19WPW', '2026-08-20', 'Brakes', NULL, 'Front Brake Pads changed'),
   ('SF19WPW', '2026-10-20', 'Tyres', NULL, 'Driver back tyre changed'),
   ('EF70ZVM', '2025-08-11', 'Service', 91128, 'Service'),
@@ -553,11 +554,128 @@ INSERT INTO sheet_jobs VALUES
   ('OU68SXP', '2026-05-12', 'Suspension', NULL, 'Suspension arm changed passenger front'),
   ('YF22UXA', '2026-02-09', 'Bulbs', NULL, '1 break bulb');
 
--- Cars not in the CRM
+-- 0. Cars on the mileage sheet that are not in the CRM yet: add them
+--    (make/model from the sheet, year from the plate, weekly rent from the RENT column).
+ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS weekly_price numeric(10,2);
+CREATE TEMP TABLE sheet_new (reg text, make text, model text, year int, fuel text, rent numeric, status text) ON COMMIT DROP;
+INSERT INTO sheet_new VALUES
+  ('KR74WDL', 'Mercedes-Benz', 'EQE', 2024, 'Electric', 370.0, 'rented'),
+  ('EN73UBZ', 'Mercedes-Benz', 'EQE', 2023, 'Electric', 450.0, 'rented'),
+  ('BN17CVA', 'Mercedes-Benz', 'Vito', 2017, 'Diesel', 350.0, 'rented'),
+  ('LM68KRD', 'Toyota', 'Auris', 2018, 'Hybrid', 200.0, 'rented'),
+  ('LS68JUC', 'Mercedes-Benz', 'Model not set', 2018, NULL, NULL, 'rented'),
+  ('KF19UCN', 'Toyota', 'Corolla', 2019, 'Hybrid', 210.0, 'rented'),
+  ('WR16UED', 'Mercedes-Benz', 'Vito', 2016, 'Diesel', 340.0, 'rented'),
+  ('WD19SNN', 'Mercedes-Benz', 'Model not set', 2019, NULL, 270.0, 'rented'),
+  ('BD20XPU', 'Mercedes-Benz', 'Model not set', 2020, NULL, 370.0, 'rented'),
+  ('LD20COJ', 'Tesla', 'Model 3', 2020, 'Electric', 250.0, 'rented'),
+  ('YF22UWU', 'MG', 'MG5', 2022, 'Electric', 210.0, 'rented'),
+  ('WN20NKU', 'Mercedes-Benz', 'Model not set', 2020, NULL, 260.0, 'rented'),
+  ('BN20XMX', 'Jaguar', 'I-PACE', 2020, 'Electric', 315.0, 'rented'),
+  ('LA69AYB', 'Tesla', 'Model 3', 2019, 'Electric', 240.0, 'rented'),
+  ('LS69UXC', 'Mercedes-Benz', 'Model not set', 2019, NULL, 200.0, 'rented'),
+  ('RX25CME', 'Ford', 'Tourneo', 2025, NULL, 400.0, 'rented'),
+  ('EF70ZYA', 'Hyundai', 'Model not set', 2020, NULL, 210.0, 'rented'),
+  ('KN73XLA', 'Mercedes-Benz', 'EQE', 2023, 'Electric', 420.0, 'rented'),
+  ('BU19ACJ', 'Mercedes-Benz', 'Model not set', 2019, NULL, 190.0, 'rented'),
+  ('RO68NXP', 'Mercedes-Benz', 'Model not set', 2018, NULL, 180.0, 'rented'),
+  ('WH74EJF', 'Mercedes-Benz', 'EQE', 2024, 'Electric', 420.0, 'rented'),
+  ('PO18UTT', 'Mercedes-Benz', 'Model not set', 2018, NULL, 250.0, 'rented'),
+  ('KN73XLB', 'Mercedes-Benz', 'EQE', 2023, 'Electric', 420.0, 'rented'),
+  ('YG71LCZ', 'MG', 'MG5', 2021, 'Electric', 200.0, 'rented'),
+  ('LB76BWF', 'Hyundai', 'Santa Fe', 2026, NULL, 360.0, 'rented'),
+  ('MD25AYY', 'Ford', 'Tourneo', 2025, NULL, 390.0, 'rented'),
+  ('YC72HZM', 'MG', 'MG5', 2022, 'Electric', 130.0, 'rented'),
+  ('BK70WYM', 'Tesla', 'Model 3', 2020, 'Electric', 260.0, 'rented'),
+  ('YF22UWK', 'MG', 'MG5', 2022, 'Electric', 210.0, 'rented'),
+  ('FX19FXC', 'Mercedes-Benz', 'Model not set', 2019, NULL, 270.0, 'rented'),
+  ('LM68KRJ', 'Toyota', 'Auris', 2018, 'Hybrid', 210.0, 'rented'),
+  ('LT69GSZ', 'Toyota', 'Corolla', 2019, 'Hybrid', 210.0, 'rented'),
+  ('LR69UCG', 'Mercedes-Benz', 'Model not set', 2019, NULL, 260.0, 'rented'),
+  ('AK69CKJ', 'Mercedes-Benz', 'Model not set', 2019, NULL, 240.0, 'rented'),
+  ('BN68NHP', 'Mercedes-Benz', 'Model not set', 2018, NULL, 240.0, 'rented'),
+  ('BL19JDZ', 'Mercedes-Benz', 'Model not set', 2019, NULL, 250.0, 'rented'),
+  ('KF19UCM', 'Toyota', 'Corolla', 2019, 'Hybrid', 220.0, 'rented'),
+  ('KP69WOR', 'Mercedes-Benz', 'Model not set', 2019, NULL, 350.0, 'rented'),
+  ('LM68KRO', 'Toyota', 'Auris', 2018, 'Hybrid', 200.0, 'rented'),
+  ('YF22UWM', 'MG', 'MG5', 2022, 'Electric', 210.0, 'rented'),
+  ('MV68OGF', 'Mercedes-Benz', 'Model not set', 2018, NULL, 250.0, 'rented'),
+  ('LB76BUJ', 'Hyundai', 'Santa Fe', 2026, NULL, 370.0, 'rented'),
+  ('WR19UFG', 'Mercedes-Benz', 'Vito', 2019, 'Diesel', 350.0, 'rented'),
+  ('LA69AXF', 'Tesla', 'Model 3', 2019, 'Electric', 240.0, 'rented'),
+  ('KW18TMV', 'Mercedes-Benz', 'Vito', 2018, 'Diesel', 350.0, 'rented'),
+  ('BK76VWB', 'Ford', 'Tourneo', 2026, NULL, 350.0, 'rented'),
+  ('BK76WGD', 'Ford', 'Tourneo', 2026, NULL, 430.0, 'rented'),
+  ('WG74KFJ', 'Mercedes-Benz', 'EQE', 2024, 'Electric', 440.0, 'rented'),
+  ('YF22UWT', 'MG', 'MG5', 2022, 'Electric', 200.0, 'rented'),
+  ('EF70ZYD', 'Hyundai', 'Model not set', 2020, NULL, 220.0, 'rented'),
+  ('BX19ZMY', 'Mercedes-Benz', 'Model not set', 2019, NULL, 260.0, 'rented'),
+  ('MD25DCX', 'Ford', 'Tourneo', 2025, NULL, 410.0, 'rented'),
+  ('EK70AOO', 'Hyundai', 'Model not set', 2020, NULL, 130.0, 'rented'),
+  ('EK70BKJ', 'Hyundai', 'Model not set', 2020, NULL, 140.0, 'rented'),
+  ('BK76WJG', 'Ford', 'Tourneo', 2026, NULL, 370.0, 'rented'),
+  ('GU72DVP', 'Hyundai', 'Model not set', 2022, NULL, 230.0, 'rented'),
+  ('LL68CRZ', 'Toyota', 'Auris', 2018, 'Hybrid', 220.0, 'rented'),
+  ('RE21NRX', 'MG', 'MG5', 2021, 'Electric', NULL, 'rented'),
+  ('LM68KRU', 'Toyota', 'Auris', 2018, 'Hybrid', 210.0, 'rented'),
+  ('WN20EJA', 'Tesla', 'Model 3', 2020, 'Electric', 260.0, 'rented'),
+  ('FL70EUV', 'Hyundai', 'Model not set', 2020, NULL, 220.0, 'rented'),
+  ('LL68CRV', 'Toyota', 'Auris', 2018, 'Hybrid', 130.0, 'rented'),
+  ('KO18HKE', 'Mercedes-Benz', 'Vito', 2018, 'Diesel', 350.0, 'rented'),
+  ('KF19UCJ', 'Toyota', 'Corolla', 2019, 'Hybrid', 220.0, 'rented'),
+  ('MJ69YPN', 'Tesla', 'Model 3', 2019, 'Electric', 230.0, 'rented'),
+  ('HK73SXU', 'Hyundai', 'Santa Fe', 2023, NULL, 330.0, 'rented'),
+  ('BN20WJL', 'Jaguar', 'I-PACE', 2020, 'Electric', 270.0, 'rented'),
+  ('BV19WNA', 'Mercedes-Benz', 'Model not set', 2019, NULL, 160.0, 'rented'),
+  ('LT69GSU', 'Toyota', 'Corolla', 2019, 'Hybrid', 220.0, 'rented'),
+  ('SF19WPW', 'Mercedes-Benz', 'Vito', 2019, 'Diesel', 370.0, 'rented'),
+  ('EF70ZVM', 'Hyundai', 'Model not set', 2020, NULL, 200.0, 'rented'),
+  ('GY69NWL', 'Mercedes-Benz', 'Model not set', 2019, NULL, 270.0, 'rented'),
+  ('BJ20LGX', 'Tesla', 'Model 3', 2020, 'Electric', 300.0, 'rented'),
+  ('BT69TEJ', 'Tesla', 'Model 3', 2019, 'Electric', 240.0, 'rented'),
+  ('OW19XNX', 'Mercedes-Benz', 'Model not set', 2019, NULL, 250.0, 'rented'),
+  ('YF22UXY', 'MG', 'MG5', 2022, 'Electric', 230.0, 'rented'),
+  ('YG71KZV', 'MG', 'MG5', 2021, 'Electric', 130.0, 'rented'),
+  ('YF22UXC', 'MG', 'MG5', 2022, 'Electric', 230.0, 'rented'),
+  ('BN68MYZ', 'Mercedes-Benz', 'Model not set', 2018, NULL, 260.0, 'rented'),
+  ('LT69GSV', 'Toyota', 'Corolla', 2019, 'Hybrid', 150.0, 'rented'),
+  ('LT69GSY', 'Toyota', 'Corolla', 2019, 'Hybrid', 220.0, 'rented'),
+  ('AF70MWK', 'Tesla', 'Model 3', 2020, 'Electric', 280.0, 'rented'),
+  ('HX19VXB', 'Mercedes-Benz', 'Model not set', 2019, NULL, 190.0, 'rented'),
+  ('EF70ZPZ', 'Hyundai', 'Model not set', 2020, NULL, 210.0, 'rented'),
+  ('LT69GTU', 'Toyota', 'Corolla', 2019, 'Hybrid', 210.0, 'rented'),
+  ('YF22UVZ', 'MG', 'MG5', 2022, 'Electric', 150.0, 'rented'),
+  ('LM68KRG', 'Toyota', 'Auris', 2018, 'Hybrid', 200.0, 'rented'),
+  ('HX19VZG', 'Mercedes-Benz', 'Model not set', 2019, NULL, 270.0, 'rented'),
+  ('LR16VTY', 'Toyota', 'Prius', 2016, 'Hybrid', 200.0, 'rented'),
+  ('KU73MVW', 'Mercedes-Benz', 'EQE', 2023, 'Electric', 460.0, 'rented'),
+  ('LD20FCE', 'Tesla', 'Model 3', 2020, 'Electric', 260.0, 'rented'),
+  ('LB69OFY', 'Tesla', 'Model 3', 2019, 'Electric', 260.0, 'rented'),
+  ('MD25DDZ', 'Ford', 'Tourneo', 2025, NULL, 410.0, 'rented'),
+  ('CA19UTF', 'Mercedes-Benz', 'Model not set', 2019, NULL, 200.0, 'rented'),
+  ('EF70ZYB', 'Hyundai', 'Model not set', 2020, NULL, 150.0, 'rented'),
+  ('YH71JHL', 'MG', 'MG5', 2021, 'Electric', 210.0, 'available'),
+  ('GX70UBD', 'Jaguar', 'I-PACE', 2020, 'Electric', 270.0, 'rented'),
+  ('KT18ATF', 'Mercedes-Benz', 'Vito', 2018, 'Diesel', 350.0, 'rented'),
+  ('EF70ZPY', 'Hyundai', 'Model not set', 2020, NULL, NULL, 'rented'),
+  ('KT68VYM', 'Mercedes-Benz', 'Model not set', 2018, NULL, 290.0, 'rented'),
+  ('MV68OHB', 'Mercedes-Benz', 'Model not set', 2018, NULL, 1.04, 'rented'),
+  ('OU68SXP', 'Mercedes-Benz', 'Model not set', 2018, NULL, 330.0, 'available'),
+  ('YF22UXA', 'MG', 'MG5', 2022, 'Electric', 230.0, 'available');
+WITH owner AS (SELECT user_id FROM public.vehicles ORDER BY created_at LIMIT 1),
+added AS (
+  INSERT INTO public.vehicles (user_id, reg, make, model, year, fuel_type, current_mileage, status, weekly_price, notes)
+  SELECT (SELECT user_id FROM owner), n.reg, n.make, n.model, n.year, n.fuel, 0, n.status, n.rent,
+         'Added from the mileage sheet.'
+  FROM sheet_new n
+  WHERE NOT EXISTS (SELECT 1 FROM public.vehicles v WHERE upper(regexp_replace(v.reg, '\s+', '', 'g')) = n.reg)
+  RETURNING reg, make, model, status
+)
 INSERT INTO public.service_import_report
-  SELECT 'not in CRM', c.reg, 'On the mileage sheet but not in the CRM (nothing imported for it).'
-  FROM sheet_cars c
-  WHERE NOT EXISTS (SELECT 1 FROM public.vehicles v WHERE upper(regexp_replace(v.reg, '\s+', '', 'g')) = c.reg);
+  SELECT 'car added', reg,
+         make || ' ' || model || ' · ' || status ||
+         CASE WHEN model = 'Model not set' THEN ' · please set the model on the vehicle page' ELSE '' END
+  FROM added;
 
 -- 1. Service history
 WITH jobs AS (
@@ -610,24 +728,24 @@ INSERT INTO public.service_import_report
 -- Notes that could not be dated (not imported)
 INSERT INTO public.service_import_report
   SELECT 'check note', r, i FROM (VALUES
-  ('WR16UED', 'bad service date 24/09/28 (370208'),
   ('YF22UWM', 'no date: front two tyre change TPMS all 4'),
   ('EK70BKJ', 'no date: Egr valve and cooler And Rear both calipers need to replace'),
   ('KF19UCJ', 'no date: Front and right'),
   ('KF19UCJ', 'no date: Front both links Front bearing'),
   ('BV19WNA', 'no date: Brake pads changed and [left tyres Nearside suspension arm and'),
-  ('SF19WPW', 'bad service date 14/08/36(270800'),
   ('YF22UXY', 'no date: 23/12/252 front tyre worn'),
   ('YF22UXY', 'no date: 1 break light bulb. Done')
   ) AS x(r, i) WHERE r IS NOT NULL;
 
 INSERT INTO public.service_import_report
   SELECT 'summary', NULL,
-    (SELECT count(*) FROM public.service_records WHERE notes LIKE '[From mileage sheet]%')::text || ' service jobs from the mileage sheet are in the CRM.';
+    (SELECT count(*) FROM public.service_records WHERE notes LIKE '[From mileage sheet]%')::text || ' service jobs from the mileage sheet are in the CRM; ' ||
+    (SELECT count(*) FROM sheet_cars c WHERE EXISTS (SELECT 1 FROM public.vehicles v WHERE upper(regexp_replace(v.reg, '\s+', '', 'g')) = c.reg))::text ||
+    ' of the ' || (SELECT count(*) FROM sheet_cars)::text || ' sheet cars are in the CRM.';
 END
 $svc$;
 
 -- What happened
 SELECT action, reg, detail FROM public.service_import_report ORDER BY
-  CASE action WHEN 'summary' THEN 0 WHEN 'not in CRM' THEN 1 WHEN 'check note' THEN 2 WHEN 'mileage updated' THEN 3
+  CASE action WHEN 'summary' THEN 0 WHEN 'car added' THEN 1 WHEN 'check note' THEN 2 WHEN 'mileage updated' THEN 3
               WHEN 'driver start mileage' THEN 4 ELSE 5 END, reg;
