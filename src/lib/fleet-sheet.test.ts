@@ -20,6 +20,8 @@ describe("fleet price sheet", () => {
     });
     expect(carTermsFor({ registration: "WR16UED" }).weeklyRent).toBe(350);
     expect(carTermsFor({ registration: "MD25AYY" }).weeklyRent).toBe(430);
+    expect(carTermsFor({ registration: "HK73SXU" }).weeklyRent).toBe(370); // fixed on the new sheet
+    expect(carTermsFor({ registration: "OW19XNX" }).weeklyRent).toBe(270); // was OWN19XNX
     // EQE: Sheet 1 says 4,000 on most rows, Sheet 2 (the allowance list) says 4,500
     expect(carTermsFor({ registration: "KN73XLA" }).monthlyAllowance).toBe(4500);
     expect(EXCESS_RATE_PENCE).toBe(20);

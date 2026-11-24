@@ -31,10 +31,47 @@ const jsonResponse = (body: unknown, status = 200) =>
 
 export type OcrResult = {
   ok: boolean;
+  /** Odometer in miles (converted when the display shows km). */
   odometer: number | null;
+  /** high = clear read; low = a reading staff should check; none = nothing usable. */
   confidence: "high" | "low" | "none";
+  unit?: "miles" | "km" | null;
   reason?: string;
 };
+
+const ODOMETER_PROMPT =
+  "You are reading a car dashboard photo to find the TOTAL odometer (the car's lifetime distance).\n" +
+  "How to find it: it is usually labelled ODO, often 5-6 digits, on the digital display or a mechanical counter. " +
+  "Ignore trip meters (TRIP, A, B, often with a decimal like 123.4), range / distance to empty, the clock, outside temperature, speed, " +
+  "fuel or battery percentage, and service-interval counters. If the odometer shows a tenths digit in a different colour or after a point, drop it.\n" +
+  "Read every digit, including leading digits. Do not guess digits that are cut off or covered by glare.\n" +
+  'Respond ONLY with JSON: {"odometer": integer|null, "unit": "miles"|"km"|null, "confidence": "high"|"medium"|"low", "reason": string}. ' +
+  'Use "high" only when the ODO value is clearly visible and unambiguous; "medium" when it is readable but small or slightly unclear; ' +
+  '"low" when you are unsure which number is the odometer or some digits are hard to read. Use null when there is no odometer in the photo.';
+
+const KM_TO_MILES = 0.621371;
+
+type RawRead = { odometer?: unknown; unit?: unknown; confidence?: unknown; reason?: unknown };
+
+/** Turns the model's answer into a checked result (exported for tests). */
+export function interpretOdometerRead(raw: RawRead): OcrResult {
+  const n = typeof raw.odometer === "number" ? raw.odometer : Number(String(raw.odometer ?? "").replace(/[^0-9.]/g, ""));
+  const unit = raw.unit === "km" ? "km" : raw.unit === "miles" ? "miles" : null;
+  const reason = typeof raw.reason === "string" ? raw.reason.slice(0, 200) : undefined;
+  if (!Number.isFinite(n) || n <= 0 || n > 2_000_000) {
+    return { ok: true, odometer: null, confidence: "none", unit, reason: reason || "no_odometer_found" };
+  }
+  const miles = unit === "km" ? Math.round(n * KM_TO_MILES) : Math.round(n);
+  const conf = raw.confidence === "high" || raw.confidence === "medium" ? "high" : "low";
+  return {
+    ok: true,
+    odometer: miles,
+    // A km display was converted: worth a quick look by staff.
+    confidence: unit === "km" ? "low" : conf,
+    unit,
+    reason: unit === "km" ? `Display showed ${Math.round(n).toLocaleString("en-GB")} km; converted to miles.` : reason,
+  };
+}
 
 export async function parseOdometerPhoto(
   photoUrlOrBase64: string,
@@ -82,17 +119,10 @@ export async function parseOdometerPhoto(
     return { ok: false, odometer: null, confidence: "none", reason: "gemini_api_key_missing" };
   }
 
-  const promptText =
-    "Examine this vehicle dashboard / odometer photograph. Extract the total accumulated main odometer mileage integer (in miles or kilometers). " +
-    "IMPORTANT: Do NOT confuse the main odometer reading with trip meter numbers (e.g., Trip A, Trip B, 0.0, 12.4), digital clock, outside temperature, fuel range, or speedometer numbers. " +
-    'Respond ONLY with a JSON object in this exact format: {"odometer": number | null, "confidence": "high" | "low" | "none"}. ' +
-    'If the main odometer digits are blurry, partially cut off, ambiguous, or if there is any doubt between trip meter and main odometer, return odometer: null and confidence: "low".';
+  const models = [...new Set([(getRuntimeEnv("GEMINI_MODEL") ?? "gemini-2.5-flash").trim(), "gemini-2.0-flash"])];
 
-  const models = [
-    (getRuntimeEnv("GEMINI_MODEL") ?? "gemini-2.5-flash").trim(),
-    "gemini-2.0-flash",
-  ];
-
+  // First clear read wins; an unsure read is kept and the next model gets a chance to do better.
+  let best: OcrResult | null = null;
   for (const model of models) {
     try {
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
@@ -102,62 +132,32 @@ export async function parseOdometerPhoto(
           "Content-Type": "application/json",
           "x-goog-api-key": apiKey,
         },
+        signal: AbortSignal.timeout(15000),
         body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                { text: promptText },
-                {
-                  inlineData: {
-                    mimeType,
-                    data: base64Data,
-                  },
-                },
-              ],
-            },
-          ],
+          contents: [{ parts: [{ text: ODOMETER_PROMPT }, { inlineData: { mimeType, data: base64Data } }] }],
           generationConfig: {
             responseMimeType: "application/json",
-            temperature: 0.1,
+            temperature: 0,
+            // No "thinking" on 2.5 models: much faster, and not needed to read digits
+            ...(/2\.5/.test(model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
           },
         }),
       });
-
       if (!response.ok) continue;
-
-      const raw = await response.text();
-      const data = JSON.parse(raw) as {
+      const data = (await response.json()) as {
         candidates?: { content?: { parts?: { text?: string }[] } }[];
       };
       const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
       const cleaned = text.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
-      const parsed = JSON.parse(cleaned);
-
-      if (
-        parsed &&
-        typeof parsed.odometer === "number" &&
-        parsed.odometer > 0 &&
-        parsed.confidence === "high"
-      ) {
-        return {
-          ok: true,
-          odometer: Math.round(parsed.odometer),
-          confidence: "high",
-        };
-      } else {
-        return {
-          ok: true,
-          odometer: null,
-          confidence: "low",
-          reason: "unclear_photo_or_low_confidence",
-        };
-      }
+      const read = interpretOdometerRead(JSON.parse(cleaned) as RawRead);
+      if (read.confidence === "high") return read;
+      if (!best || (best.odometer == null && read.odometer != null)) best = read;
     } catch {
       // try next model
     }
   }
 
-  return { ok: false, odometer: null, confidence: "none", reason: "ocr_failed" };
+  return best ?? { ok: false, odometer: null, confidence: "none", reason: "ocr_failed" };
 }
 
 async function handleOcr(request: Request) {

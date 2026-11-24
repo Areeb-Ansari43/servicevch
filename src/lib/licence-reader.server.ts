@@ -60,8 +60,16 @@ export async function readDrivingLicence(dataUrl: string): Promise<LicenceReadRe
           headers: { "Content-Type": "application/json", "x-goog-api-key": key },
           body: JSON.stringify({
             contents: [{ parts: [{ text: PROMPT }, { inlineData: { mimeType, data: m[2] } }] }],
-            generationConfig: { responseMimeType: "application/json", temperature: 0 },
+            generationConfig: {
+              responseMimeType: "application/json",
+              temperature: 0,
+              // Speed: 2.5 models "think" by default, which adds seconds and isn't needed to copy
+              // printed text.
+              ...(/2\.5/.test(model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+            },
           }),
+          // Give up after 15s so the backup model gets its turn
+          signal: AbortSignal.timeout(15000),
         },
       );
       if (!res.ok) {

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import { currentDueDate, nextDueDate, rentState } from "./rent-cycle";
-import { getRentHistory, recordRentAction, syncRentCycles } from "./rent-cycle.server";
+import { getRentHistory, recordRentAction, settleRent, syncRentCycles } from "./rent-cycle.server";
 
 // ---- tiny in-memory stand-in for the Supabase query builder ----------------------------
 type Row = Record<string, any>;
@@ -194,5 +194,39 @@ describe("Paid button, weekly rollover and history", () => {
     const res = await recordRentAction(db, "d1", "paid", { today: "2026-11-13" });
     (db as any).from = origFrom;
     expect(res).toMatchObject({ ok: true, legacy: true, status: "paid", balance: 0 });
+  });
+});
+
+describe("Paid pop-up (settleRent)", () => {
+  it("two unpaid weeks add up, then Paid clears everything to £0", async () => {
+    await syncRentCycles(db, "2026-11-20"); // week of 13 Nov missed, 20 Nov now due
+    expect(driver().balance_due).toBe(520);
+    const res = await settleRent(db, "d1", { today: "2026-11-20", recordedBy: "admin" });
+    expect(res).toMatchObject({ ok: true, status: "paid", balance: 0, advanceWeeks: 0 });
+    expect(res.weeksPaid).toEqual(["2026-11-13", "2026-11-20"]);
+    expect(driver()).toMatchObject({ balance_due: 0, rent_status: "paid" });
+    expect(tables.rent_week_log.every((r) => r.status === "paid")).toBe(true);
+  });
+
+  it("rent paid in advance: £200 owed + £400 more covers the next 2 weeks and stays Paid", async () => {
+    tables.driver_tracks[0] = { ...driver(), weekly_rent: 200, balance_due: 200 };
+    const res = await settleRent(db, "d1", { today: "2026-11-13", totalPaid: 600 });
+    expect(res).toMatchObject({ ok: true, advanceWeeks: 2, paidThrough: "2026-11-27", balance: 0 });
+    // 20 and 27 Nov arrive: nothing charged, still Paid
+    await syncRentCycles(db, "2026-11-20");
+    expect(driver()).toMatchObject({ balance_due: 0, rent_status: "paid" });
+    await syncRentCycles(db, "2026-11-27");
+    expect(driver()).toMatchObject({ balance_due: 0, rent_status: "paid" });
+    // 4 Dec: back to Unpaid, one week owed
+    await syncRentCycles(db, "2026-12-04");
+    expect(driver()).toMatchObject({ balance_due: 200, rent_status: "unpaid" });
+  });
+
+  it("a part-week paid ahead is kept as credit off the next week", async () => {
+    tables.driver_tracks[0] = { ...driver(), weekly_rent: 200, balance_due: 200 };
+    const res = await settleRent(db, "d1", { today: "2026-11-13", totalPaid: 300 });
+    expect(res).toMatchObject({ advanceWeeks: 0, credit: 100, balance: -100 });
+    await syncRentCycles(db, "2026-11-20");
+    expect(driver().balance_due).toBe(100);
   });
 });

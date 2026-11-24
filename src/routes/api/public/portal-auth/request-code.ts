@@ -87,6 +87,8 @@ export const Route = createFileRoute("/api/public/portal-auth/request-code")({
  *   invalid_credentials | account_disabled | otp_store_failed | email_send_failed | crm_internal_error
  */
 export async function handleRequestCode(request: Request): Promise<Response> {
+  const { portalApiEnabled, portalDisabledResponse } = await import("@/lib/features");
+  if (!portalApiEnabled()) return portalDisabledResponse();
   try {
     return await handleRequestCodeInner(request);
   } catch (err: any) {

@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+// The portal is switched off by default (src/lib/features.ts); these tests exercise it switched on.
+process.env.PORTAL_ENABLED = "true";
 
 /**
  * Driver portal data + odometer submission endpoints (CRM side), with Supabase faked.

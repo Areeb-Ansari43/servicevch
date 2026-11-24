@@ -432,6 +432,16 @@ export async function runExpiryScan(
     // ---------------------------------------------------------------------------
     const rentDueItems: any[] = [];
 
+    // Drivers deleted more than 30 days ago are removed for good.
+    try {
+      const { purgeExpiredDeletedDrivers } = await import("@/lib/driver-purge.server");
+      const purge = await purgeExpiredDeletedDrivers(supabaseAdmin as any);
+      if (purge.purged.length) console.info(`[ExpiryScan] purged ${purge.purged.length} deleted driver(s) older than 30 days`);
+      if (purge.errors.length) console.warn("[ExpiryScan] driver purge errors:", purge.errors.length);
+    } catch (err) {
+      console.warn("[ExpiryScan] driver purge failed:", err);
+    }
+
     // Roll rent weeks forward first (auto Unpaid + "not paid" log for weeks that ended unpaid).
     try {
       const { syncRentCycles } = await import("@/lib/rent-cycle.server");

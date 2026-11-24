@@ -98,31 +98,24 @@ html.light {
   }
 }
 
-/* Smooth color transitions for live preview & theme switching (~200ms) */
-.vch-app,
-.vch-app *,
-.vch-app aside,
-.vch-app header,
-.vch-app main {
-  transition: background-color 200ms ease, border-color 200ms ease, color 200ms ease, box-shadow 200ms ease;
+/* Colours fade only while the theme is being switched (applyThemeToDocument adds the class
+   for ~300ms). A transition on every element made all hovers lag. */
+html.vch-theme-switching,
+html.vch-theme-switching * {
+  transition: background-color 260ms var(--vch-ease-in-out, ease), border-color 260ms var(--vch-ease-in-out, ease),
+    color 260ms var(--vch-ease-in-out, ease) !important;
 }
-
 @media (prefers-reduced-motion: reduce) {
-  .vch-app,
-  .vch-app *,
-  .vch-app aside,
-  .vch-app header,
-  .vch-app main {
+  html.vch-theme-switching,
+  html.vch-theme-switching * {
     transition: none !important;
   }
 }
 
-/* Liquid glass surfaces for the fleet app */
+/* Glass only where it shows (sidebar, top bar, dialogs): blurring every card made scrolling heavy */
 .vch-app aside,
 .vch-app header,
-.vch-app [class*="rounded-xl"],
-.vch-app [class*="rounded-2xl"],
-.vch-app [class*="rounded-lg"] {
+.vch-app .fixed[class*="rounded"] {
   backdrop-filter: blur(22px) saturate(170%);
 }
 
@@ -234,3 +227,115 @@ html.light .vch-glow {
     animation: none !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Motion (dashboard: quick and quiet). ease-out for things arriving, short
+   durations, transform/opacity only, and nothing loops for attention.
+   --------------------------------------------------------------------------- */
+:root {
+  --vch-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --vch-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+/* Content arriving: fade + 8px rise + slight blur.
+   Fill mode is "backwards" on purpose: a filled transform/filter animation keeps acting as a
+   containing block, which traps position:fixed dialogs inside the page instead of the screen. */
+@keyframes vch-enter {
+  from { opacity: 0; transform: translateY(8px); filter: blur(4px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+.vch-enter { animation: vch-enter 320ms var(--vch-ease-out) backwards; }
+
+/* Sections of a page arrive one after another (30-60ms apart) */
+.vch-stagger > * { animation: vch-enter 360ms var(--vch-ease-out) backwards; }
+.vch-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.vch-stagger > *:nth-child(2) { animation-delay: 50ms; }
+.vch-stagger > *:nth-child(3) { animation-delay: 100ms; }
+.vch-stagger > *:nth-child(4) { animation-delay: 140ms; }
+.vch-stagger > *:nth-child(5) { animation-delay: 180ms; }
+.vch-stagger > *:nth-child(n + 6) { animation-delay: 210ms; }
+
+/* Menus and popovers grow from where they open */
+@keyframes vch-pop {
+  from { opacity: 0; transform: scale(0.96) translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+.vch-pop { animation: vch-pop 160ms var(--vch-ease-out) backwards; }
+
+/* A picture settling into place (vehicle hero) */
+@keyframes vch-float-in {
+  from { opacity: 0; transform: translateX(24px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+.vch-float-in { animation: vch-float-in 600ms var(--vch-ease-out) 120ms backwards; }
+
+/* Buttons press, linked cards lift */
+.vch-press { transition: transform 120ms var(--vch-ease-out), background-color 160ms, color 160ms, border-color 160ms; }
+.vch-press:active { transform: scale(0.97); }
+.vch-lift { transition: transform 180ms var(--vch-ease-out), box-shadow 180ms var(--vch-ease-out), border-color 180ms; }
+.vch-lift:hover { transform: translateY(-2px); box-shadow: 0 10px 24px -14px rgba(0, 0, 0, 0.6); border-color: var(--vch-accent-soft); }
+.vch-card { transition: border-color 200ms, box-shadow 200ms; }
+
+/* Loading placeholder (a soft sweep, stops once content arrives) */
+@keyframes vch-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+.vch-skeleton {
+  background: linear-gradient(90deg, var(--vch-surface) 25%, var(--vch-surface-2) 50%, var(--vch-surface) 75%);
+  background-size: 200% 100%;
+  animation: vch-shimmer 1.4s linear infinite;
+}
+
+/* Dialogs: backdrop fades, panel rises */
+@keyframes vch-sheet {
+  from { opacity: 0; transform: translateY(16px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+.vch-sheet { animation: vch-sheet 260ms var(--vch-ease-out) backwards; }
+
+@media (prefers-reduced-motion: reduce) {
+  .vch-enter, .vch-stagger > *, .vch-pop, .vch-float-in, .vch-sheet { animation: none !important; }
+  .vch-press:active, .vch-lift:hover { transform: none; }
+  .vch-skeleton { animation: none; }
+}
+
+
+/* ---------------------------------------------------------------------------
+   Theme bridge: many screens use fixed colours (orange accent, dark panels,
+   white text). These map them onto the theme so every theme and accent works.
+   --------------------------------------------------------------------------- */
+/* Accent colour */
+.vch-app .bg-\[\#ff6a00\], .vch-app .hover\:bg-\[\#ff6a00\]:hover, .vch-app .bg-\[\#ff8a3d\] { background-color: var(--vch-accent); }
+.vch-app .hover\:bg-\[\#e05d00\]:hover, .vch-app .hover\:bg-\[\#ff8a3d\]:hover { background-color: var(--vch-accent-hover); }
+.vch-app .text-\[\#ff6a00\] { color: var(--vch-accent); }
+.vch-app .text-\[\#ff8a3d\], .vch-app .hover\:text-\[\#ff8a3d\]:hover { color: var(--vch-accent-text); }
+.vch-app .border-\[\#ff6a00\], .vch-app .border-\[\#ff8a3d\], .vch-app .hover\:border-\[\#ff6a00\]:hover,
+.vch-app .focus\:border-\[\#ff6a00\]:focus, .vch-app .focus\:border-\[\#ff8a3d\]:focus { border-color: var(--vch-accent); }
+.vch-app .focus\:ring-\[\#ff6a00\]:focus, .vch-app .focus-visible\:ring-\[\#ff6a00\]:focus-visible {
+  --tw-ring-color: var(--vch-accent);
+}
+.vch-app [class*="bg-[#ff6a00]/"] { background-color: color-mix(in srgb, var(--vch-accent) 12%, transparent); }
+.vch-app [class*="border-[#ff6a00]/"] { border-color: color-mix(in srgb, var(--vch-accent) 40%, transparent); }
+
+/* Light themes: dark-only colours become the theme's */
+html.light .vch-app { color: var(--vch-text); }
+html.light .vch-app .text-white:not([class*="bg-[#"]):not([class*="bg-red-"]):not([class*="bg-emerald-"]):not([class*="bg-blue-"]):not([class*="bg-green-"]):not([class*="bg-amber-"]):not([class*="bg-[var(--vch-accent)]"]) {
+  color: var(--vch-text);
+}
+html.light .vch-app :is(.text-\[\#e7eaf0\], .text-\[\#eef2f8\], .text-\[\#edf2f8\], .text-\[\#e9edef\], .text-\[\#f1f3f7\]) { color: var(--vch-text); }
+html.light .vch-app :is(.text-\[\#8b95a8\], .text-\[\#9aa5b8\], .text-\[\#aeb8c9\], .text-\[\#c5cbd6\], .text-\[\#c8d0dd\], .text-\[\#aab4c4\], .text-\[\#c9d1dc\], .text-\[\#8696a0\], .text-\[\#7d8799\]) { color: var(--vch-text-muted); }
+html.light .vch-app .text-\[\#5b6478\] { color: var(--vch-text-soft); }
+html.light .vch-app :is(.bg-\[\#10141d\], .bg-\[\#142131\], .bg-\[\#0d1420\], .bg-\[\#141A24\], .bg-\[\#0b0f19\], .bg-\[\#0b0d12\], .bg-\[\#1e222b\]) { background-color: var(--vch-surface-solid); }
+html.light .vch-app :is(.hover\:bg-\[\#1e222b\]:hover, .hover\:bg-white\/10:hover, .hover\:bg-white\/5:hover) { background-color: var(--vch-surface-2); }
+html.light .vch-app [class*="bg-white/["], html.light .vch-app :is(.bg-white\/5, .bg-white\/10) { background-color: rgba(15, 23, 42, 0.04); }
+html.light .vch-app :is(.bg-black\/20, .bg-black\/30, .bg-black\/40, .bg-black\/50) { background-color: rgba(15, 23, 42, 0.05); }
+html.light .vch-app :is(.border-white\/5, .border-white\/10, .border-white\/15, .border-white\/20) { border-color: var(--vch-border-soft); }
+html.light .vch-app .divide-white\/5 > :not(:last-child) { border-color: var(--vch-border-soft); }
+html.light .vch-app .placeholder\:text-\[\#5b6478\]::placeholder { color: var(--vch-text-soft); }
+/* Light themes: pale status text (made for dark backgrounds) gets a readable shade */
+html.light .vch-app :is(.text-red-200, .text-red-300, .text-red-400, .text-rose-300, .text-rose-400) { color: #b91c1c; }
+html.light .vch-app :is(.text-emerald-200, .text-emerald-300, .text-emerald-400, .text-green-300, .text-green-400) { color: #047857; }
+html.light .vch-app :is(.text-blue-200, .text-blue-300, .text-blue-400, .text-sky-300, .text-sky-400) { color: #1d4ed8; }
+html.light .vch-app :is(.text-amber-100, .text-amber-200, .text-amber-300, .text-amber-400, .text-yellow-300) { color: #b45309; }
+html.light .vch-app :is(.text-purple-300, .text-violet-300, .text-indigo-300) { color: #6d28d9; }
+html.light .vch-app :is(.text-orange-300, .text-orange-400) { color: #c2410c; }
+html.light .vch-app :is(.text-cyan-300, .text-teal-300) { color: #0e7490; }
+html.light .vch-app :is(.text-zinc-300, .text-slate-300, .text-slate-200) { color: var(--vch-text-muted); }

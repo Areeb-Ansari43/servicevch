@@ -11,6 +11,8 @@ import { createFileRoute } from "@tanstack/react-router";
  *   503 { ok: false, code: "missing_config" }
  */
 async function handle(request: Request): Promise<Response> {
+  const { portalApiEnabled, portalDisabledResponse } = await import("@/lib/features");
+  if (!portalApiEnabled()) return portalDisabledResponse();
   const { checkPortalSecret, jsonResponse } = await import("@/lib/portal-secret.server");
   const { logPortalAuthEvent } = await import("@/lib/portal-auth-logger");
   const { getRuntimeEnv } = await import("@/integrations/supabase/config");

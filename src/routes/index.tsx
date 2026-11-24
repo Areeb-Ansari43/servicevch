@@ -63,6 +63,11 @@ import { EmailTestCard } from "@/components/email-test-card";
 import { RentHistoryCard } from "@/components/rent-history-card";
 import { LicenceScanner, type LicenceValues } from "@/components/licence-scanner";
 import { VehicleSearch } from "@/components/vehicle-search";
+import { OdometerScanner } from "@/components/odometer-scanner";
+import { RentPaidDialog } from "@/components/rent-paid-dialog";
+import { PORTAL_ENABLED } from "@/lib/features";
+import { RentLoggedList } from "@/components/rent-logged-list";
+import { Check as LucideCheck, ChevronDown as LucideChevronDown } from "lucide-react";
 import { carTermsFor } from "@/lib/fleet-sheet";
 import { runExpiryScanNowFn } from "@/lib/email-admin.functions";
 
@@ -1604,13 +1609,17 @@ function UserSettingsView({
         <AppearanceSettingsCard toast={toast} />
       </SettingsCardBoundary>
 
-      <SettingsCardBoundary name="Portal Accounts">
-        <PortalAccountsAdminCard toast={toast} />
-      </SettingsCardBoundary>
+      {PORTAL_ENABLED && (
+        <>
+          <SettingsCardBoundary name="Portal Accounts">
+            <PortalAccountsAdminCard toast={toast} />
+          </SettingsCardBoundary>
 
-      <SettingsCardBoundary name="2FA & Auth Security Events">
-        <PortalAuthEventsAdminCard toast={toast} />
-      </SettingsCardBoundary>
+          <SettingsCardBoundary name="2FA & Auth Security Events">
+            <PortalAuthEventsAdminCard toast={toast} />
+          </SettingsCardBoundary>
+        </>
+      )}
 
       <SettingsCardBoundary name="Email Template Previews">
         <EmailTestCard email={email} toast={toast} />
@@ -1621,9 +1630,19 @@ function UserSettingsView({
 
 function AuditLogsView({
   toast,
+  deletedDrivers = [],
+  restoreDriver,
 }: {
   toast: (m: string, t?: Toast["type"]) => void;
+  deletedDrivers?: DriverTrack[];
+  restoreDriver?: (id: string) => Promise<void>;
 }) {
+  const [restoring, setRestoring] = useState<string | null>(null);
+  const daysLeft = (deletedAt?: string | null) => {
+    if (!deletedAt) return 30;
+    const left = 30 - Math.floor((Date.now() - new Date(deletedAt).getTime()) / 86400000);
+    return Math.max(0, left);
+  };
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -1740,6 +1759,14 @@ function AuditLogsView({
         colorCls = "border-red-500/30 bg-red-500/10 text-red-300";
         label = "Driver Deleted";
         break;
+      case "driver_restored":
+        colorCls = "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
+        label = "Driver Restored";
+        break;
+      case "driver_purged":
+        colorCls = "border-zinc-500/30 bg-zinc-500/10 text-zinc-300";
+        label = "Permanently Deleted (30 days)";
+        break;
       case "rent_updated":
         colorCls = "border-amber-500/30 bg-amber-500/10 text-amber-300";
         label = "Rent Status Updated";
@@ -1823,6 +1850,63 @@ function AuditLogsView({
           Refresh Logs
         </button>
       </div>
+
+      {/* Deleted drivers: restorable for 30 days, then removed for good by the daily job */}
+      {deletedDrivers.length > 0 && (
+        <section
+          className="rounded-2xl border p-4"
+          style={{ borderColor: "rgba(245,158,11,0.3)", background: "rgba(245,158,11,0.05)" }}
+        >
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 text-sm font-bold text-amber-200">
+              <Icon.RotateCcw className="h-4 w-4" /> Deleted drivers
+            </h2>
+            <span className="text-[11px] text-[#9aa5b8]">
+              Kept for 30 days, then permanently deleted with their records and portal login.
+            </span>
+          </div>
+          <ul className="divide-y divide-white/5">
+            {deletedDrivers.map((d) => {
+              const left = daysLeft(d.deleted_at);
+              return (
+                <li key={d.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-white">{d.driver_name}</div>
+                    <div className="text-[11px] text-[#8b95a8]">
+                      {d.registration || "No car"}
+                      {d.deleted_at ? ` · deleted ${new Date(d.deleted_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}` : ""}
+                      {" · "}
+                      <span className={left <= 3 ? "font-semibold text-red-300" : "text-amber-200"}>
+                        {left === 0 ? "removed at the next daily cleanup" : `${left} day${left === 1 ? "" : "s"} left`}
+                      </span>
+                    </div>
+                  </div>
+                  {restoreDriver && (
+                    <button
+                      type="button"
+                      disabled={restoring === d.id}
+                      onClick={async () => {
+                        setRestoring(d.id);
+                        try {
+                          await restoreDriver(d.id);
+                          toast(`${d.driver_name} restored, with portal access`);
+                        } catch (err: any) {
+                          toast(err?.message || "Could not restore the driver", "error");
+                        } finally {
+                          setRestoring(null);
+                        }
+                      }}
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/25 disabled:opacity-50"
+                    >
+                      <Icon.RotateCcw className="h-3.5 w-3.5" /> {restoring === d.id ? "Restoring…" : "Restore"}
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       {/* FILTER BAR */}
       <div
@@ -2252,13 +2336,15 @@ export function FleetShell({ view }: { view: View }) {
       />
       <div className={`relative z-10 ml-0 transition-all duration-350 ease-out ${isPinned ? "lg:ml-[280px]" : "lg:ml-[80px]"} pb-24 lg:pb-6`}>
         <Topbar vehicles={data.vehicles} goto={go} onMenu={() => setMobileNavOpen(true)} />
-        <main className="mx-auto w-full max-w-[1400px] p-3 sm:p-5 xl:p-6">
+        <main key={view} className="vch-enter mx-auto w-full max-w-[1400px] p-3 sm:p-5 xl:p-6">
           {data.loading ? (
-            <div
-              className="rounded-xl border p-12 text-center text-sm"
-              style={{ borderColor: T.border, background: T.panel, color: T.muted }}
-            >
-              Loading fleet data…
+            <div className="space-y-4" aria-busy="true" aria-label="Loading fleet data">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                {[0, 1, 2, 3].map((i) => (
+                  <div key={i} className="vch-skeleton h-24 rounded-xl" />
+                ))}
+              </div>
+              <div className="vch-skeleton h-72 rounded-xl" />
             </div>
           ) : view === "dashboard" ? (
             <Dashboard
@@ -2352,7 +2438,7 @@ export function FleetShell({ view }: { view: View }) {
               fallbackTitle="Audit Logs Error"
               fallbackMessage="An error occurred while loading system audit logs."
             >
-              <AuditLogsView toast={toast} />
+              <AuditLogsView toast={toast} deletedDrivers={data.deletedDrivers} restoreDriver={data.restoreDriver} />
             </RouteErrorBoundary>
           ) : null}
         </main>
@@ -3102,7 +3188,7 @@ function Topbar({
       className="sticky top-0 z-20 flex h-[56px] items-center gap-3 border-b px-3 sm:px-6 xl:px-8"
       style={{
         borderColor: T.border,
-        background: "rgba(8,11,19,0.88)",
+        background: "color-mix(in srgb, var(--vch-surface-solid) 88%, transparent)",
         backdropFilter: "blur(20px)",
       }}
     >
@@ -3910,7 +3996,7 @@ function Kpi({ label, value, accent }: { label: string; value: string | number; 
       className="group relative overflow-hidden rounded-2xl border p-4 shadow-[0_12px_35px_rgba(0,0,0,0.16)] transition hover:-translate-y-0.5"
       style={{
         borderColor: T.border,
-        background: "linear-gradient(145deg, rgba(21,28,43,0.96), rgba(13,18,30,0.96))",
+        background: "linear-gradient(145deg, var(--vch-surface-2), var(--vch-surface))",
       }}
     >
       <div className="flex items-start justify-between gap-2">
@@ -3920,12 +4006,15 @@ function Kpi({ label, value, accent }: { label: string; value: string | number; 
         >
           <KpiIcon className="h-5 w-5" />
         </div>
-        <span className="text-[10px] uppercase tracking-[0.14em] text-[#718096]">Live</span>
+        <span className="text-[10px] uppercase tracking-[0.14em] text-[var(--vch-text-soft)]">Live</span>
       </div>
       <div className="relative z-10 mt-4 text-[10px] uppercase tracking-[0.14em] text-[#8b95a8]">
         {label}
       </div>
-      <div className="relative z-10 mt-1 text-3xl font-bold" style={{ color: accent }}>
+      <div
+        className="relative z-10 mt-1 text-3xl font-bold"
+        style={{ color: accent === "#e7eaf0" ? "var(--vch-text)" : accent }}
+      >
         {value}
       </div>
       <KpiIcon className="pointer-events-none absolute -bottom-3 -right-2 h-24 w-24 opacity-[0.06]" />
@@ -5282,6 +5371,7 @@ function ServiceDetailsModal({
 
 /* ---------------- Drivers ---------------- */
 function portalStatusBadge(driver: DriverTrack) {
+  if (!PORTAL_ENABLED) return null;
   const status = driver.status || (Boolean(driver.auth_user_id) || driver.invite_status === "accepted" ? "active" : driver.invite_status === "pending" ? "pending" : "active");
 
   if (status === "active") {
@@ -5351,6 +5441,20 @@ function DriversView({
   const [balanceDriver, setBalanceDriver] = useState<DriverTrack | null>(null);
   const [previewDriver, setPreviewDriver] = useState<DriverTrack | null>(null);
   const [inviteModalDriver, setInviteModalDriver] = useState<DriverTrack | null>(null);
+  const [paidDriver, setPaidDriver] = useState<DriverTrack | null>(null);
+
+  // /drivers?driver=<id> opens that driver's profile (links from the vehicle page)
+  const openedFromLink = useRef(false);
+  useEffect(() => {
+    if (openedFromLink.current || typeof window === "undefined") return;
+    const id = new URLSearchParams(window.location.search).get("driver");
+    if (!id) return;
+    const d = drivers.find((x) => x.id === id);
+    if (d) {
+      openedFromLink.current = true;
+      setProfileDriver(d);
+    }
+  }, [drivers]);
 
   const totalDrivers = drivers.length;
   const activeDrivers = drivers.filter((d) => d.status === "active" || (!d.status && d.active !== false)).length;
@@ -5373,10 +5477,14 @@ function DriversView({
   });
 
   const handleDelete = async (driver: DriverTrack) => {
-    if (confirm(`Are you sure you want to delete driver "${driver.driver_name}"?`)) {
+    if (
+      confirm(
+        `Delete driver "${driver.driver_name}"?\n\nYou can restore them from the Audit Log for 30 days. After that they are deleted for good.`,
+      )
+    ) {
       try {
         await data.deleteDriver(driver.id);
-        toast(`Driver ${driver.driver_name} deleted`, "info");
+        toast(`${driver.driver_name} deleted. Restore from the Audit Log within 30 days.`, "info");
       } catch (err: any) {
         toast(err?.message ?? "Failed to delete driver", "error");
       }
@@ -5483,14 +5591,14 @@ function DriversView({
                 <th className="px-4 py-3 font-bold">Weekly Rent</th>
                 <th className="px-4 py-3 font-bold">Rent Status</th>
                 <th className="px-4 py-3 font-bold">Balance Due</th>
-                <th className="px-4 py-3 font-bold">Portal</th>
+                {PORTAL_ENABLED && <th className="px-4 py-3 font-bold">Portal</th>}
                 <th className="px-4 py-3 text-right font-bold">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.06]">
               {filteredDrivers.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-[#8b95a8]">
+                  <td colSpan={PORTAL_ENABLED ? 8 : 7} className="px-4 py-8 text-center text-[#8b95a8]">
                     No drivers match your search.
                   </td>
                 </tr>
@@ -5538,9 +5646,9 @@ function DriversView({
                         <div>{driver.phone || "No phone saved"}</div>
                         {driver.email ? (
                           <div className="text-[10px] text-[#8b95a8]">{driver.email}</div>
-                        ) : (
+                        ) : PORTAL_ENABLED ? (
                           <div className="text-[10px] text-amber-500/80 italic">No email on file</div>
-                        )}
+                        ) : null}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
@@ -5566,6 +5674,12 @@ function DriversView({
                           type="button"
                           onClick={async (e) => {
                             e.stopPropagation();
+                            // Unpaid -> the Paid pop-up (deposit / rent in advance). Paid -> undo after a check.
+                            if (driver.rent_status !== "paid") {
+                              setPaidDriver(driver);
+                              return;
+                            }
+                            if (!confirm(`Mark ${driver.driver_name}'s rent as unpaid again?`)) return;
                             try {
                               await data.toggleRentStatus(
                                 driver.id,
@@ -5573,7 +5687,7 @@ function DriversView({
                                 driver.weekly_rent,
                                 driver.balance_due,
                               );
-                              toast(`Rent status for ${driver.driver_name} updated`);
+                              toast(`${driver.driver_name}'s rent marked unpaid`);
                             } catch (err: any) {
                               toast(err?.message ?? "Failed to update rent status", "error");
                             }
@@ -5611,10 +5725,10 @@ function DriversView({
                           </span>
                         </button>
                       </td>
-                      <td className="px-4 py-3">{portalStatusBadge(driver)}</td>
+                      {PORTAL_ENABLED && <td className="px-4 py-3">{portalStatusBadge(driver)}</td>}
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {!isPortalActive && (
+                          {PORTAL_ENABLED && !isPortalActive && (
                             <button
                               type="button"
                               onClick={(e) => {
@@ -5674,46 +5788,19 @@ function DriversView({
         </div>
       </div>
 
-      {/* Recently Deleted Drivers — 48-Hour Recovery Window */}
-      {data.deletedDrivers && data.deletedDrivers.length > 0 && (
-        <div className="rounded-xl border p-4 space-y-2.5" style={{ borderColor: "rgba(245,158,11,0.3)", background: "rgba(245,158,11,0.05)" }}>
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
-              <Icon.RotateCcw className="h-3.5 w-3.5" /> Recently Deleted Drivers (48-Hour Recovery Window)
-            </h3>
-            <span className="text-[10px] text-[#8b95a8]">{data.deletedDrivers.length} in recovery window</span>
-          </div>
-          <div className="space-y-2">
-            {data.deletedDrivers.map((d) => (
-              <div key={d.id} className="flex items-center justify-between rounded-lg border p-2.5 text-xs" style={{ borderColor: T.borderSoft, background: T.panel2 }}>
-                <div>
-                  <span className="font-bold text-white">{d.driver_name}</span>{" "}
-                  <span className="text-[#8b95a8]">({d.registration || "No reg"})</span>
-                  {d.email && <span className="text-[#8b95a8] ml-2">· {d.email}</span>}
-                  {d.deleted_at && (
-                    <span className="text-[10px] text-[#8b95a8] ml-2 block sm:inline">
-                      Deleted: {new Date(d.deleted_at).toLocaleString("en-GB")}
-                    </span>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      await data.restoreDriver(d.id);
-                      toast(`Restored driver ${d.driver_name} and reactivated portal access`);
-                    } catch (err: any) {
-                      toast(err?.message || "Failed to restore driver", "error");
-                    }
-                  }}
-                  className="inline-flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1 text-[11px] font-bold text-emerald-300 hover:bg-emerald-500/25 transition-colors shrink-0"
-                >
-                  <Icon.RotateCcw className="h-3 w-3" /> Restore Driver & Portal Access
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
+      {paidDriver && (
+        <RentPaidDialog
+          driver={drivers.find((d) => d.id === paidDriver.id) || paidDriver}
+          onClose={() => setPaidDriver(null)}
+          onConfirm={async (opts) => {
+            const res = await data.settleRent(paidDriver.id, opts);
+            const bits = [
+              res.advanceWeeks ? `${res.advanceWeeks} week${res.advanceWeeks === 1 ? "" : "s"} paid ahead` : null,
+              opts.depositPaid ? `£${opts.depositPaid} deposit recorded` : null,
+            ].filter(Boolean);
+            toast(`${paidDriver.driver_name}: rent paid, balance £0${bits.length ? ` · ${bits.join(" · ")}` : ""}`);
+          }}
+        />
       )}
 
       {/* Add Driver Modal */}
@@ -5930,15 +6017,17 @@ function AddDriverModal({
               placeholder="e.g. John Smith"
             />
           </Field>
-          <Field label="Email Address">
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className={inputCls}
-              placeholder="e.g. driver@example.com"
-            />
-          </Field>
+          {PORTAL_ENABLED && (
+            <Field label="Email Address">
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className={inputCls}
+                placeholder="e.g. driver@example.com"
+              />
+            </Field>
+          )}
           <Field label="Phone Number (optional)">
             <input
               type="tel"
@@ -6765,6 +6854,15 @@ function DriverProfileModal({
   const [saving, setSaving] = useState(false);
   const [sendingReminder, setSendingReminder] = useState<string | null>(null);
   const [customMsgModalOpen, setCustomMsgModalOpen] = useState(false);
+  type ProfileTab = "details" | "rent" | "documents" | "portal" | "messages";
+  const [tab, setTab] = useState<ProfileTab>("details");
+  const tabs: { id: ProfileTab; label: string }[] = [
+    { id: "details", label: "Details" },
+    { id: "rent", label: "Rent" },
+    { id: "documents", label: "Documents" },
+    ...(PORTAL_ENABLED ? [{ id: "portal" as ProfileTab, label: "Portal" }] : []),
+    { id: "messages", label: "Messages" },
+  ];
 
   const selectedVehicle = vehicles.find((v) => v.id === vehicleId);
 
@@ -6847,7 +6945,7 @@ function DriverProfileModal({
       onClick={onClose}
     >
       <div
-        className="my-auto max-h-[85vh] sm:max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-white/15 bg-[#10141d] p-4 sm:p-6 shadow-2xl animate-in zoom-in-95 duration-200 space-y-5"
+        className="vch-sheet my-auto max-h-[88vh] sm:max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-white/15 bg-[#10141d] p-4 sm:p-6 shadow-2xl space-y-5"
         style={{ borderColor: T.border }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -6867,8 +6965,41 @@ function DriverProfileModal({
           </button>
         </div>
 
+        {/* Key facts */}
+        <div className="grid grid-cols-3 gap-2 text-center">
+          {[
+            ["Weekly rent", driver.weekly_rent ? `£${driver.weekly_rent}` : "—"],
+            ["Balance", `£${Number(driver.balance_due || 0).toFixed(2)}`],
+            ["Rent day", driver.rent_due_day || "—"],
+          ].map(([k, v]) => (
+            <div key={k} className="rounded-xl border px-2 py-2.5" style={{ borderColor: T.borderSoft, background: T.panel }}>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-[#8b95a8]">{k}</div>
+              <div className="mt-0.5 truncate text-sm font-bold text-white">{v}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Tabs: one topic at a time instead of one long page */}
+        <div className="-mx-1 flex gap-1 overflow-x-auto px-1" role="tablist" aria-label="Driver profile sections">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.id}
+              onClick={() => setTab(t.id)}
+              className={`vch-press shrink-0 rounded-lg px-3.5 py-2 text-xs font-semibold transition-colors ${
+                tab === t.id ? "bg-[#ff6a00] text-white" : "text-[#8b95a8] hover:bg-white/[0.06] hover:text-white"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
         {/* Quick Alert Reminders */}
-        <div className="rounded-xl border p-4 space-y-2.5" style={{ borderColor: T.borderSoft, background: T.panel }}>
+        {tab === "messages" && (
+        <div className="vch-enter rounded-xl border p-4 space-y-2.5" style={{ borderColor: T.borderSoft, background: T.panel }}>
           <div className="text-xs font-bold uppercase tracking-wider text-[#ff8a3d]">Quick Alert & Reminder Actions</div>
           <div className="flex flex-wrap gap-2">
             <button
@@ -6921,8 +7052,11 @@ function DriverProfileModal({
             Sends a direct notification to the driver's portal dashboard and an email copy if connected.
           </p>
         </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+          {tab === "details" && (
+          <div key="details" className="vch-enter space-y-4">
           <Grid2>
             <Field label="Full Name *">
               <input
@@ -6938,6 +7072,7 @@ function DriverProfileModal({
           </Grid2>
 
           <Grid2>
+            {PORTAL_ENABLED && (
             <Field label="Email Address">
               <div>
                 <input
@@ -6955,6 +7090,7 @@ function DriverProfileModal({
                 ) : null}
               </div>
             </Field>
+            )}
 
             <Field label="Linked Vehicle">
               <DarkSelect
@@ -7082,10 +7218,19 @@ function DriverProfileModal({
             </Grid2>
           </div>
 
+          </div>
+          )}
+
           {/* Document Upload Section */}
-          <DriverDocumentsSection driver={driver} toast={toast} />
+          {tab === "documents" && (
+            <div key="documents" className="vch-enter">
+              <DriverDocumentsSection driver={driver} toast={toast} />
+            </div>
+          )}
 
           {/* Weekly rent log: paid / not paid per week */}
+          {tab === "rent" && (
+          <div key="rent" className="vch-enter">
           <SettingsCardBoundary name="Rent history">
             <RentHistoryCard
               driverId={driver.id}
@@ -7095,9 +7240,15 @@ function DriverProfileModal({
               refreshKey={`${driver.rent_status}-${driver.rent_paid_for_due_date}-${driver.balance_due}`}
             />
           </SettingsCardBoundary>
+          </div>
+          )}
 
           {/* Portal Settings Section */}
-          <DriverPortalSettingsCard driver={driver} data={data} toast={toast} onCloseModal={onClose} />
+          {PORTAL_ENABLED && tab === "portal" && (
+            <div key="portal" className="vch-enter">
+              <DriverPortalSettingsCard driver={driver} data={data} toast={toast} onCloseModal={onClose} />
+            </div>
+          )}
 
           <div className="flex justify-end gap-2 border-t pt-4" style={{ borderColor: T.border }}>
             <button
@@ -7106,15 +7257,17 @@ function DriverProfileModal({
               className="rounded-lg border px-4 py-2 hover:bg-white/10"
               style={{ borderColor: T.border }}
             >
-              Cancel
+              {tab === "details" ? "Cancel" : "Close"}
             </button>
-            <button
-              type="submit"
-              disabled={saving || !name.trim()}
-              className="rounded-lg bg-[#ff6a00] px-4 py-2 font-semibold text-white hover:bg-[#e05d00] disabled:opacity-50"
-            >
-              {saving ? "Saving…" : "Save Profile"}
-            </button>
+            {tab === "details" && (
+              <button
+                type="submit"
+                disabled={saving || !name.trim()}
+                className="vch-press rounded-lg bg-[#ff6a00] px-4 py-2 font-semibold text-white hover:bg-[#e05d00] disabled:opacity-50"
+              >
+                {saving ? "Saving…" : "Save Profile"}
+              </button>
+            )}
           </div>
         </form>
 
@@ -7167,6 +7320,7 @@ function DriverBalanceModal({
   const [chargeDesc, setChargeDesc] = useState("");
   const [addingCharge, setAddingCharge] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [paidOpen, setPaidOpen] = useState(false);
 
   useEffect(() => {
     setBalanceDue(String(driver.balance_due || 0));
@@ -7270,8 +7424,10 @@ function DriverBalanceModal({
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-lg font-bold text-white">Deposit & Balance Details</h3>
-              <span className="font-bold text-red-400 text-sm">
-                Balance Due: £{Number(balanceDue || 0).toFixed(2)}
+              <span className={`font-bold text-sm ${Number(balanceDue || 0) > 0 ? "text-red-400" : "text-emerald-400"}`}>
+                {Number(balanceDue || 0) < 0
+                  ? `Credit: £${Math.abs(Number(balanceDue)).toFixed(2)}`
+                  : `Balance due: £${Number(balanceDue || 0).toFixed(2)}`}
               </span>
             </div>
             <p className="text-xs text-[#8b95a8]">
@@ -7284,8 +7440,18 @@ function DriverBalanceModal({
         </div>
 
         <form onSubmit={handleSaveFinancials} className="space-y-4 text-xs">
-          {/* Deposit Tracking & Paid/Unpaid Toggle */}
-          <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: T.borderSoft, background: T.panel }}>
+          {/* Deposit Tracking & Paid/Unpaid Toggle (collapsed once paid in full) */}
+          <details
+            open={!isDepositFullyPaid}
+            className="group rounded-xl border p-4 space-y-3"
+            style={{ borderColor: T.borderSoft, background: T.panel }}
+          >
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2">
+              <span className="font-bold text-white text-xs">
+                Deposit{isDepositFullyPaid ? ` · £${agreedDeposit.toFixed(2)} paid in full` : ""}
+              </span>
+              <LucideChevronDown className="h-4 w-4 text-[#8b95a8] transition-transform group-open:rotate-180" />
+            </summary>
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="font-bold text-white text-xs">Deposit Tracking</div>
               <div className="flex items-center gap-2">
@@ -7415,11 +7581,20 @@ function DriverBalanceModal({
                 </div>
               </div>
             </div>
-          </div>
+          </details>
 
           {/* Rent & Financial Tracking */}
           <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: T.borderSoft, background: T.panel }}>
-            <div className="font-bold text-white text-xs">Rent & Account Balance</div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="font-bold text-white text-xs">Rent & Account Balance</div>
+              <button
+                type="button"
+                onClick={() => setPaidOpen(true)}
+                className="vch-press inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/15 px-3 py-1.5 text-[11px] font-bold text-emerald-300 hover:bg-emerald-500/25"
+              >
+                <LucideCheck className="h-3.5 w-3.5" /> Rent paid…
+              </button>
+            </div>
             <Grid2>
               <Field label="Rent Start Date">
                 <input
@@ -7507,7 +7682,11 @@ function DriverBalanceModal({
                           {new Date(c.created_at).toLocaleDateString("en-GB")}
                         </div>
                       </div>
-                      <div className="font-bold text-red-400">+£{Number(c.amount).toFixed(2)}</div>
+                      {["paid", "settled"].includes(String((c as any).status || "").toLowerCase()) ? (
+                        <div className="font-bold text-emerald-400">Paid £{Number(c.amount).toFixed(2)}</div>
+                      ) : (
+                        <div className="font-bold text-red-400">+£{Number(c.amount).toFixed(2)}</div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -7547,6 +7726,10 @@ function DriverBalanceModal({
                 </div>
               </div>
             </div>
+            <RentLoggedList
+              driverId={driver.id}
+              refreshKey={`${driver.rent_status}-${driver.rent_paid_for_due_date}-${driver.balance_due}`}
+            />
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-4" style={{ borderColor: T.border }}>
@@ -7578,6 +7761,18 @@ function DriverBalanceModal({
             </div>
           </div>
         </form>
+        {paidOpen && (
+          <RentPaidDialog
+            driver={driver}
+            onClose={() => setPaidOpen(false)}
+            onConfirm={async (opts) => {
+              const res = await data.settleRent(driver.id, opts);
+              setBalanceDue(String(res.balance));
+              setRentStatus("paid");
+              toast(`${driver.driver_name}: rent paid, balance £0`);
+            }}
+          />
+        )}
       </div>
     </div>
   );
@@ -8855,56 +9050,13 @@ function SubmitMileagePhotoModal({
   onClose: () => void;
 }) {
   const [selectedDriverId, setSelectedDriverId] = useState<string>(drivers[0]?.id || "");
-  const [photoUrl, setPhotoUrl] = useState<string>("");
   const [photoPreview, setPhotoPreview] = useState<string>("");
-  const [analyzing, setAnalyzing] = useState(false);
   const [ocrResult, setOcrResult] = useState<{ odometer: number | null; confidence: "high" | "low" | "none" } | null>(null);
+  const [reading, setReading] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [notes, setNotes] = useState("");
 
   const selectedDriver = drivers.find((d) => d.id === selectedDriverId);
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64 = reader.result as string;
-        setPhotoPreview(base64);
-        void runOcr(base64);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleUrlBlur = () => {
-    if (photoUrl.trim() && photoUrl !== photoPreview) {
-      setPhotoPreview(photoUrl.trim());
-      void runOcr(photoUrl.trim());
-    }
-  };
-
-  const runOcr = async (imageSource: string) => {
-    setAnalyzing(true);
-    setOcrResult(null);
-    try {
-      const res = await fetch("/api/public/ocr-odometer", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photo_url: imageSource }),
-      });
-      if (res.ok) {
-        const body = await res.json();
-        setOcrResult({
-          odometer: typeof body.odometer === "number" ? body.odometer : null,
-          confidence: body.confidence || "none",
-        });
-      }
-    } catch {
-      // ignore
-    } finally {
-      setAnalyzing(false);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -8912,26 +9064,34 @@ function SubmitMileagePhotoModal({
       toast("Please select a driver", "error");
       return;
     }
-    const finalPhoto = photoPreview || photoUrl.trim();
-    if (!finalPhoto) {
-      toast("Please provide an odometer photo or file", "error");
+    if (!photoPreview) {
+      toast("Please add a photo of the dashboard", "error");
+      return;
+    }
+    const readingNum = reading.trim() ? Math.round(Number(reading.replace(/[^0-9.]/g, ""))) : null;
+    if (reading.trim() && (!readingNum || readingNum <= 0)) {
+      toast("Please enter a valid odometer reading", "error");
       return;
     }
 
+    setSubmitting(true);
     try {
       await data.addMileageSubmission({
         driver_id: selectedDriver.id,
         driver_name: selectedDriver.driver_name,
         registration: selectedDriver.registration,
-        photo_url: finalPhoto,
+        photo_url: photoPreview,
         ocr_mileage: ocrResult?.odometer ?? null,
-        ocr_confidence: ocrResult?.confidence ?? "low",
+        ocr_confidence: ocrResult?.confidence ?? "none",
+        reading_value: readingNum,
         notes,
       });
       toast(`Odometer photo submitted for review (${selectedDriver.driver_name})`);
       onClose();
     } catch (e: any) {
       toast(e?.message ?? "Failed to submit photo", "error");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -8949,7 +9109,7 @@ function SubmitMileagePhotoModal({
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h2 className="text-lg font-extrabold text-white">Submit Odometer Photo</h2>
-            <p className="text-xs text-[#8b95a8]">Upload dashboard image for automatic Gemini OCR extraction</p>
+            <p className="text-xs text-[#8b95a8]">Drop a dashboard photo and the AI reads the odometer for you.</p>
           </div>
           <button onClick={onClose} className="text-[#8b95a8] hover:text-white">
             <Icon.X className="h-5 w-5" />
@@ -8972,59 +9132,30 @@ function SubmitMileagePhotoModal({
             </select>
           </div>
 
-          <div>
-            <Label>Upload Photo / Image File</Label>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleFileChange}
-              className="block w-full text-xs text-[#8b95a8] file:mr-3 file:rounded-md file:border-0 file:bg-[#ff6a00] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-[#e05d00] cursor-pointer"
-            />
-          </div>
+          <OdometerScanner
+            onScan={(scan) => {
+              setPhotoPreview(scan.dataUrl);
+              setOcrResult({ odometer: scan.odometer, confidence: scan.confidence });
+              if (scan.odometer) setReading(String(scan.odometer));
+            }}
+          />
 
-          <Field label="OR Photo URL">
+          <Field label="Odometer reading (miles)">
             <input
-              type="url"
-              placeholder="https://..."
-              value={photoUrl}
-              onChange={(e) => setPhotoUrl(e.target.value)}
-              onBlur={handleUrlBlur}
-              className={inputCls}
+              inputMode="numeric"
+              placeholder="Filled in from the photo, or type it"
+              value={reading}
+              onChange={(e) => setReading(e.target.value.replace(/[^0-9]/g, ""))}
+              className={
+                inputCls +
+                (ocrResult?.odometer && reading === String(ocrResult.odometer)
+                  ? ocrResult.confidence === "high"
+                    ? " ring-2 ring-emerald-500/50"
+                    : " ring-2 ring-amber-400/70"
+                  : "")
+              }
             />
           </Field>
-
-          {photoPreview && (
-            <div className="space-y-2">
-              <div className="text-xs font-medium text-[#8b95a8]">Image Preview</div>
-              <div className="relative overflow-hidden rounded-lg border border-white/10 bg-black/50 max-h-48 flex items-center justify-center p-2">
-                <img src={photoPreview} alt="Preview" className="max-h-44 object-contain rounded" />
-              </div>
-            </div>
-          )}
-
-          {analyzing && (
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-center text-xs font-semibold text-amber-300 animate-pulse flex items-center justify-center gap-2">
-              <Icon.Clock className="h-4 w-4 animate-spin" />
-              Analyzing photo with Gemini Vision OCR...
-            </div>
-          )}
-
-          {ocrResult && !analyzing && (
-            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300 space-y-1">
-              <div className="font-bold flex items-center gap-1.5">
-                <span>✨ OCR Analysis Complete</span>
-              </div>
-              {ocrResult.odometer ? (
-                <p>
-                  Extracted Odometer: <span className="font-bold text-white">{ocrResult.odometer.toLocaleString()} mi</span> (High Confidence)
-                </p>
-              ) : (
-                <p className="text-amber-300">
-                  ⚠️ Confidence low or image unclear — field will be left blank for staff manual entry.
-                </p>
-              )}
-            </div>
-          )}
 
           <Field label="Notes / Comments (Optional)">
             <input
@@ -9047,10 +9178,10 @@ function SubmitMileagePhotoModal({
             </button>
             <button
               type="submit"
-              disabled={analyzing || (!photoPreview && !photoUrl.trim())}
+              disabled={submitting || !photoPreview}
               className="rounded-lg bg-[#ff6a00] px-4 py-2 text-xs font-bold text-white hover:bg-[#e05d00] disabled:opacity-50 transition-colors"
             >
-              Submit Photo for Review
+              {submitting ? "Submitting…" : "Submit for review"}
             </button>
           </div>
         </form>

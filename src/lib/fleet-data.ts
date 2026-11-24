@@ -528,9 +528,14 @@ export function useFleetData() {
       return dFromRow(r, logsByTrack.get(r.id) ?? [], chargesList, depositPaymentsList);
     });
 
-    // Active drivers vs soft-deleted drivers (48-hour recovery window)
+    // Active drivers vs soft-deleted drivers (restorable for 30 days)
     const active = allDriverTracks.filter((d) => !d.deleted_at && d.active !== false);
-    const softDeleted = allDriverTracks.filter((d) => Boolean(d.deleted_at) || d.active === false);
+    const cutoff = Date.now() - 30 * 86400000;
+    const softDeleted = allDriverTracks
+      .filter((d) => Boolean(d.deleted_at) || d.active === false)
+      // Older than 30 days: waiting for the daily cleanup, no longer restorable
+      .filter((d) => !d.deleted_at || new Date(d.deleted_at).getTime() >= cutoff)
+      .sort((a, b) => String(b.deleted_at ?? "").localeCompare(String(a.deleted_at ?? "")));
 
     const loadedVehicles = (vRes.data ?? []).map(vFromRow);
     if (loadedVehicles.length === 0 && typeof window !== "undefined" && (window as any).__MOCK_AUTH__) {
@@ -1050,37 +1055,79 @@ export function useFleetData() {
       photo_url: string;
       ocr_mileage?: number | null;
       ocr_confidence?: "high" | "low" | "none" | null;
+      /** Reading entered (or confirmed) by staff. */
+      reading_value?: number | null;
       notes?: string | null;
     }) => {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id || null;
+
+      // Store the photo in the mileage-photos bucket (not as text in the row), like portal uploads.
+      let photoUrl = sub.photo_url;
+      let imagePath: string | null = null;
+      const m = /^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i.exec(sub.photo_url || "");
+      if (m) {
+        try {
+          const bin = atob(m[2]);
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          const ext = /png/i.test(m[1]) ? "png" : /webp/i.test(m[1]) ? "webp" : "jpg";
+          const path = `${sub.driver_id || "staff"}/${Date.now()}.${ext}`;
+          const { error: upErr } = await supabase.storage
+            .from("mileage-photos")
+            .upload(path, bytes, { contentType: m[1].toLowerCase(), upsert: false });
+          if (!upErr) {
+            imagePath = path;
+            photoUrl = supabase.storage.from("mileage-photos").getPublicUrl(path).data.publicUrl;
+          } else {
+            console.warn("[fleet-data] odometer photo upload failed, keeping it inline:", upErr.message);
+          }
+        } catch (err) {
+          console.warn("[fleet-data] odometer photo upload failed, keeping it inline:", err);
+        }
+      }
+
       const newSub: MileageSubmission = {
         id: crypto.randomUUID(),
         driver_id: sub.driver_id ?? null,
         driver_name: sub.driver_name,
         registration: sub.registration,
-        photo_url: sub.photo_url,
+        photo_url: photoUrl,
         ocr_mileage: sub.ocr_mileage ?? null,
         ocr_confidence: sub.ocr_confidence ?? "low",
         status: "pending",
         submitted_at: new Date().toISOString(),
         notes: sub.notes ?? null,
-      };
+        reading_value: sub.reading_value ?? null,
+      } as MileageSubmission;
 
       setMileageSubmissions((prev) => [newSub, ...prev]);
 
-      const { data: userData } = await supabase.auth.getUser();
-      const userId = userData.user?.id || null;
-
-      await supabase.from("mileage_submissions").insert({
+      const base = {
         ...(userId ? { user_id: userId } : {}),
         driver_id: sub.driver_id || null,
         driver_name: sub.driver_name,
         registration: sub.registration,
-        photo_url: sub.photo_url,
+        photo_url: photoUrl,
         ocr_mileage: sub.ocr_mileage || null,
         ocr_confidence: sub.ocr_confidence || "low",
         status: "pending",
         notes: sub.notes || null,
-      } as any);
+      };
+      const extra = {
+        ...(imagePath ? { image_path: imagePath } : {}),
+        ...(sub.reading_value ? { reading_value: sub.reading_value } : {}),
+      };
+      let { error } = await (supabase.from("mileage_submissions") as any).insert({ ...base, ...extra });
+      if (error && /column|schema cache/i.test(error.message)) {
+        ({ error } = await (supabase.from("mileage_submissions") as any).insert({
+          ...base,
+          notes: [sub.notes, sub.reading_value ? `Reading entered: ${sub.reading_value.toLocaleString("en-GB")} miles` : null]
+            .filter(Boolean)
+            .join(" · ") || null,
+        }));
+      }
+      if (error) throw new Error(error.message);
 
       await refresh();
       return newSub;
@@ -1446,6 +1493,42 @@ export function useFleetData() {
     [drivers, refresh],
   );
 
+  /** "Paid" pop-up: clears what is owed, records rent paid ahead and deposit paid with it. */
+  const settleRent = useCallback(
+    async (driverId: string, opts: { totalPaid?: number | null; depositPaid?: number | null }) => {
+      const before = drivers.find((item) => item.id === driverId);
+      const { settleRentFn } = await import("@/lib/rent.functions");
+      const res = await settleRentFn({ data: { driverId, totalPaid: opts.totalPaid ?? null } });
+      if (!res.ok) throw new Error(res.error || "Could not record the payment");
+      if (opts.depositPaid && opts.depositPaid > 0) {
+        try {
+          await addDepositPayment(driverId, opts.depositPaid, "Paid with rent", new Date().toISOString().slice(0, 10));
+        } catch (err) {
+          throw new Error(`Rent recorded, but the deposit payment failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+      await logAuditEvent({
+        actionType: "rent_updated",
+        targetTable: "driver_tracks",
+        targetId: driverId,
+        details: {
+          driver_name: before?.driver_name ?? "Driver",
+          reg: before?.registration ?? null,
+          previous_status: before?.rent_status ?? null,
+          new_status: "paid",
+          previous_balance_due: before?.balance_due ?? null,
+          new_balance_due: res.balance,
+          weeks_paid: res.weeksPaid,
+          advance_weeks: res.advanceWeeks,
+          deposit_paid_with_rent: opts.depositPaid ?? 0,
+        },
+      });
+      await refresh();
+      return res;
+    },
+    [drivers, refresh, addDepositPayment],
+  );
+
   /** Marks / unmarks one specific rent week (used by the driver's rent history). */
   const setRentWeekPaid = useCallback(
     async (driverId: string, dueDate: string, paid: boolean) => {
@@ -1606,7 +1689,7 @@ export function useFleetData() {
         .eq("id", id)
         .maybeSingle();
 
-      // Soft-delete driver track retaining auth_user_id for 48-hour recovery window
+      // Soft-delete: restorable from the Audit Log for 30 days, then purged by the daily job
       await supabase
         .from("driver_tracks")
         .update({
@@ -1631,7 +1714,7 @@ export function useFleetData() {
           driver_name: target?.driver_name ?? track?.driver_name ?? null,
           reg: target?.registration ?? null,
           auth_user_id: target?.auth_user_id ?? track?.auth_user_id ?? null,
-          recovery_window: "48h",
+          recovery_window: "30 days",
         },
       });
 
@@ -1690,6 +1773,7 @@ export function useFleetData() {
     addDepositPayment,
     toggleDepositPaidStatus,
     toggleRentStatus,
+    settleRent,
     setRentWeekPaid,
     addDriverCharge,
     sendDriverReminder,

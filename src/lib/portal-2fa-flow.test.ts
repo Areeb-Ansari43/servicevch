@@ -4,6 +4,8 @@ import path from "path";
 import sharp from "sharp";
 import { VCH_HEADER_LOGO_URL, VCH_FOOTER_LOGO_URL, render2FATemplate } from "@/lib/email-templates";
 import { hashEmailForAudit } from "@/lib/portal-auth-logger";
+// The portal is switched off by default (src/lib/features.ts); these tests exercise it switched on.
+process.env.PORTAL_ENABLED = "true";
 
 describe("2FA Full Flow & Image Assets Verification", () => {
   test("Logo aspect ratio in rendered HTML matches real cropped image ratio within 2%", async () => {

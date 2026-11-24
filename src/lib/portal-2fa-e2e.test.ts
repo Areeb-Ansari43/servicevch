@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import fs from "fs";
 import path from "path";
+// The portal is switched off by default (src/lib/features.ts); these tests exercise it switched on.
+process.env.PORTAL_ENABLED = "true";
 
 /**
  * End-to-end (on paper) driver-portal 2FA flow through the CRM endpoints, with Supabase,
