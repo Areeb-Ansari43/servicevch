@@ -556,6 +556,7 @@ INSERT INTO sheet_jobs VALUES
 
 -- 0. Cars on the mileage sheet that are not in the CRM yet: add them
 --    (make/model from the sheet, year from the plate, weekly rent from the RENT column).
+--    They are Available unless a current driver on the Drivers page has them.
 ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS weekly_price numeric(10,2);
 CREATE TEMP TABLE sheet_new (reg text, make text, model text, year int, fuel text, rent numeric, status text) ON COMMIT DROP;
 INSERT INTO sheet_new VALUES
@@ -662,6 +663,15 @@ INSERT INTO sheet_new VALUES
   ('MV68OHB', 'Mercedes-Benz', 'E220', 2018, 'Diesel', 1.04, 'rented'),
   ('OU68SXP', 'Mercedes-Benz', 'E220', 2018, 'Diesel', 330.0, 'available'),
   ('YF22UXA', 'MG', 'MG5', 2022, 'Electric', 230.0, 'available');
+-- In case an earlier run of this file marked an added car Rented without a current driver
+UPDATE public.vehicles v SET status = 'available'
+WHERE v.notes = 'Added from the mileage sheet.' AND v.status = 'rented'
+  AND NOT EXISTS (
+    SELECT 1 FROM public.driver_tracks d
+    WHERE (d.vehicle_id = v.id OR upper(regexp_replace(coalesce(d.reg, ''), '\s+', '', 'g')) = upper(regexp_replace(v.reg, '\s+', '', 'g')))
+      AND coalesce(d.active, true) AND d.deleted_at IS NULL
+  );
+
 -- In case an earlier run saved them as "Model not set"
 UPDATE public.vehicles SET model = CASE WHEN make = 'Hyundai' THEN 'Ioniq' ELSE 'E220' END,
   fuel_type = CASE WHEN make = 'Hyundai' THEN 'Hybrid' ELSE 'Diesel' END
@@ -670,7 +680,14 @@ WHERE model = 'Model not set' AND make IN ('Hyundai', 'Mercedes-Benz');
 WITH owner AS (SELECT user_id FROM public.vehicles ORDER BY created_at LIMIT 1),
 added AS (
   INSERT INTO public.vehicles (user_id, reg, make, model, year, fuel_type, current_mileage, status, weekly_price, notes)
-  SELECT (SELECT user_id FROM owner), n.reg, n.make, n.model, n.year, n.fuel, 0, n.status, n.rent,
+  -- Rented only if a current driver on the Drivers page has this car; otherwise Available.
+  SELECT (SELECT user_id FROM owner), n.reg, n.make, n.model, n.year, n.fuel, 0,
+         CASE WHEN EXISTS (
+           SELECT 1 FROM public.driver_tracks d
+           WHERE upper(regexp_replace(coalesce(d.reg, ''), '\s+', '', 'g')) = n.reg
+             AND coalesce(d.active, true) AND d.deleted_at IS NULL
+         ) THEN 'rented' ELSE 'available' END,
+         n.rent,
          'Added from the mileage sheet.'
   FROM sheet_new n
   WHERE NOT EXISTS (SELECT 1 FROM public.vehicles v WHERE upper(regexp_replace(v.reg, '\s+', '', 'g')) = n.reg)
