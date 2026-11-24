@@ -259,7 +259,7 @@ function LoginPage() {
   };
 
   return (
-    <div className="relative h-dvh min-h-dvh w-full overflow-hidden font-sans bg-[#07090D] text-white flex flex-col justify-between select-none">
+    <div className="vch-login relative min-h-dvh w-full overflow-x-hidden font-sans bg-[#07090D] text-white flex flex-col justify-between">
       {/* CSS Animations, Responsive Background Image & Micro-interactions */}
       <style>{`
         @keyframes shake {
@@ -309,12 +309,69 @@ function LoginPage() {
           }
         }
 
+        /* Entrance: each part of the card rises in, one after another */
+        @keyframes vchRise {
+          from { opacity: 0; transform: translateY(14px); filter: blur(4px); }
+          to { opacity: 1; transform: none; filter: none; }
+        }
+        .vch-rise { animation: vchRise 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards; animation-delay: calc(var(--i, 0) * 70ms + 120ms); }
+
+        /* Background car: a very slow drift / zoom */
+        @keyframes vchKen { from { transform: scale(1.04) translate3d(0,0,0); } to { transform: scale(1.12) translate3d(-1.5%, -1%, 0); } }
+        .vch-ken { animation: vchKen 26s ease-in-out infinite alternate; will-change: transform; }
+
+        /* Soft orange glow drifting behind the card */
+        @keyframes vchOrb {
+          0% { transform: translate3d(-10%, -6%, 0) scale(1); opacity: .55; }
+          50% { transform: translate3d(8%, 6%, 0) scale(1.15); opacity: .8; }
+          100% { transform: translate3d(-10%, -6%, 0) scale(1); opacity: .55; }
+        }
+        .vch-orb { animation: vchOrb 14s ease-in-out infinite; }
+
+        /* Logo floats gently */
+        @keyframes vchFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+        .vch-float { animation: vchFloat 5s ease-in-out infinite; }
+
+        /* Sheen across the Continue button */
+        @keyframes vchSheen { 0% { transform: translateX(-120%) skewX(-20deg); } 60%, 100% { transform: translateX(260%) skewX(-20deg); } }
+        .vch-sheen::after {
+          content: ""; position: absolute; inset: 0 auto 0 0; width: 40%;
+          background: linear-gradient(90deg, transparent, rgba(255,255,255,.35), transparent);
+          animation: vchSheen 3.6s ease-in-out 1.2s infinite;
+        }
+
+        /* Card border catches the light */
+        @property --vch-angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+        @keyframes vchSpin { to { --vch-angle: 360deg; } }
+        .vch-card-ring { position: relative; isolation: isolate; }
+        .vch-card-ring::before {
+          content: ""; position: absolute; inset: -1.5px; border-radius: inherit; z-index: -1; padding: 1.5px;
+          background: conic-gradient(from var(--vch-angle), rgba(255,106,0,0) 0deg, rgba(255,138,61,.75) 60deg, rgba(255,106,0,0) 140deg, rgba(255,255,255,.08) 220deg, rgba(255,106,0,0) 360deg);
+          -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+          animation: vchSpin 7s linear infinite;
+        }
+
+        /* Inputs glow softly when focused */
+        .vch-field:focus { box-shadow: 0 0 0 4px rgba(255,106,0,.14); }
+
+        /* OTP boxes pop as they fill */
+        @keyframes vchPop { 0% { transform: scale(.9); } 60% { transform: scale(1.06); } 100% { transform: scale(1); } }
+        .vch-otp-filled { animation: vchPop .22s ease-out; border-color: rgba(255,106,0,.7) !important; }
+
+        /* Short screens (phones on their side): tighter, scrollable */
+        @media (max-height: 560px) {
+          .vch-login .vch-hide-short { display: none !important; }
+          .vch-login .vch-card { padding: 16px 20px !important; }
+        }
+
         @media (prefers-reduced-motion: reduce) {
-          .animate-shake, .animate-light-sweep, .animate-card-spring {
+          .animate-shake, .animate-light-sweep, .animate-card-spring, .vch-rise, .vch-ken, .vch-orb, .vch-float, .vch-otp-filled {
             animation: none !important;
             transform: none !important;
             opacity: 1 !important;
+            filter: none !important;
           }
+          .vch-sheen::after, .vch-card-ring::before { animation: none !important; }
         }
       `}</style>
 
@@ -348,7 +405,8 @@ function LoginPage() {
 
       {/* Full-Viewport Background Car Image (fixed inset-0 behind everything) */}
       <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
-        <div className="vch-login-bg-car w-full h-full" />
+        <div className="vch-login-bg-car vch-ken w-full h-full" />
+        <div className="vch-orb absolute left-1/2 top-1/2 h-[70vmin] w-[70vmin] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(255,106,0,0.22),transparent_65%)] blur-2xl" />
 
         {/* Subtle dark overlay (35% opacity) to keep text readable + right/top dark gradients */}
         <div className="absolute inset-0 bg-[#07090D]/35" />
@@ -357,28 +415,31 @@ function LoginPage() {
       </div>
 
       {/* Top Header Bar */}
-      <header className="relative z-10 shrink-0 flex items-center justify-between px-6 py-[1.5vh] lg:px-12">
-        <div className="flex items-center gap-3">
+      <header className="relative z-10 shrink-0 flex items-center justify-between px-4 pt-[max(12px,env(safe-area-inset-top))] pb-2 sm:px-6 lg:px-12">
+        <div className="hidden lg:flex items-center gap-3">
           <BrandLogo size={56} />
         </div>
-        <div className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-[clamp(11px,1.3vh,13px)] font-medium text-slate-300">Secure environment</span>
+        <div className="ml-auto flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-3 py-1.5 backdrop-blur-md">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60 motion-reduce:hidden" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+          </span>
+          <span className="text-[12px] font-medium text-slate-200">Secure sign-in</span>
         </div>
       </header>
 
       {/* Main Responsive Grid Layout */}
-      <main className="relative z-10 flex-1 min-h-0 my-auto grid w-full px-6 lg:px-12 grid-cols-1 lg:grid-cols-[1fr_minmax(460px,32vw)_1fr] gap-4 lg:gap-8 items-center">
+      <main className="relative z-10 flex-1 grid w-full px-4 py-2 sm:py-3 sm:px-6 lg:px-12 grid-cols-1 lg:grid-cols-[1fr_minmax(440px,32vw)_1fr] gap-4 lg:gap-8 items-center">
         {/* Left Column (Desktop) - Aligned with Header Logo */}
         <div className="hidden lg:flex flex-col justify-between h-full py-2 min-h-0">
-          <div className="space-y-[1.5vh] my-auto">
+          <div className="space-y-[1.5vh] my-auto vch-rise" style={{ ["--i" as any]: 1 }}>
             <span className="text-[clamp(10px,1.2vh,12px)] font-bold tracking-[0.2em] text-[#ff6a00] uppercase block">
               DRIVE ▪ MANAGE ▪ GROW
             </span>
-            <h1 className="text-[clamp(32px,3.8vh,50px)] font-extrabold tracking-tight leading-[1.12] text-white">
+            <p className="text-[clamp(32px,3.8vh,50px)] font-extrabold tracking-tight leading-[1.12] text-white">
               Smarter fleet <br />
               <span className="text-[#ff6a00]">management.</span>
-            </h1>
+            </p>
             <p className="text-slate-300 text-[clamp(12px,1.5vh,15px)] leading-relaxed max-w-sm">
               Everything you need to keep your fleet moving, in one place.
             </p>
@@ -393,39 +454,49 @@ function LoginPage() {
         {/* Center Main Card Column */}
         <div className="flex justify-center items-center w-full min-h-0 max-h-full py-1">
           <div
-            className={`w-full max-w-[640px] sm:min-w-[460px] rounded-[20px] border-[1.5px] border-white/16 bg-[#0E131B]/90 p-[clamp(16px,2.5vh,36px)] shadow-2xl space-y-[clamp(10px,1.8vh,22px)] max-h-full overflow-y-auto sm:overflow-visible animate-card-spring transition-all duration-300 ${
+            className={`vch-card vch-card-ring w-full max-w-[460px] rounded-[24px] border border-white/10 bg-[#0E131B]/80 backdrop-blur-xl p-5 sm:p-7 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.8)] space-y-4 sm:space-y-5 animate-card-spring transition-all duration-300 ${
               isRouting ? "opacity-0 scale-95" : "opacity-100"
             }`}
           >
-            {/* Logo Mark and Title inside Card */}
-            <div className="flex flex-col items-center text-center space-y-[0.5vh]">
-              <BrandLogo size={96} className="mx-auto" />
-              <h2 className="text-[clamp(22px,3vh,30px)] font-bold text-white tracking-tight leading-tight pt-1">
-                Virtual Car Hire
-              </h2>
-              <p className="text-[clamp(11px,1.4vh,13px)] text-slate-400 font-medium">Fleet Operations Platform</p>
+            {/* Logo and title */}
+            <div className="flex flex-col items-center text-center vch-rise" style={{ ["--i" as any]: 0 }}>
+              <div className="vch-float -my-3 sm:-my-2">
+                <BrandLogo size={76} className="mx-auto" />
+              </div>
+              <h1 className="mt-1 text-[24px] sm:text-[28px] font-bold text-white tracking-tight leading-tight">
+                {stage === "otp" ? "Check your email" : "Welcome back"}
+              </h1>
+              <p className="mt-1 text-[13px] text-slate-400 font-medium">
+                {stage === "otp" ? "One more step to keep your fleet secure" : "Sign in to Fleet Operations"}
+              </p>
             </div>
 
-            {info && (
-              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-[clamp(10px,1.3vh,12px)] font-medium text-emerald-200">
+            {info && stage === "creds" && (
+              <div role="status" className="vch-rise rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-[13px] font-medium text-emerald-200">
                 {info}
               </div>
             )}
 
             {stage === "creds" ? (
-              <form onSubmit={submitCreds} className={`space-y-[clamp(10px,1.6vh,20px)] ${isShaking ? "animate-shake" : ""}`}>
+              <form onSubmit={submitCreds} noValidate className={`space-y-3.5 sm:space-y-4 ${isShaking ? "animate-shake" : ""}`}>
                 {/* Email Field */}
-                <div className="space-y-[0.5vh]">
-                  <label className="block text-[clamp(11px,1.4vh,13px)] font-semibold text-white">Email address</label>
+                <div className="space-y-1.5 vch-rise" style={{ ["--i" as any]: 1 }}>
+                  <label htmlFor="login-email" className="block text-[13px] font-semibold text-white">Email address</label>
                   <div className="relative">
                     <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <input
+                      id="login-email"
                       type="email"
+                      inputMode="email"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="areeb@fa-ibi.co.uk"
-                      className="w-full h-[clamp(40px,5vh,52px)] rounded-xl border border-white/15 bg-[#141A24] pl-11 pr-10 text-xs sm:text-sm font-medium text-white placeholder-slate-500 focus:border-[#ff6a00] focus:outline-none focus:ring-1 focus:ring-[#ff6a00] transition-colors"
-                      autoComplete="email"
+                      placeholder="you@company.co.uk"
+                      aria-invalid={Boolean(error) && !email.trim()}
+                      className="vch-field w-full h-[52px] rounded-xl border border-white/15 bg-[#141A24] pl-11 pr-10 text-[16px] font-medium text-white placeholder-slate-500 focus:border-[#ff6a00] focus:outline-none transition-[border-color,box-shadow] duration-200"
+                      autoComplete="username email"
                     />
                     {isValidEmail && (
                       <div className="absolute right-4 top-1/2 -translate-y-1/2 text-emerald-400 animate-in fade-in zoom-in duration-200">
@@ -436,22 +507,23 @@ function LoginPage() {
                 </div>
 
                 {/* Password Field */}
-                <div className="space-y-[0.5vh]">
-                  <label className="block text-[clamp(11px,1.4vh,13px)] font-semibold text-white">Password</label>
+                <div className="space-y-1.5 vch-rise" style={{ ["--i" as any]: 2 }}>
+                  <label htmlFor="login-password" className="block text-[13px] font-semibold text-white">Password</label>
                   <div className="relative">
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <input
+                      id="login-password"
                       type={showPassword ? "text" : "password"}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
-                      className="w-full h-[clamp(40px,5vh,52px)] rounded-xl border border-white/15 bg-[#141A24] pl-11 pr-11 text-xs sm:text-sm font-medium text-white placeholder-slate-500 focus:border-[#ff6a00] focus:outline-none focus:ring-1 focus:ring-[#ff6a00] transition-colors"
+                      placeholder="Your password"
+                      className="vch-field w-full h-[52px] rounded-xl border border-white/15 bg-[#141A24] pl-11 pr-14 text-[16px] font-medium text-white placeholder-slate-500 focus:border-[#ff6a00] focus:outline-none transition-[border-color,box-shadow] duration-200"
                       autoComplete="current-password"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors p-1"
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 grid h-11 w-11 place-items-center rounded-lg text-slate-400 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#ff6a00] transition-colors"
                       aria-label={showPassword ? "Hide password" : "Show password"}
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -460,17 +532,17 @@ function LoginPage() {
                 </div>
 
                 {/* Remember Me & Forgot Password */}
-                <div className="flex items-center justify-between text-[clamp(11px,1.4vh,13px)] pt-0.5">
-                  <label className="flex items-center gap-2 cursor-pointer group">
+                <div className="flex items-center justify-between gap-3 text-[13px] vch-rise" style={{ ["--i" as any]: 3 }}>
+                  <label className="flex min-h-[44px] items-center gap-2 cursor-pointer group">
                     <div className="relative flex items-center justify-center">
                       <input
                         type="checkbox"
                         checked={rememberMe}
                         onChange={(e) => setRememberMe(e.target.checked)}
-                        className="sr-only"
+                        className="peer sr-only"
                       />
                       <div
-                        className={`h-4 w-4 rounded border transition-colors flex items-center justify-center ${
+                        className={`h-5 w-5 rounded-md border peer-focus-visible:ring-2 peer-focus-visible:ring-[#ff6a00] transition-colors flex items-center justify-center ${
                           rememberMe
                             ? "bg-[#ff6a00] border-[#ff6a00]"
                             : "bg-[#141A24] border-white/20 group-hover:border-white/40"
@@ -488,7 +560,7 @@ function LoginPage() {
                       setForgotEmail(email);
                       setIsForgotModalOpen(true);
                     }}
-                    className="text-[#ff6a00] underline hover:text-[#ff8a3d] font-semibold transition-colors cursor-pointer"
+                    className="min-h-[44px] px-1 text-[#ff8a3d] underline-offset-4 hover:underline hover:text-[#ffa366] font-semibold transition-colors cursor-pointer"
                   >
                     Forgot password?
                   </button>
@@ -496,7 +568,7 @@ function LoginPage() {
 
                 {/* Inline Error Message */}
                 {error && (
-                  <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-2.5 text-xs font-medium text-red-200">
+                  <div role="alert" className="vch-rise rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-[13px] font-medium text-red-200">
                     {error}
                   </div>
                 )}
@@ -505,7 +577,8 @@ function LoginPage() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="group relative w-full h-[clamp(40px,5vh,52px)] rounded-xl bg-gradient-to-r from-[#ff6a00] to-[#ff8a3d] text-[clamp(13px,1.6vh,16px)] font-bold text-white shadow-lg shadow-[#ff6a00]/20 hover:from-[#f05f00] hover:to-[#ff7a1a] active:scale-[0.98] transition-all disabled:opacity-60 flex items-center justify-center gap-2 cursor-pointer overflow-hidden"
+                  style={{ ["--i" as any]: 4 }}
+                  className="vch-rise vch-sheen group relative w-full h-[52px] rounded-xl bg-gradient-to-r from-[#ff6a00] to-[#ff8a3d] text-[16px] font-bold text-white shadow-lg shadow-[#ff6a00]/25 hover:shadow-[#ff6a00]/40 hover:from-[#f05f00] hover:to-[#ff7a1a] active:scale-[0.98] transition-all disabled:opacity-60 flex items-center justify-center gap-2 cursor-pointer overflow-hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                 >
                   {loading ? (
                     <div className="flex items-center gap-2">
@@ -521,22 +594,21 @@ function LoginPage() {
                 </button>
 
                 {/* Support Section with WhatsApp Link */}
-                <div className="space-y-[1vh] pt-1">
-                  <div className="relative flex items-center justify-center">
-                    <div className="w-full border-t border-white/10" />
-                    <span className="absolute bg-[#0E131B] px-3 text-[clamp(10px,1.2vh,12px)] text-slate-400 font-medium">
-                      Need help?
-                    </span>
+                <div className="space-y-3 pt-1 vch-rise" style={{ ["--i" as any]: 5 }}>
+                  <div className="flex items-center gap-3 text-[12px] text-slate-400 font-medium">
+                    <span className="h-px flex-1 bg-white/10" />
+                    Need help?
+                    <span className="h-px flex-1 bg-white/10" />
                   </div>
 
                   <a
                     href="https://wa.me/447721502779?text=Hi%2C%20I%20need%20help%20with%20the%20Virtual%20Car%20Hire%20CRM"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 w-full h-[clamp(36px,4.5vh,44px)] rounded-xl border border-white/10 bg-[#141A24]/60 hover:bg-[#141A24] text-[clamp(11px,1.4vh,13px)] font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer text-center"
+                    className="flex items-center justify-center gap-2 w-full h-12 rounded-xl border border-white/10 bg-[#141A24]/60 hover:bg-[#141A24] hover:border-white/20 text-[14px] font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer text-center"
                   >
-                    <Headphones className="h-3.5 w-3.5 text-[#ff6a00]" />
-                    <span>Contact support</span>
+                    <Headphones className="h-4 w-4 text-[#ff6a00]" />
+                    <span>Contact support on WhatsApp</span>
                   </a>
                 </div>
               </form>
@@ -544,8 +616,8 @@ function LoginPage() {
               /* OTP Verification Stage */
               <div className="space-y-4">
                 {feedback === "success" ? (
-                  <div className="py-6 flex flex-col items-center justify-center space-y-2">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                  <div role="status" className="py-6 flex flex-col items-center justify-center space-y-2 vch-rise">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 vch-otp-filled">
                       <Check className="h-6 w-6" />
                     </div>
                     <h3 className="text-lg font-bold text-white">Welcome back!</h3>
@@ -553,14 +625,19 @@ function LoginPage() {
                   </div>
                 ) : (
                   <>
-                    <div className="text-center space-y-1">
-                      <h3 className="text-base font-bold text-white">Enter 6-Digit Code</h3>
-                      <p className="text-xs text-slate-400">
+                    <div className="text-center space-y-1 vch-rise" style={{ ["--i" as any]: 1 }}>
+                      <h2 className="text-base font-bold text-white">Enter the 6-digit code</h2>
+                      <p className="text-[13px] text-slate-400">
                         {info ?? "We emailed a verification code to your email."}
                       </p>
                     </div>
 
-                    <div className={`flex justify-center gap-2 ${isShaking ? "animate-shake" : ""}`}>
+                    <div
+                      role="group"
+                      aria-label="6-digit verification code"
+                      className={`flex justify-center gap-1.5 sm:gap-2 vch-rise ${isShaking ? "animate-shake" : ""}`}
+                      style={{ ["--i" as any]: 2 }}
+                    >
                       {digits.map((d, i) => (
                         <input
                           key={i}
@@ -571,19 +648,22 @@ function LoginPage() {
                           onChange={(e) => setDigit(i, e.target.value)}
                           onKeyDown={(e) => onKeyDown(i, e)}
                           inputMode="numeric"
+                          pattern="[0-9]*"
+                          autoComplete={i === 0 ? "one-time-code" : "off"}
+                          aria-label={`Digit ${i + 1} of 6`}
                           maxLength={6}
-                          className="h-12 w-10 sm:w-11 rounded-xl border border-white/15 bg-[#141A24] text-center text-lg font-bold text-white focus:border-[#ff6a00] focus:outline-none focus:ring-1 focus:ring-[#ff6a00] transition-colors"
+                          className={`vch-field h-14 w-full max-w-[52px] min-w-0 flex-1 rounded-xl border border-white/15 bg-[#141A24] text-center text-[22px] font-bold text-white focus:border-[#ff6a00] focus:outline-none transition-[border-color,box-shadow] ${d ? "vch-otp-filled" : ""}`}
                         />
                       ))}
                     </div>
 
                     {error && (
-                      <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-2.5 text-center text-xs font-medium text-red-200">
+                      <div role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-center text-[13px] font-medium text-red-200">
                         {error}
                       </div>
                     )}
 
-                    <div className="flex items-center justify-between text-xs pt-1">
+                    <div className="flex items-center justify-between text-[13px] pt-1 vch-rise" style={{ ["--i" as any]: 3 }}>
                       <button
                         type="button"
                         onClick={() => {
@@ -594,7 +674,7 @@ function LoginPage() {
                           setFeedback("none");
                           submittedRef.current = false;
                         }}
-                        className="text-slate-400 hover:text-white font-medium transition-colors cursor-pointer"
+                        className="min-h-[44px] px-1 text-slate-400 hover:text-white font-medium transition-colors cursor-pointer"
                       >
                         ← Different email
                       </button>
@@ -603,7 +683,7 @@ function LoginPage() {
                         type="button"
                         disabled={resendCooldown > 0 || loading}
                         onClick={handleResendCode}
-                        className="text-[#ff6a00] hover:text-[#ff8a3d] disabled:text-slate-500 font-bold transition-colors cursor-pointer"
+                        className="min-h-[44px] px-1 text-[#ff8a3d] hover:text-[#ffa366] disabled:text-slate-500 font-bold transition-colors cursor-pointer"
                       >
                         {resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : "Resend code"}
                       </button>
@@ -616,7 +696,7 @@ function LoginPage() {
         </div>
 
         {/* Right Column (Desktop) */}
-        <div className="hidden lg:flex flex-col justify-center space-y-[2.5vh] pl-4 min-h-0">
+        <div className="hidden lg:flex flex-col justify-center space-y-[2.5vh] pl-4 min-h-0 vch-rise" style={{ ["--i" as any]: 3 }}>
           {/* Feature 1 */}
           <div className="flex items-start gap-3">
             <div className="h-9 w-9 shrink-0 rounded-xl bg-[#141A24] border border-white/10 flex items-center justify-center text-[#ff6a00]">
@@ -659,25 +739,33 @@ function LoginPage() {
       </main>
 
       {/* Footer */}
-      <footer className="relative z-10 shrink-0 px-6 py-[1.2vh] lg:px-12 flex justify-end">
-        <p className="text-[clamp(10px,1.2vh,12px)] font-medium text-slate-400">
+      <footer className="vch-hide-short relative z-10 shrink-0 px-4 pb-[max(10px,env(safe-area-inset-bottom))] pt-0 sm:pt-2 sm:px-6 lg:px-12 flex justify-center lg:justify-end">
+        <p className="text-[11px] sm:text-[12px] font-medium text-slate-400 text-center">
           © 2026 Virtual Car Hire · Fleet Operations Platform
         </p>
       </footer>
 
       {/* Forgot Password Modal */}
       {isForgotModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setIsForgotModalOpen(false)}
+          onKeyDown={(e) => e.key === "Escape" && setIsForgotModalOpen(false)}
+        >
           <div
-            className="w-full sm:max-w-md rounded-t-[20px] sm:rounded-[20px] border border-white/16 bg-[#0E131B] p-6 md:p-8 shadow-2xl space-y-6 animate-in slide-in-from-bottom sm:zoom-in-95 duration-200"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reset-title"
+            className="w-full sm:max-w-md rounded-t-[24px] sm:rounded-[24px] border border-white/15 bg-[#0E131B] p-6 pb-[max(24px,env(safe-area-inset-bottom))] md:p-8 shadow-2xl space-y-6 animate-in slide-in-from-bottom sm:zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h3 className="text-xl font-bold text-white">Reset Password</h3>
+              <h3 id="reset-title" className="text-xl font-bold text-white">Reset password</h3>
               <button
                 type="button"
                 onClick={() => setIsForgotModalOpen(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/5 transition-colors"
+                aria-label="Close"
+                className="grid h-11 w-11 place-items-center text-slate-400 hover:text-white rounded-lg hover:bg-white/5 transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -689,16 +777,20 @@ function LoginPage() {
 
             <form onSubmit={handleSendResetLink} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-white">Email address</label>
+                <label htmlFor="reset-email" className="block text-[13px] font-semibold text-white">Email address</label>
                 <div className="relative">
                   <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                   <input
+                    id="reset-email"
                     type="email"
+                    inputMode="email"
+                    autoComplete="email"
+                    autoFocus
                     value={forgotEmail}
                     onChange={(e) => setForgotEmail(e.target.value)}
-                    placeholder="areeb@fa-ibi.co.uk"
+                    placeholder="you@company.co.uk"
                     required
-                    className="w-full h-12 rounded-xl border border-white/15 bg-[#141A24] pl-10 pr-4 text-sm text-white placeholder-slate-500 focus:border-[#ff6a00] focus:outline-none focus:ring-1 focus:ring-[#ff6a00]"
+                    className="vch-field w-full h-12 rounded-xl border border-white/15 bg-[#141A24] pl-10 pr-4 text-[16px] text-white placeholder-slate-500 focus:border-[#ff6a00] focus:outline-none focus:ring-1 focus:ring-[#ff6a00]"
                   />
                 </div>
               </div>
