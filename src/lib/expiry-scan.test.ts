@@ -225,6 +225,17 @@ describe("rent due tomorrow", () => {
       },
     ];
 
+    // Default: drivers are not emailed, only admin gets the summary.
+    const off = await runExpiryScan({ trigger: "manual", force: true });
+    expect(off.rentDueItems).toBe(1);
+    expect(sent.filter((p) => p.to[0] === "sam@example.com").length).toBe(0);
+    expect(sent.filter((p) => p.to[0] === "admin@fa-ibi.co.uk").length).toBe(1);
+
+    // With driver emails switched back on, the driver is emailed too.
+    sent = [];
+    db.inserts.length = 0;
+    db.tables.driver_notifications = [];
+    process.env.DRIVER_EMAILS_ENABLED = "true";
     const res = await runExpiryScan({ trigger: "manual", force: true });
     expect(res.rentDueItems).toBe(1);
 
@@ -246,6 +257,7 @@ describe("rent due tomorrow", () => {
     sent = [];
     await runExpiryScan({ trigger: "manual", force: true });
     expect(sent.filter((p) => p.to[0] === "sam@example.com").length).toBe(0);
+    delete process.env.DRIVER_EMAILS_ENABLED;
   });
 });
 

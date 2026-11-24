@@ -29,6 +29,8 @@ export type Vehicle = {
   weekly_price?: number | null;
   /** Monthly mileage allowance saved on the vehicle. */
   monthly_allowance?: number | null;
+  /** Mileage the next service is due at (from the mileage sheet). */
+  next_service_mileage?: number | null;
 };
 
 export type DriverDocument = {
@@ -198,6 +200,7 @@ const vFromRow = (r: any): Vehicle => ({
   default_deposit: Number(r.default_deposit ?? getVehicleDefaultDeposit(r.make, r.model)),
   weekly_price: r.weekly_price != null ? Number(r.weekly_price) : null,
   monthly_allowance: r.monthly_mileage_allowance != null ? Number(r.monthly_mileage_allowance) : null,
+  next_service_mileage: r.next_service_mileage != null ? Number(r.next_service_mileage) : null,
 });
 
 const sFromRow = (r: any): ServiceRecord => ({
@@ -1495,8 +1498,38 @@ export function useFleetData() {
 
   /** "Paid" pop-up: clears what is owed, records rent paid ahead and deposit paid with it. */
   const settleRent = useCallback(
-    async (driverId: string, opts: { totalPaid?: number | null; depositPaid?: number | null }) => {
+    async (
+      driverId: string,
+      opts: {
+        totalPaid?: number | null;
+        depositPaid?: number | null;
+        extraCharge?: { amount: number; description: string } | null;
+      },
+    ) => {
       const before = drivers.find((item) => item.id === driverId);
+      // Extra charge paid with the rent (e.g. maintenance): added to what is owed, then
+      // settled with the rent below, so it is recorded and marked paid and the balance stays £0.
+      if (opts.extraCharge && opts.extraCharge.amount > 0) {
+        const { data: userData } = await supabase.auth.getUser();
+        const userId = userData.user?.id || null;
+        const { error: chargeErr } = await supabase.from("driver_charges").insert({
+          driver_id: driverId,
+          amount: opts.extraCharge.amount,
+          description: opts.extraCharge.description,
+          ...(userId ? { user_id: userId } : {}),
+        } as any);
+        if (chargeErr) throw new Error(`Could not add the extra charge: ${chargeErr.message}`);
+        const { data: row } = await supabase
+          .from("driver_tracks")
+          .select("balance_due")
+          .eq("id", driverId)
+          .maybeSingle();
+        const { error: balErr } = await supabase
+          .from("driver_tracks")
+          .update({ balance_due: Number((row as any)?.balance_due || 0) + opts.extraCharge.amount } as any)
+          .eq("id", driverId);
+        if (balErr) throw new Error(`Could not add the extra charge: ${balErr.message}`);
+      }
       const { settleRentFn } = await import("@/lib/rent.functions");
       const res = await settleRentFn({ data: { driverId, totalPaid: opts.totalPaid ?? null } });
       if (!res.ok) throw new Error(res.error || "Could not record the payment");
@@ -1521,6 +1554,7 @@ export function useFleetData() {
           weeks_paid: res.weeksPaid,
           advance_weeks: res.advanceWeeks,
           deposit_paid_with_rent: opts.depositPaid ?? 0,
+          extra_charge: opts.extraCharge ?? null,
         },
       });
       await refresh();

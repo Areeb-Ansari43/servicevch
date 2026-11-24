@@ -78,7 +78,11 @@ export function RentPaidDialog({
   onClose,
 }: {
   driver: DriverTrack;
-  onConfirm: (opts: { totalPaid: number | null; depositPaid: number | null }) => Promise<void>;
+  onConfirm: (opts: {
+    totalPaid: number | null;
+    depositPaid: number | null;
+    extraCharge: { amount: number; description: string } | null;
+  }) => Promise<void>;
   onClose: () => void;
 }) {
   const weekly = Number(driver.weekly_rent || 0);
@@ -103,10 +107,15 @@ export function RentPaidDialog({
   const [deposit, setDeposit] = useState(depositOutstanding ? String(depositOutstanding) : "");
   const [advance, setAdvance] = useState(false);
   const [total, setTotal] = useState(String(owed + weekly));
+  const [withExtra, setWithExtra] = useState(false);
+  const [extraAmount, setExtraAmount] = useState("");
+  const [extraDesc, setExtraDesc] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const depositNow = withDeposit ? Math.max(0, Number(deposit) || 0) : 0;
+  const extraNow = withExtra ? Math.max(0, Math.round((Number(extraAmount) || 0) * 100) / 100) : 0;
+  const extraMissing = withExtra && (extraNow <= 0 || !extraDesc.trim());
   const totalPaid = advance ? Math.max(0, Number(total) || 0) : owed;
   const p = useMemo(
     () =>
@@ -123,13 +132,19 @@ export function RentPaidDialog({
     [owed, weekly, anchorDue, advance, totalPaid, depositAgreed, depositPaidSoFar, depositNow],
   );
   const advanceTooSmall = advance && totalPaid < owed;
+  const blocked = advanceTooSmall || extraMissing;
 
   const confirm = async () => {
-    if (advanceTooSmall) return;
+    if (blocked) return;
     setSaving(true);
     setError(null);
     try {
-      await onConfirm({ totalPaid: advance ? totalPaid : null, depositPaid: depositNow || null });
+      await onConfirm({
+        // The extra charge is added to what is owed first, so the rent total covers it too.
+        totalPaid: advance ? totalPaid + extraNow : null,
+        depositPaid: depositNow || null,
+        extraCharge: extraNow > 0 ? { amount: extraNow, description: extraDesc.trim() } : null,
+      });
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not record the payment");
@@ -181,9 +196,15 @@ export function RentPaidDialog({
               <span className="font-semibold text-white">{money(chargesTotal)}</span>
             </div>
           )}
+          {extraNow > 0 && (
+            <div className="mt-1 flex justify-between text-[#8b95a8]">
+              <span className="truncate pr-2">Paid now: {extraDesc.trim() || "extra charge"}</span>
+              <span className="font-semibold text-white">{money(extraNow)}</span>
+            </div>
+          )}
           <div className="mt-2 flex justify-between border-t border-white/10 pt-2 text-sm font-bold text-white">
-            <span>Owed now</span>
-            <span>{money(owed)}</span>
+            <span>{extraNow > 0 ? "Total paid now" : "Owed now"}</span>
+            <span>{money((advance ? totalPaid : owed) + extraNow)}</span>
           </div>
         </div>
 
@@ -231,6 +252,54 @@ export function RentPaidDialog({
                   No deposit amount is set for this driver yet.
                 </p>
               )}
+            </div>
+          )}
+        </div>
+
+        {/* Extra charges paid with this payment (e.g. maintenance) */}
+        <div className="mt-4 space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm font-semibold text-white">
+              Does this payment have any other extra charges?
+            </span>
+            <YesNo name="Extra charges with this payment" value={withExtra} onChange={setWithExtra} />
+          </div>
+          {withExtra && (
+            <div className="vch-enter grid gap-2 rounded-xl border border-white/10 bg-black/20 p-3">
+              <div>
+                <label className="text-xs text-[#8b95a8]" htmlFor="extra-amount">
+                  Amount
+                </label>
+                <div className="mt-1 flex items-center gap-2">
+                  <span className="text-sm font-bold text-white">£</span>
+                  <input
+                    id="extra-amount"
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    value={extraAmount}
+                    onChange={(e) => setExtraAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+                    className="w-full rounded-lg border border-white/15 bg-[#142131] px-3 py-2 text-sm text-white focus:border-[#ff6a00] focus:outline-none"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-[#8b95a8]" htmlFor="extra-desc">
+                  What is it for?
+                </label>
+                <input
+                  id="extra-desc"
+                  placeholder="e.g. Maintenance, tyre replacement, PCN"
+                  value={extraDesc}
+                  maxLength={200}
+                  onChange={(e) => setExtraDesc(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-white/15 bg-[#142131] px-3 py-2 text-sm text-white focus:border-[#ff6a00] focus:outline-none"
+                />
+              </div>
+              <p className={`text-xs ${extraMissing ? "text-amber-200" : "text-[#8b95a8]"}`}>
+                {extraMissing
+                  ? "Add the amount and a short description."
+                  : "Recorded as a charge on the driver's account and marked as paid."}
+              </p>
             </div>
           )}
         </div>
@@ -311,7 +380,7 @@ export function RentPaidDialog({
           </button>
           <button
             type="button"
-            disabled={saving || advanceTooSmall}
+            disabled={saving || blocked}
             onClick={confirm}
             className="vch-press inline-flex items-center gap-1.5 rounded-lg bg-[#ff6a00] px-4 py-2 text-xs font-bold text-white hover:bg-[#e05d00] disabled:opacity-50"
           >

@@ -61,16 +61,21 @@ export function useLeadsData() {
       const timeB = new Date(b.last_message_at || b.created_at).getTime();
       return timeB - timeA;
     });
-    setLeads(fetchedLeads);
-    setAccidents((aRes.data ?? []) as AccidentCase[]);
+    const same = (x: unknown[], y: unknown[]) => JSON.stringify(x) === JSON.stringify(y);
+    setLeads((prev) => (same(prev, fetchedLeads) ? prev : fetchedLeads));
+    setAccidents((prev) => {
+      const next = (aRes.data ?? []) as AccidentCase[];
+      return same(prev, next) ? prev : next;
+    });
     setLoading(false);
   }, []);
 
   useEffect(() => {
     void refresh();
 
+    // Unique channel name: two screens using this hook must not share (and close) one channel.
     const channel = supabase
-      .channel("crm-data-sync")
+      .channel(`crm-leads-sync-${Math.random().toString(36).slice(2, 8)}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "whatsapp_leads" },
@@ -81,13 +86,31 @@ export function useLeadsData() {
         { event: "*", schema: "public", table: "accident_cases" },
         () => void refresh(),
       )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages" },
+        () => void refresh(),
+      )
       .subscribe((status) => {
         if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
           console.warn(`[LeadsData] Realtime sync status: ${status}`);
         }
       });
 
+    // Fallback when realtime isn't enabled for these tables: check every 8s while the tab is
+    // visible, and as soon as it comes back into view. New messages show without pressing Refresh.
+    const poll = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      void refresh();
+    };
+    const interval = setInterval(poll, 8000);
+    window.addEventListener("focus", poll);
+    document.addEventListener("visibilitychange", poll);
+
     return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", poll);
+      document.removeEventListener("visibilitychange", poll);
       void supabase.removeChannel(channel);
     };
   }, [refresh]);
