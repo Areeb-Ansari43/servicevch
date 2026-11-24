@@ -118,6 +118,7 @@ describe("reader (Gemini faked)", () => {
     const r = await readDrivingLicence(img);
     expect(sentBody.contents[0].parts[1].inlineData.mimeType).toBe("image/jpeg");
     expect(sentBody.generationConfig.temperature).toBe(0);
+    expect(sentBody.generationConfig.thinkingConfig).toEqual({ thinkingBudget: 0 }); // fast: no thinking
     expect(r.licenceNumber.value).toBe("MORGA753116SM9IJ");
   });
   it("tries the second model when the first fails", async () => {

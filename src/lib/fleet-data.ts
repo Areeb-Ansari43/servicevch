@@ -1493,6 +1493,42 @@ export function useFleetData() {
     [drivers, refresh],
   );
 
+  /** "Paid" pop-up: clears what is owed, records rent paid ahead and deposit paid with it. */
+  const settleRent = useCallback(
+    async (driverId: string, opts: { totalPaid?: number | null; depositPaid?: number | null }) => {
+      const before = drivers.find((item) => item.id === driverId);
+      const { settleRentFn } = await import("@/lib/rent.functions");
+      const res = await settleRentFn({ data: { driverId, totalPaid: opts.totalPaid ?? null } });
+      if (!res.ok) throw new Error(res.error || "Could not record the payment");
+      if (opts.depositPaid && opts.depositPaid > 0) {
+        try {
+          await addDepositPayment(driverId, opts.depositPaid, "Paid with rent", new Date().toISOString().slice(0, 10));
+        } catch (err) {
+          throw new Error(`Rent recorded, but the deposit payment failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+      await logAuditEvent({
+        actionType: "rent_updated",
+        targetTable: "driver_tracks",
+        targetId: driverId,
+        details: {
+          driver_name: before?.driver_name ?? "Driver",
+          reg: before?.registration ?? null,
+          previous_status: before?.rent_status ?? null,
+          new_status: "paid",
+          previous_balance_due: before?.balance_due ?? null,
+          new_balance_due: res.balance,
+          weeks_paid: res.weeksPaid,
+          advance_weeks: res.advanceWeeks,
+          deposit_paid_with_rent: opts.depositPaid ?? 0,
+        },
+      });
+      await refresh();
+      return res;
+    },
+    [drivers, refresh, addDepositPayment],
+  );
+
   /** Marks / unmarks one specific rent week (used by the driver's rent history). */
   const setRentWeekPaid = useCallback(
     async (driverId: string, dueDate: string, paid: boolean) => {
@@ -1737,6 +1773,7 @@ export function useFleetData() {
     addDepositPayment,
     toggleDepositPaidStatus,
     toggleRentStatus,
+    settleRent,
     setRentWeekPaid,
     addDriverCharge,
     sendDriverReminder,

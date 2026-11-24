@@ -1,5 +1,7 @@
 import { describe, test, expect, beforeEach, afterEach, mock } from "bun:test";
 import { sendOtpEmail } from "./request-code";
+// The portal is switched off by default (src/lib/features.ts); these tests exercise it switched on.
+process.env.PORTAL_ENABLED = "true";
 
 describe("Portal Auth Request Code & OTP Delivery", () => {
   const originalFetch = globalThis.fetch;

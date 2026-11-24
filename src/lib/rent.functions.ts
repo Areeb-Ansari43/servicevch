@@ -50,3 +50,21 @@ export const getRentHistoryFn = createServerFn({ method: "POST" })
     const { getRentHistory } = await import("@/lib/rent-cycle.server");
     return getRentHistory(supabaseAdmin, data.driverId);
   });
+
+/** "Paid" pop-up: clears what is owed and records any rent paid in advance. */
+export const settleRentFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z
+      .object({
+        driverId: z.string().min(1),
+        totalPaid: z.number().min(0).max(100000).nullable().optional(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const staffEmail = await resolveStaffEmail(context as any);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { settleRent } = await import("@/lib/rent-cycle.server");
+    return settleRent(supabaseAdmin, data.driverId, { totalPaid: data.totalPaid ?? null, recordedBy: staffEmail });
+  });

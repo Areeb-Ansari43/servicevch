@@ -318,3 +318,112 @@ export async function getRentHistory(db: Db, driverId: string, today: string = l
   entries.sort((a, b) => (a.due_date < b.due_date ? 1 : -1));
   return { ok: true as const, state, entries };
 }
+
+export type SettleResult = {
+  ok: boolean;
+  status: "paid" | "unpaid";
+  /** Balance after the payment: 0, or negative when part of a week was paid ahead (credit). */
+  balance: number;
+  /** Rent weeks marked paid now (owed weeks + current week + weeks ahead). */
+  weeksPaid: string[];
+  /** Weeks covered ahead of time. */
+  advanceWeeks: number;
+  /** Last due date covered: the driver stays Paid until the week after it. */
+  paidThrough: string | null;
+  credit: number;
+  legacy?: boolean;
+  error?: string;
+};
+
+/**
+ * "Paid" pop-up: the driver has paid everything owed.
+ *  - every week still owed (missed weeks and the current week) is marked paid and logged
+ *    with today's date, and the balance (rent + extra charges) goes to 0;
+ *  - `totalPaid` above what was owed pays future weeks in advance (whole weeks are logged as
+ *    paid so they are never charged and the driver stays Paid); a part-week is kept as credit
+ *    (negative balance) and comes off the next week's rent.
+ */
+export async function settleRent(
+  db: Db,
+  driverId: string,
+  opts: { totalPaid?: number | null; recordedBy?: string | null; today?: string } = {},
+): Promise<SettleResult> {
+  const today = opts.today ?? londonToday();
+  const fail = (error: string): SettleResult => ({
+    ok: false, status: "unpaid", balance: 0, weeksPaid: [], advanceWeeks: 0, paidThrough: null, credit: 0, error,
+  });
+  const { data: d, error } = await db.from("driver_tracks").select("*").eq("id", driverId).maybeSingle();
+  if (error || !d) return fail(error?.message || "Driver not found");
+
+  const weekly = Number(d.weekly_rent || 0);
+  const owed = Math.max(0, Number(d.balance_due || 0));
+  const extra = Math.max(0, Number(opts.totalPaid ?? owed) - owed);
+  const logs = await loadLogs(db, driverId);
+  const tracked = !logs.missing && d.rent_paid_for_due_date !== undefined;
+
+  if (!tracked || !weekly || !d.rent_due_day) {
+    // Rent weeks aren't tracked yet: just clear the balance (keep any overpayment as credit).
+    const balance = -extra;
+    await db.from("driver_tracks").update({ rent_status: "paid", balance_due: balance }).eq("id", driverId);
+    return { ok: true, status: "paid", balance, weeksPaid: [], advanceWeeks: 0, paidThrough: null, credit: extra, legacy: !tracked };
+  }
+
+  const state = rentState(d, today);
+  const anchor = state.payableDue; // the current (or first) rent week
+  const now = new Date().toISOString();
+  const by = opts.recordedBy || null;
+  const weeksPaid: string[] = [];
+
+  // Owed weeks: missed weeks become paid (paid late, today).
+  for (const r of logs.rows.filter((r: any) => r.status === "missed")) {
+    const due = String(r.due_date).slice(0, 10);
+    await db.from(LOG).update({ status: "paid", recorded_at: now, recorded_by: by }).eq("driver_id", driverId).eq("due_date", due);
+    weeksPaid.push(due);
+  }
+  // This week
+  const paidSet = new Set(logs.rows.filter((r: any) => r.status === "paid").map((r: any) => String(r.due_date).slice(0, 10)));
+  const upsertPaid = async (due: string) => {
+    const { error: e } = await db.from(LOG).upsert(
+      { driver_id: driverId, due_date: due, status: "paid", amount: weekly, recorded_at: now, recorded_by: by },
+      { onConflict: "driver_id,due_date" },
+    );
+    if (e) throw new Error(e.message);
+    weeksPaid.push(due);
+  };
+  try {
+    if (anchor && !paidSet.has(anchor)) await upsertPaid(anchor);
+    // Weeks ahead: start after the latest week already paid (so an earlier advance isn't double counted)
+    let advanceWeeks = 0;
+    let credit = extra;
+    if (anchor && extra >= weekly) {
+      const alreadyAhead = [...paidSet, ...weeksPaid].filter((x) => x > anchor).sort().at(-1);
+      let due = addDays(alreadyAhead ?? anchor, 7);
+      while (credit + 1e-9 >= weekly) {
+        await upsertPaid(due);
+        credit -= weekly;
+        advanceWeeks++;
+        due = addDays(due, 7);
+      }
+    }
+    credit = Math.round(credit * 100) / 100;
+
+    // Extra charges are paid off too (best effort: older tables have no status column).
+    try {
+      await db.from("driver_charges").update({ status: "paid" }).eq("driver_id", driverId);
+    } catch {
+      /* ignore */
+    }
+
+    const after = await loadLogs(db, driverId);
+    const paidThrough = latestPaid(after.rows);
+    const balance = credit > 0 ? -credit : 0;
+    const chargedThrough = d.rent_charged_through ? String(d.rent_charged_through).slice(0, 10) : state.currentDue;
+    await db
+      .from("driver_tracks")
+      .update({ rent_paid_for_due_date: paidThrough, rent_charged_through: chargedThrough, balance_due: balance, rent_status: "paid" })
+      .eq("id", driverId);
+    return { ok: true, status: "paid", balance, weeksPaid: [...new Set(weeksPaid)].sort(), advanceWeeks, paidThrough, credit };
+  } catch (err) {
+    return fail(err instanceof Error ? err.message : String(err));
+  }
+}

@@ -14,6 +14,8 @@ export const Route = createFileRoute("/api/public/portal-auth/verify-code")({
 });
 
 export async function handleVerifyCode(request: Request): Promise<Response> {
+  const { portalApiEnabled, portalDisabledResponse } = await import("@/lib/features");
+  if (!portalApiEnabled()) return portalDisabledResponse();
   try {
     return await handleVerifyCodeInner(request);
   } catch (err: any) {

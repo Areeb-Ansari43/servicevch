@@ -22,6 +22,8 @@ function escapeLike(value: string): string {
 }
 
 export async function resolvePortalDriver(request: Request): Promise<PortalDriverResult> {
+  const { portalApiEnabled, portalDisabledResponse } = await import("@/lib/features");
+  if (!portalApiEnabled()) return { ok: false, response: portalDisabledResponse() };
   const secret = checkPortalSecret(request);
   if (!secret.ok) {
     return { ok: false, response: jsonResponse({ ok: false, code: secret.code }, secret.status) };

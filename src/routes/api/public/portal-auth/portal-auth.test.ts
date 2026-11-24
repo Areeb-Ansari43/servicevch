@@ -1,5 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import { sendOtpEmail } from "./request-code";
+// The portal is switched off by default (src/lib/features.ts); these tests exercise it switched on.
+process.env.PORTAL_ENABLED = "true";
 
 describe("Portal 2FA Endpoints & Email Content", () => {
   test("sendOtpEmail formats HTML body containing 6-digit code clearly", async () => {

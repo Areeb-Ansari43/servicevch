@@ -132,9 +132,15 @@ export async function parseOdometerPhoto(
           "Content-Type": "application/json",
           "x-goog-api-key": apiKey,
         },
+        signal: AbortSignal.timeout(15000),
         body: JSON.stringify({
           contents: [{ parts: [{ text: ODOMETER_PROMPT }, { inlineData: { mimeType, data: base64Data } }] }],
-          generationConfig: { responseMimeType: "application/json", temperature: 0 },
+          generationConfig: {
+            responseMimeType: "application/json",
+            temperature: 0,
+            // No "thinking" on 2.5 models: much faster, and not needed to read digits
+            ...(/2\.5/.test(model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+          },
         }),
       });
       if (!response.ok) continue;
