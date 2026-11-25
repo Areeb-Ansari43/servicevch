@@ -50,6 +50,33 @@ function titleCase(v: string): string {
     .replace(/\bMc([a-z])/g, (_m, ch) => "Mc" + ch.toUpperCase());
 }
 
+/** Titles printed before the first names on many licences ("MR PETER ZOLTAN"). */
+const TITLES = /^(?:(?:MR|MRS|MS|MISS|MX|DR|SIR|DAME|MASTER|REV|PROF|LORD|LADY)\.?\s+)+/i;
+export function stripTitle(names: string): string {
+  return clean(names).replace(TITLES, "").trim();
+}
+
+/**
+ * Digits 6-11 of a GB number for a date of birth: decade, month (+50 for women), day, year digit.
+ * Returns both forms because the sex isn't printed on the front.
+ */
+export function birthSection(dobIso: string): { male: string; female: string } | null {
+  const m = dobIso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const [y, mo, d] = [m[1], Number(m[2]), m[3]];
+  const make = (month: number) => `${y[2]}${String(month).padStart(2, "0")}${d}${y[3]}`;
+  return { male: make(mo), female: make(mo + 50) };
+}
+
+/** The usual ways the AI rewrites the six digits as a plain date (e.g. 860307 for 07.03.1986). */
+function looksLikePlainDate(section: string, dobIso: string): boolean {
+  const [y, mo, d] = dobIso.split("-");
+  const yy = y.slice(2);
+  return [yy + mo + d, d + mo + yy, mo + d + yy].includes(section);
+}
+
+const diff = (a: string, b: string) => [...a].filter((ch, i) => ch !== b[i]).length;
+
 /** "MORGA753116SM9IJ 35" -> "MORGA753116SM9IJ"; drops spaces and the photocard issue number. */
 export function normaliseLicenceNumber(raw: string): string {
   let v = clean(raw)
@@ -156,9 +183,9 @@ export function assessLicenceRead(
   }
 
   // Name: first names + surname, as people write it.
-  const surname = clean(raw.surname);
-  const firstNames = clean(raw.first_names);
-  const nameRaw = firstNames || surname ? `${firstNames} ${surname}` : clean(raw.full_name);
+  const surname = stripTitle(clean(raw.surname));
+  const firstNames = stripTitle(clean(raw.first_names));
+  const nameRaw = firstNames || surname ? `${firstNames} ${surname}`.trim() : stripTitle(clean(raw.full_name));
   const fullName: LicenceField<string> = nameRaw
     ? { value: titleCase(nameRaw), confidence: firstNames && surname ? "high" : "check" }
     : empty();
@@ -192,8 +219,29 @@ export function assessLicenceRead(
         licenceNumber = { value: num, confidence: "check" };
         warnings.push("The licence number doesn't match the surname. Please check both.");
       } else if (v.birthMatches === false) {
-        licenceNumber = { value: num, confidence: "check" };
-        warnings.push("The licence number doesn't match the date of birth. Please check it.");
+        // The digits after the surname are the date of birth in DVLA order. If what was read is
+        // the plain date (860307) or one or two digits off, rebuild them from the date of birth.
+        const want = dob ? birthSection(dob) : null;
+        const got = num.slice(5, 11);
+        const fix = want
+          ? looksLikePlainDate(got, dob!)
+            ? Number(got[2]) >= 5 && !looksLikePlainDate(want.male, dob!) ? want.female : want.male
+            : diff(got, want.male) <= 2
+              ? want.male
+              : diff(got, want.female) <= 2
+                ? want.female
+                : null
+          : null;
+        if (fix) {
+          const fixed = num.slice(0, 5) + fix + num.slice(11);
+          licenceNumber = { value: fixed, confidence: "check" };
+          warnings.push(
+            `Licence number digits corrected from the date of birth (read ${got}, now ${fix}). Please check it against the licence.`,
+          );
+        } else {
+          licenceNumber = { value: num, confidence: "check" };
+          warnings.push("The licence number doesn't match the date of birth. Please check it.");
+        }
       } else {
         licenceNumber = { value: num, confidence: "high" };
       }

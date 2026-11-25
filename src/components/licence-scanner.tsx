@@ -14,7 +14,7 @@ export type LicenceValues = {
 const MAX_BYTES = 9 * 1024 * 1024;
 
 /** Big phone photos are scaled to 1600px (sharp enough for the small print) to upload fast. */
-function fileToDataUrl(file: File): Promise<string> {
+export function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error("Could not read the file"));
