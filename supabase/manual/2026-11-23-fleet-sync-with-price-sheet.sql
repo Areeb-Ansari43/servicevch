@@ -127,7 +127,7 @@ INSERT INTO fleet_sheet VALUES
   ('YF22UXC', 'MG', 'MG5 EV', 2022, 'Electric', 200, 5000, 500, 6, 'MG 5 EV', ARRAY[]::text[]),
   ('YF22UXY', 'MG', 'MG5 EV', 2022, 'Electric', 200, 5000, 500, 6, 'MG 5 EV', ARRAY[]::text[]),
   ('YG71LCZ', 'MG', 'MG5 EV', 2021, 'Electric', 200, 5000, 500, 6, 'MG 5 EV', ARRAY[]::text[]),
-  ('YH76ZLWF', 'MG', 'S9', 2026, 'Plug-in-Hybrid', 300, 5000, 500, 6, 'MG S9', ARRAY['YH76LWF', 'YH76ZLF', 'YH76ZLW', 'YH76ZWF']::text[]),
+  ('YH76ZWF', 'MG', 'S9', 2026, 'Plug-in-Hybrid', 300, 5000, 500, 6, 'MG S9', ARRAY['YH76ZLWF']::text[]),
   ('MD25AYY', 'Ford', 'Tourneo Custom', 2025, 'Electric', 430, 5000, 500, 6, 'Ford Tourneo Custom', ARRAY[]::text[]),
   ('MD25DDZ', 'Ford', 'Tourneo Custom', 2025, 'Electric', 430, 5000, 500, 6, 'Ford Tourneo Custom', ARRAY[]::text[]),
   ('RX25CME', 'Ford', 'Tourneo Custom', 2025, 'Electric', 430, 5000, 500, 6, 'Ford Tourneo Custom', ARRAY[]::text[]),
