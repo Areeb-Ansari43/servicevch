@@ -41,6 +41,8 @@ export async function geminiImageJson(opts: {
   timeoutMs?: number;
   /** Return true to accept this answer; false asks the next model (e.g. an unsure read). */
   accept?: (json: unknown) => boolean;
+  /** Let the model think first: slower, but more careful (used for a second look). */
+  thinking?: boolean;
 }): Promise<GeminiJsonResult & { fallback?: unknown }> {
   const key = geminiApiKey();
   if (!key) return { ok: false, reason: "no_api_key", tried: [] };
@@ -49,7 +51,7 @@ export async function geminiImageJson(opts: {
   let fallback: { json: unknown; model: string } | null = null;
 
   for (const model of modelsToTry()) {
-    for (const skipThinking of canSkipThinking(model) ? [true, false] : [false]) {
+    for (const skipThinking of canSkipThinking(model) && !opts.thinking ? [true, false] : [false]) {
       tried.push(model + (skipThinking ? "" : " (thinking)"));
       try {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {

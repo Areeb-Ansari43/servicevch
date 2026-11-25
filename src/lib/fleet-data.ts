@@ -814,12 +814,19 @@ export function useFleetData() {
         monthly_logs: [],
       };
       setDrivers((prev) => [newDriver, ...prev]);
+      const prevStatus = vehicles.find((v) => v.id === d.vehicle_id)?.status;
       if (d.vehicle_id) {
         setVehicles((prev) =>
           prev.map((v) => (v.id === d.vehicle_id ? { ...v, status: "Rented" } : v)),
         );
       }
-
+      // If saving fails, take the driver back off the screen (it was shown straight away).
+      const undo = () => {
+        setDrivers((prev) => prev.filter((x) => x.id !== newDriver.id));
+        if (d.vehicle_id && prevStatus)
+          setVehicles((prev) => prev.map((v) => (v.id === d.vehicle_id ? { ...v, status: prevStatus } : v)));
+      };
+      try {
       const { data: userData } = await supabase.auth.getUser();
       const userId = userData.user?.id;
       if (!userId) throw new Error("Not signed in");
@@ -878,9 +885,13 @@ export function useFleetData() {
           rent_status: d.rent_status,
         },
       });
+      } catch (err) {
+        undo();
+        throw err;
+      }
       await refresh();
     },
-    [refresh],
+    [refresh, vehicles],
   );
 
   const updateDriverMileage = useCallback(

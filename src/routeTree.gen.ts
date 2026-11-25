@@ -15,6 +15,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as GenerationsRouteImport } from './routes/generations'
 import { Route as DriversRouteImport } from './routes/drivers'
 import { Route as DriverMileageRouteImport } from './routes/driver-mileage'
+import { Route as BulkDriversRouteImport } from './routes/bulk-drivers'
 import { Route as AuditLogsRouteImport } from './routes/audit-logs'
 import { Route as AddVehicleRouteImport } from './routes/add-vehicle'
 import { Route as AccidentCasesRouteImport } from './routes/accident-cases'
@@ -68,6 +69,11 @@ const DriversRoute = DriversRouteImport.update({
 const DriverMileageRoute = DriverMileageRouteImport.update({
   id: '/driver-mileage',
   path: '/driver-mileage',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BulkDriversRoute = BulkDriversRouteImport.update({
+  id: '/bulk-drivers',
+  path: '/bulk-drivers',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuditLogsRoute = AuditLogsRouteImport.update({
@@ -200,6 +206,7 @@ export interface FileRoutesByFullPath {
   '/accident-cases': typeof AccidentCasesRoute
   '/add-vehicle': typeof AddVehicleRoute
   '/audit-logs': typeof AuditLogsRoute
+  '/bulk-drivers': typeof BulkDriversRoute
   '/driver-mileage': typeof DriverMileageRoute
   '/drivers': typeof DriversRoute
   '/generations': typeof GenerationsRoute
@@ -232,6 +239,7 @@ export interface FileRoutesByTo {
   '/accident-cases': typeof AccidentCasesRoute
   '/add-vehicle': typeof AddVehicleRoute
   '/audit-logs': typeof AuditLogsRoute
+  '/bulk-drivers': typeof BulkDriversRoute
   '/driver-mileage': typeof DriverMileageRoute
   '/drivers': typeof DriversRoute
   '/generations': typeof GenerationsRoute
@@ -265,6 +273,7 @@ export interface FileRoutesById {
   '/accident-cases': typeof AccidentCasesRoute
   '/add-vehicle': typeof AddVehicleRoute
   '/audit-logs': typeof AuditLogsRoute
+  '/bulk-drivers': typeof BulkDriversRoute
   '/driver-mileage': typeof DriverMileageRoute
   '/drivers': typeof DriversRoute
   '/generations': typeof GenerationsRoute
@@ -299,6 +308,7 @@ export interface FileRouteTypes {
     | '/accident-cases'
     | '/add-vehicle'
     | '/audit-logs'
+    | '/bulk-drivers'
     | '/driver-mileage'
     | '/drivers'
     | '/generations'
@@ -331,6 +341,7 @@ export interface FileRouteTypes {
     | '/accident-cases'
     | '/add-vehicle'
     | '/audit-logs'
+    | '/bulk-drivers'
     | '/driver-mileage'
     | '/drivers'
     | '/generations'
@@ -363,6 +374,7 @@ export interface FileRouteTypes {
     | '/accident-cases'
     | '/add-vehicle'
     | '/audit-logs'
+    | '/bulk-drivers'
     | '/driver-mileage'
     | '/drivers'
     | '/generations'
@@ -396,6 +408,7 @@ export interface RootRouteChildren {
   AccidentCasesRoute: typeof AccidentCasesRoute
   AddVehicleRoute: typeof AddVehicleRoute
   AuditLogsRoute: typeof AuditLogsRoute
+  BulkDriversRoute: typeof BulkDriversRoute
   DriverMileageRoute: typeof DriverMileageRoute
   DriversRoute: typeof DriversRoute
   GenerationsRoute: typeof GenerationsRoute
@@ -466,6 +479,13 @@ declare module '@tanstack/react-router' {
       path: '/driver-mileage'
       fullPath: '/driver-mileage'
       preLoaderRoute: typeof DriverMileageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/bulk-drivers': {
+      id: '/bulk-drivers'
+      path: '/bulk-drivers'
+      fullPath: '/bulk-drivers'
+      preLoaderRoute: typeof BulkDriversRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/audit-logs': {
@@ -644,6 +664,7 @@ const rootRouteChildren: RootRouteChildren = {
   AccidentCasesRoute: AccidentCasesRoute,
   AddVehicleRoute: AddVehicleRoute,
   AuditLogsRoute: AuditLogsRoute,
+  BulkDriversRoute: BulkDriversRoute,
   DriverMileageRoute: DriverMileageRoute,
   DriversRoute: DriversRoute,
   GenerationsRoute: GenerationsRoute,

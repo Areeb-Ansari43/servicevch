@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import {
   assessLicenceRead,
+  stripTitle,
+  birthSection,
   birthDateFromNumber,
   normaliseLicenceNumber,
   parseLicenceDate,
@@ -140,5 +142,25 @@ describe("reader (Gemini faked)", () => {
     delete process.env.GEMINI_API_KEY;
     expect((await readDrivingLicence(img)).error).toMatch(/GEMINI_API_KEY/);
     expect((await readDrivingLicence("data:text/plain;base64,aGk=")).error).toMatch(/photo/);
+  });
+});
+
+describe("titles and DOB digit repair", () => {
+  it("title is dropped from the name", () => {
+    expect(stripTitle("MR PETER ZOLTAN")).toBe("PETER ZOLTAN");
+    expect(stripTitle("Mrs. Anna")).toBe("Anna");
+    const r = assessLicenceRead({ surname: "FARSANG", first_names: "MR PETER ZOLTAN", expiry_date: "04.01.2028", licence_number: "FARSA803076PZ8SP", date_of_birth: "07.03.1986" }, "2026-11-25");
+    expect(r.fullName.value).toBe("Peter Zoltan Farsang");
+    expect(r.licenceNumber).toEqual({ value: "FARSA803076PZ8SP", confidence: "high" });
+  });
+  it("digits written as a plain date are rebuilt from the date of birth", () => {
+    expect(birthSection("1986-03-07")).toEqual({ male: "803076", female: "853076" });
+    const r = assessLicenceRead({ surname: "FARSANG", first_names: "PETER ZOLTAN", expiry_date: "04.01.2028", licence_number: "FARSA860307PZ8SP", date_of_birth: "07.03.1986" }, "2026-11-25");
+    expect(r.licenceNumber.value).toBe("FARSA803076PZ8SP");
+    expect(r.licenceNumber.confidence).toBe("check");
+  });
+  it("one misread digit is corrected", () => {
+    const r = assessLicenceRead({ surname: "FARSANG", first_names: "PETER", licence_number: "FARSA808076PZ8SP", date_of_birth: "07.03.1986" }, "2026-11-25");
+    expect(r.licenceNumber.value).toBe("FARSA803076PZ8SP");
   });
 });

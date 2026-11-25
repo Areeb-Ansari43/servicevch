@@ -11,6 +11,7 @@ import {
   Plus,
   Users,
   Gauge,
+  IdCard,
   MessageSquare,
   AlertTriangle,
   Settings,
@@ -69,6 +70,7 @@ import { PORTAL_ENABLED } from "@/lib/features";
 import { serviceDue } from "@/lib/service-due";
 import { RentLoggedList } from "@/components/rent-logged-list";
 import { Check as LucideCheck, ChevronDown as LucideChevronDown } from "lucide-react";
+import { BulkDriversView } from "@/components/bulk-drivers";
 import { carTermsFor } from "@/lib/fleet-sheet";
 import { runExpiryScanNowFn } from "@/lib/email-admin.functions";
 
@@ -2142,6 +2144,7 @@ export type View =
   | "log-service"
   | "mileage"
   | "drivers"
+  | "bulk"
   | "leads"
   | "accidents"
   | "generations"
@@ -2156,6 +2159,7 @@ export const VIEW_PATH: Record<View, string> = {
   "log-service": "/service-history/new",
   mileage: "/driver-mileage",
   drivers: "/drivers",
+  bulk: "/bulk-drivers",
   leads: "/whatsapp-leads",
   accidents: "/accident-cases",
   generations: "/generations",
@@ -2426,6 +2430,18 @@ export function FleetShell({ view }: { view: View }) {
                 toast={toast}
               />
             </RouteErrorBoundary>
+          ) : view === "bulk" ? (
+            <RouteErrorBoundary
+              fallbackTitle="Bulk Driver Recognition Error"
+              fallbackMessage="Something went wrong on the bulk driver page. Your drafts are kept; please reload."
+            >
+              <BulkDriversView
+                vehicles={data.vehicles}
+                drivers={data.drivers}
+                addDriver={data.addDriver}
+                toast={toast}
+              />
+            </RouteErrorBoundary>
           ) : view === "leads" ? (
             <WhatsAppLeadsView toast={toast} />
           ) : view === "accidents" ? (
@@ -2543,11 +2559,11 @@ function Sidebar({
     { id: "vehicles", label: "Vehicles", Icon: Car },
     { id: "services", label: "Service History", Icon: Wrench },
     { id: "generations", label: "Reservations / Contracts", Icon: Calendar },
-    { id: "add", label: "Add Vehicle", Icon: Plus },
   ];
 
   const driverItems: NavItem[] = [
     { id: "drivers", label: "Drivers", Icon: Users },
+    { id: "bulk", label: "Bulk Driver Recognition", Icon: IdCard },
     { id: "mileage", label: "Driver Mileage", Icon: Gauge },
     { id: "leads", label: "WhatsApp Leads", Icon: MessageSquare },
     { id: "accidents", label: "Accident Cases", Icon: AlertTriangle },
@@ -2984,10 +3000,10 @@ function MobileBottomNav({
       Icon: Icon.Calendar,
     },
     {
-      id: "add",
-      label: "Add Vehicle",
-      description: "Add new vehicle to fleet",
-      Icon: Icon.Plus,
+      id: "bulk",
+      label: "Bulk Driver Recognition",
+      description: "Add many drivers from their licences",
+      Icon: (p: { className?: string }) => <IdCard className={p.className} />,
     },
     {
       id: "settings",
