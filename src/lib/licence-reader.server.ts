@@ -1,3 +1,4 @@
+import { getRuntimeEnv } from "@/integrations/supabase/config";
 import {
   assessLicenceRead,
   type LicenceReadResult,
@@ -43,40 +44,98 @@ export async function readDrivingLicence(dataUrl: string): Promise<LicenceReadRe
   if (!/^(image\/(jpeg|jpg|png|webp|heic|heif)|application\/pdf)$/.test(mimeType)) {
     return fail("Please use a photo (JPG, PNG, HEIC) or a PDF of the licence.");
   }
-  const { geminiImageJson, geminiApiKey } = await import("@/lib/gemini-vision.server");
-  if (!geminiApiKey())
+  const base64 = m[2];
+  const { geminiApiKey } = await import("@/lib/gemini-vision.server");
+  const { azureConfig, readLicenceWithAzure } = await import("@/lib/azure-licence.server");
+  const choice = (getRuntimeEnv("LICENCE_READER") ?? "auto").trim().toLowerCase();
+  const useAzure = choice !== "gemini" && Boolean(azureConfig()) && !/webp/.test(mimeType);
+  const useGemini = choice !== "azure" && Boolean(geminiApiKey());
+  if (!useAzure && !useGemini)
     return fail(
-      "Licence reading isn't set up yet (GEMINI_API_KEY is missing). Please type the details in.",
+      "Licence reading isn't set up yet (add the Azure or Gemini settings). Please type the details in.",
     );
 
-  const res = await geminiImageJson({ prompt: PROMPT, mimeType, base64: m[2], timeoutMs: 20000 });
-  if (res.ok) {
-    const first = assessLicenceRead(res.json as RawLicenceRead);
-    if (first.licenceNumber.confidence === "high" || !first.ok) return first;
-    // The number didn't check out: one careful second look at just the number and date of birth.
-    const again = await geminiImageJson({
-      prompt: RECHECK_PROMPT,
-      mimeType,
-      base64: m[2],
-      timeoutMs: 25000,
-      thinking: true,
-    });
-    if (again.ok) {
-      const merged = { ...(res.json as RawLicenceRead), ...(again.json as RawLicenceRead) };
-      const second = assessLicenceRead(merged);
-      if (second.licenceNumber.confidence === "high") return second;
+  // Azure first when it's set up: a model trained on ID documents.
+  let azureResult: LicenceReadResult | null = null;
+  let azureReason = "";
+  if (useAzure) {
+    const az = await readLicenceWithAzure(mimeType, base64);
+    if (az.ok) {
+      azureResult = assessLicenceRead(az.raw);
+      // Fields Azure itself was unsure about are marked "Check".
+      const unsure: Record<string, keyof LicenceReadResult> = {
+        FirstName: "fullName",
+        LastName: "fullName",
+        DocumentNumber: "licenceNumber",
+        DateOfExpiration: "expiryDate",
+      };
+      for (const k of az.lowConfidence) {
+        const fieldName = unsure[k] as "fullName" | "licenceNumber" | "expiryDate";
+        const fld = azureResult[fieldName];
+        if (fld.value && fld.confidence === "high") fld.confidence = "check";
+      }
+      if (az.lowConfidence.length)
+        azureResult.warnings.push("Some details were hard to read. Please check the amber fields.");
+      if (azureResult.ok && allClear(azureResult)) return azureResult;
+    } else {
+      azureReason = az.reason;
     }
-    return first;
   }
-  const why =
-    res.reason === "timeout"
-      ? "the AI took too long"
-      : res.reason === "http_429"
-        ? "the AI is busy (too many requests)"
-        : res.reason === "http_403" || res.reason === "http_401"
-          ? "the AI key was refused"
-          : res.reason === "http_404"
-            ? "the AI model wasn't found"
-            : `AI error ${res.reason}`;
-  return fail(`The licence couldn't be read (${why}). Please try again or type the details in.`);
+
+  if (useGemini) {
+    const g = await readWithGemini(mimeType, base64);
+    if ("result" in g) {
+      // Both read it: keep whichever is surer.
+      if (!azureResult || !azureResult.ok) return g.result;
+      return score(g.result) > score(azureResult) ? g.result : azureResult;
+    }
+    if (azureResult?.ok) return azureResult;
+    return fail(`The licence couldn't be read (${explain(g.reason)}). Please try again or type the details in.`);
+  }
+  if (azureResult?.ok) return azureResult;
+  if (azureResult && !azureResult.ok) return azureResult;
+  return fail(`The licence couldn't be read (${explain(azureReason)}). Please try again or type the details in.`);
 }
+
+const allClear = (r: LicenceReadResult) =>
+  [r.fullName, r.expiryDate, r.licenceNumber].every((f) => f.confidence === "high");
+const score = (r: LicenceReadResult) =>
+  [r.fullName, r.expiryDate, r.licenceNumber].reduce(
+    (n, f) => n + (f.confidence === "high" ? 2 : f.confidence === "check" ? 1 : 0),
+    0,
+  );
+
+function explain(reason: string): string {
+  if (reason === "timeout") return "the reader took too long";
+  if (/429/.test(reason)) return "the reader is busy (too many requests)";
+  if (/40[13]/.test(reason)) return "the reader's key was refused";
+  if (/404/.test(reason)) return "the reader's address or model wasn't found";
+  if (reason === "azure_unreachable") return "Azure couldn't be reached";
+  return `reader error ${reason}`;
+}
+
+async function readWithGemini(
+  mimeType: string,
+  base64: string,
+): Promise<{ result: LicenceReadResult } | { reason: string }> {
+  const { geminiImageJson } = await import("@/lib/gemini-vision.server");
+  const res = await geminiImageJson({ prompt: PROMPT, mimeType, base64, timeoutMs: 20000 });
+  if (!res.ok) return { reason: res.reason };
+  const first = assessLicenceRead(res.json as RawLicenceRead);
+  if (first.licenceNumber.confidence === "high" || !first.ok) return { result: first };
+  // The number didn't check out: one careful second look at just the number and date of birth.
+  const again = await geminiImageJson({
+    prompt: RECHECK_PROMPT,
+    mimeType,
+    base64,
+    timeoutMs: 25000,
+    thinking: true,
+  });
+  if (again.ok) {
+    const merged = { ...(res.json as RawLicenceRead), ...(again.json as RawLicenceRead) };
+    const second = assessLicenceRead(merged);
+    if (second.licenceNumber.confidence === "high") return { result: second };
+  }
+  return { result: first };
+}
+

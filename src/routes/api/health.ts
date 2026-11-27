@@ -98,7 +98,9 @@ export const ENV_VARS: { name: string; required: boolean; purpose: string }[] = 
   },
   { name: "TELEGRAM_BOT_TOKEN", required: false, purpose: "failure alerts" },
   { name: "TELEGRAM_CHAT_ID", required: false, purpose: "failure alerts" },
-  { name: "GEMINI_API_KEY", required: false, purpose: "WhatsApp assistant" },
+  { name: "GEMINI_API_KEY", required: false, purpose: "WhatsApp assistant, licence and odometer reading" },
+  { name: "AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT", required: false, purpose: "Licence reading with Azure" },
+  { name: "AZURE_DOCUMENT_INTELLIGENCE_KEY", required: false, purpose: "Licence reading with Azure" },
   { name: "META_ACCESS_TOKEN", required: false, purpose: "WhatsApp messaging" },
   { name: "META_PHONE_NUMBER_ID", required: false, purpose: "WhatsApp messaging" },
 ];
