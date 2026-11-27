@@ -140,7 +140,7 @@ describe("reader (Gemini faked)", () => {
   });
   it("explains clearly when the AI key is missing or the file type is wrong", async () => {
     delete process.env.GEMINI_API_KEY;
-    expect((await readDrivingLicence(img)).error).toMatch(/GEMINI_API_KEY/);
+    expect((await readDrivingLicence(img)).error).toMatch(/isn.t set up/);
     expect((await readDrivingLicence("data:text/plain;base64,aGk=")).error).toMatch(/photo/);
   });
 });
